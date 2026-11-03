@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 개인 메시지/로그의 클라우드 백업 및 기기 간 이전 제한 -->
+<data-extraction-rules>
+    <cloud-backup><exclude domain="root" path="."/></cloud-backup>
+    <device-transfer><exclude domain="root" path="."/></device-transfer>
+</data-extraction-rules>

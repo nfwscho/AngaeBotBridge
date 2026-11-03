@@ -1,0 +1,64 @@
+# AngaeBot Bridge — Git에서 제외해야 할 로컬 파일 / 민감정보
+# Git에는 소스와 문서만 보관하며 실행 로그, 설정, 키, 빌드 결과는 올리지 않습니다.
+
+# Android Studio / Gradle 생성 파일
+.gradle/
+.idea/
+**/build/
+local.properties
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 실행 파일 / 서명 키 / 인증서
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+
+# 로컬 환경 변수 / 인증 정보
+.env
+.env.*
+!.env.example
+!.env.sample
+secrets/
+credentials/
+credentials.json
+service-account*.json
+google-services.json
+
+# 프로그램 실행 중 생성되는 자료·로그·DB
+*.log
+logs/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
+
+# 일반 임시 파일
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.bak
+*.swp
+*.swo
+__pycache__/
+.venv/
+.pytest_cache/
+
+# 개인 IDE/테스트 출력
+*.hprof
+coverage/

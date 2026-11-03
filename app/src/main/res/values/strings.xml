@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">앙개봇 Bridge</string>
+    <string name="service_name">앙개봇 카카오톡 알림 수신</string>
+</resources>
