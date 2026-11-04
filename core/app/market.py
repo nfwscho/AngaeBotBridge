@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.2 — 메모리7 무료 주식 시세 모듈 전체 기능 설명
+앙개봇 Python Core v0.4.3 — 메모리7 무료 주식 시세 모듈 전체 기능 설명
 1. '앙개야 주식 메모리7' 및 '앙개야 메모리7'의 지정된 8개 종목 시세를 조회한다.
 2. 삼성전자 005930.KS, SK하이닉스 000660.KS, 마이크론 MU, SK하이닉스 ADR SKHY,
    샌디스크 SNDK, 키오시아 285A.T, 씨게이트 STX, 웨스턴디지털 WDC를 고정 순서로 표시한다.
@@ -18,7 +18,12 @@
 15. 키오시아는 기존 Yahoo Chart 우선 시도 후 Yahoo Japan 공식 종목 페이지의 동경시장 시세만 검증해 보완한다.
 16. 가격·변동률·종목 코드·거래일을 검증하며 야간 PTS 가격, 다른 종목 및 오래된 값을 사용하지 않는다.
 17. 외부 시세 공급자별 실패를 격리하고 기존 미국 종목·메모리7 출력·캐시·이벤트 로그 흐름을 보존한다.
-18. 외부 API는 무료/비공식이고 변경될 수 있어 실제 Termux 네트워크에서 검증해야 한다.
+18. v0.4.3은 Yahoo Japan 본장 날짜를 시각·거래일 상세에서 유연하게 추출하여 HTML 구조 변화를 허용한다.
+19. 키오시아는 기존 Yahoo(미국/일본) 조회 실패 시 일본 증권사 공개 시세 페이지에서 날짜·전일가·등락률을 검증한다.
+20. 일본 현지 증권사 원문 날짜/가격/등락률의 정합성을 검증하고 야간 PTS·오래된 값은 채택하지 않는다.
+21. 해외 시세 추가 경로는 키오시아 단일 종목만 허용하고 한국 2종목·미국 5종목·캐시/출력은 유지한다.
+22. 모든 신규 오류는 기존 조회 불가로 격리하며 토큰/요청 원문은 기록하지 않는다.
+23. 데이터 공급자는 비공식/지연/접근 차단 가능하고 재판매·실시간 거래용으로 사용하지 않는다.
 """
 from __future__ import annotations
 
@@ -164,6 +169,7 @@ def fetch_yahoo_quote(stock: Stock, *, opener=urlopen, now: datetime | None = No
 _NAVER_BASIC = 'https://m.stock.naver.com/api/stock/{code}/basic'
 _NAVER_POLLING = 'https://polling.finance.naver.com/api/realtime/domestic/stock/{code}'
 _YAHOO_JAPAN = 'https://finance.yahoo.co.jp/quote/285A.T'
+_RAKUTEN_JAPAN = 'https://www.rakuten-sec.co.jp/smartphone/market/info/pagecontent?pid=305&ric=285A.T'
 _LOCAL_TIMEOUT = 2.8
 _PAGE_MAX_BYTES = 2_000_000
 
@@ -305,56 +311,147 @@ class _VisibleText(HTMLParser):
 
 
 def parse_yahoo_japan_quote(stock: Stock, html: str, *, now: datetime | None = None) -> Quote:
-    """키오시아 동경거래소 본장 현재가/전일비만 분석; 야간PTS 데이터 제외."""
+    """Yahoo Japan 본장: 날짜가 11/4 또는 15:30으로 보이는 두 UI 모두 지원한다."""
     if stock.ticker != '285A.T':
         raise StockQuoteError('키오시아 이외 일본 페이지 미지원')
     now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     parser = _VisibleText()
     parser.feed(html)
     visible = ' '.join(parser.chunks)
     if 'キオクシア' not in visible or '285A' not in visible:
         raise StockQuoteError('키오시아 종목 식별 실패')
-    # 일본 Yahoo 첫 본장 가격과 '前日比'를 결합해서만 읽는다. 야간PTS는 뒤쪽 별도 패널.
-    # 실 페이지: '48,010 前日比 +280(+0.59%) リアルタイム株価 8/10 ... 夜間PTS ...'
+    # 첫 공개 정규장 시세만 사용한다. 뒤쪽 '夜間PTS' 값은 이 정규장 헤더와 불일치한다.
     pattern = (r'(?P<price>[\d,]+(?:\.\d+)?)\s*前日比\s*'
                r'(?P<delta>[+\-−]\s*[\d,]+(?:\.\d+)?)\s*'
                r'\(\s*(?P<pct>[+\-−]?\d+(?:\.\d+)?)%\s*\)\s*'
-               r'リアルタイム株価\s*(?P<month>\d{1,2})/(?P<day>\d{1,2})')
+               r'リアルタイム株価')
     match = re.search(pattern, visible[:40_000])
     if match is None:
         raise StockQuoteError('Yahoo Japan 본장 시세 구조 변경 또는 데이터 없음')
     price = _numeric_text(match.group('price'))
-    pct = _numeric_text(match.group('pct'), allow_zero=True)
-    if pct is None:
-        try:
-            pct = float(match.group('pct').replace('−','-'))
-        except ValueError:
-            pass
-    if price is None or pct is None or not -99.9 < pct < 1000:
+    try:
+        pct = float(match.group('pct').replace('−', '-'))
+        delta = float(match.group('delta').replace(',', '').replace(' ', '').replace('−', '-'))
+    except ValueError as error:
+        raise StockQuoteError('Yahoo Japan 숫자 오류') from error
+    if price is None or not math.isfinite(pct) or not math.isfinite(delta):
         raise StockQuoteError('Yahoo Japan 숫자 오류')
-    delta = float(match.group('delta').replace(',','').replace(' ','').replace('−','-'))
-    if (delta > 0 and pct < 0) or (delta < 0 and pct > 0):
-        raise StockQuoteError('Yahoo Japan 방향 검증 실패')
+    previous = price - delta
+    if previous <= 0 or abs(delta / previous * 100 - pct) > 0.15:
+        raise StockQuoteError('Yahoo Japan 전일비 정합성 불일치')
+    # 페이지 업데이트에 따라 'リアルタイム株価 11/4'가 'リアルタイム株価 15:30'으로 바뀐다.
+    # 시간만 있으면 정규장 상세의 '始値 ... (11/04)' 날짜를 사용한다.
+    trail = visible[match.end():match.end() + 100]
+    explicit = re.match(r'\s*(\d{1,2})/(\d{1,2})(?!\d)', trail)
+    if explicit:
+        month, day = int(explicit.group(1)), int(explicit.group(2))
+    else:
+        details_start = visible.find('株価詳細値')
+        if details_start < 0:
+            raise StockQuoteError('Yahoo Japan 거래일 증빙 누락')
+        details = visible[details_start:details_start + 4000].split('夜間PTSについて', 1)[0]
+        details_date = re.search(r'始値.{0,100}?(\d{1,2})/(\d{1,2})(?!\d)', details)
+        if details_date is None:
+            raise StockQuoteError('Yahoo Japan 거래일 증빙 누락')
+        month, day = int(details_date.group(1)), int(details_date.group(2))
     tokyo = _timezone('Asia/Tokyo')
     local_now = now.astimezone(tokyo)
-    month, day = int(match.group('month')), int(match.group('day'))
     try:
         trading_day = date(local_now.year, month, day)
         if trading_day > local_now.date() + timedelta(days=1):
             trading_day = date(local_now.year - 1, month, day)
-    except ValueError as err:
-        raise StockQuoteError('거래일 날짜 오류') from err
-    trade_time = datetime.combine(trading_day, dt_time(15, 30), tzinfo=tokyo)
-    if (now - trade_time.astimezone(timezone.utc)).total_seconds() > 10 * 86400:
+        trade_time = datetime.combine(trading_day, dt_time(15, 30), tzinfo=tokyo)
+    except ValueError as error:
+        raise StockQuoteError('Yahoo Japan 거래일 날짜 오류') from error
+    age = (now - trade_time.astimezone(timezone.utc)).total_seconds()
+    if age > 10 * 86400:
         raise StockQuoteError('Yahoo Japan 시세 오래됨')
-    # 당일 장중 시세는 본장 시작 전의 15:30을 미래로 표기하지 않도록 조회 시각을 상한으로 처리.
+    if age < -15 * 3600:
+        raise StockQuoteError('Yahoo Japan 거래일 미래 날짜')
     if trade_time > local_now:
         trade_time = local_now
-    previous = price / (1 + pct / 100)
-    if not math.isfinite(previous) or previous <= 0:
-        raise StockQuoteError('Yahoo Japan 전일가 계산 실패')
     return Quote(stock, price, previous, pct, trade_time,
                  now.astimezone(timezone(timedelta(hours=9))))
+
+
+def parse_rakuten_quote(stock: Stock, html: str, *, now: datetime | None = None) -> Quote:
+    """라쿠텐 증권의 동경증권거래소 285A 본장 정보: PTS 제외/날짜·등락률 교차검증."""
+    if stock.ticker != '285A.T':
+        raise StockQuoteError('키오시아 이외 라쿠텐 시세 미지원')
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    p = _VisibleText()
+    p.feed(html)
+    text = ' '.join(p.chunks)
+    if '285A' not in text[:12000] or 'キオクシア' not in text[:12000]:
+        raise StockQuoteError('라쿠텐 종목 식별 실패')
+    # 실제 공개 페이지 예시: 東証P 10,735.0 -610.0-5.38% 26/11/04 15:30 前終(11/02) 11,345.0
+    # PTS/체결 정보와 구분하려고 '東証' 바로 뒤의 첫 시세만 선택한다.
+    pattern = (r'東証[\wＰP]*\s*'
+               r'(?P<price>[\d,]+(?:\.\d+)?)\s*'
+               r'(?P<delta>[+\-−][\d,]+(?:\.\d+)?)\s*'
+               r'(?P<pct>[+\-−]\d+(?:\.\d+)?)\s*%\s*'
+               r'(?P<year>\d{2,4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})\s*'
+               r'(?P<hour>\d{1,2}):(?P<minute>\d{2})')
+    m = re.search(pattern, text[:12000])
+    if m is None:
+        raise StockQuoteError('라쿠텐 본장 시세 형식 오류')
+    price = _numeric_text(m.group('price'))
+    try:
+        delta = float(m.group('delta').replace(',', '').replace('−','-'))
+        pct = float(m.group('pct').replace('−','-'))
+    except ValueError as error:
+        raise StockQuoteError('라쿠텐 숫자 오류') from error
+    if price is None or not math.isfinite(delta) or not math.isfinite(pct):
+        raise StockQuoteError('라쿠텐 숫자 오류')
+    previous = price - delta
+    if previous <= 0 or abs(delta / previous * 100 - pct) > 0.15:
+        raise StockQuoteError('라쿠텐 전일비 정합성 불일치')
+    year = int(m.group('year'))
+    if year < 100:
+        year += 2000
+    tz = _timezone('Asia/Tokyo')
+    try:
+        market_time = datetime(year, int(m.group('month')), int(m.group('day')),
+                               int(m.group('hour')), int(m.group('minute')), tzinfo=tz)
+    except ValueError as error:
+        raise StockQuoteError('라쿠텐 거래일 형식 오류') from error
+    age = (now - market_time.astimezone(timezone.utc)).total_seconds()
+    if age < -900 or age > 10 * 86400:
+        raise StockQuoteError('라쿠텐 최근 거래일 시세 없음')
+    # '前終'은 전 거래일 종가다. 가격·등락률 자체와 큰 차이가 있으면 오염된 데이터다.
+    footer = text[m.end():m.end() + 250]
+    prev_match = re.search(r'前終\s*\([^)]*\)\s*([\d,]+(?:\.\d+)?)', footer)
+    if prev_match:
+        reported_prev = _numeric_text(prev_match.group(1))
+        if reported_prev is None or abs(reported_prev - previous) > max(2.0, previous * 0.002):
+            raise StockQuoteError('라쿠텐 전일 종가 불일치')
+    return Quote(stock, price, previous, pct, market_time,
+                 now.astimezone(timezone(timedelta(hours=9))))
+
+
+def fetch_rakuten_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
+    """키오시아만 고정 HTTPS 공개 페이지 접근; 실제 데이터가 아닐 때 fail closed."""
+    if stock.ticker != '285A.T':
+        raise StockQuoteError('라쿠텐 조회는 키오시아만 지원')
+    req = Request(_RAKUTEN_JAPAN, headers={'User-Agent': 'Mozilla/5.0',
+                                          'Accept': 'text/html,application/xhtml+xml'}, method='GET')
+    try:
+        with opener(req, timeout=_LOCAL_TIMEOUT) as resp:
+            raw = resp.read(_PAGE_MAX_BYTES + 1)
+        if len(raw) > _PAGE_MAX_BYTES:
+            raise StockQuoteError('페이지 용량 제한 초과')
+        html = raw.decode('utf-8', errors='replace')
+        if 'キオクシア' not in html:
+            html = raw.decode('cp932', errors='replace')
+        return parse_rakuten_quote(stock, html, now=now)
+    except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as error:
+        if isinstance(error, StockQuoteError):
+            raise
+        raise StockQuoteError('라쿠텐 연결 실패') from error
 
 
 def fetch_yahoo_japan_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
@@ -381,10 +478,15 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
         except StockQuoteError:
             return fetch_yahoo_quote(stock, opener=opener, now=now)
     if stock.ticker == '285A.T':
+        # 기존 Yahoo Finance → Yahoo Japan 순서를 유지하고, 두 제공처 모두 실패할 때
+        # 라쿠텐 증권의 공개 본장 시세(PTS 제외)로 마지막 보완한다.
         try:
             return fetch_yahoo_quote(stock, opener=opener, now=now)
         except StockQuoteError:
-            return fetch_yahoo_japan_quote(stock, opener=opener, now=now)
+            try:
+                return fetch_yahoo_japan_quote(stock, opener=opener, now=now)
+            except StockQuoteError:
+                return fetch_rakuten_quote(stock, opener=opener, now=now)
     return fetch_yahoo_quote(stock, opener=opener, now=now)
 
 
