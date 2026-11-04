@@ -1,6 +1,6 @@
 """
 앙개봇 v0.5.5 주식 숫자 선택 메뉴 회귀 테스트 — 검증 기능 전체 안내
-1. 메인 메뉴 1~6번, 최근 조회·분석 서브메뉴 생성과 1~9 번호 입력을 검증한다.
+1. 메인 메뉴 1~6번, 최근 조회·분석 서브메뉴 생성과 1~10 번호 입력을 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -9,6 +9,8 @@
 7. Python 선택 상태는 메모리에서만 유지되며 앱 재시작 후 숫자 허용 여부는 Android가 별도 검사한다.
 8. 모든 테스트는 임시 SQLite만 사용하고 기존 운영 DB·로그·Android APK·AI/주문/알림 기능을 건드리지 않는다.
 9. sqlite3.Connection은 contextlib.closing으로 끝까지 닫아 ResourceWarning을 발생시키지 않는다.
+10. 메모리7 8종목 고정 순서와 실제 그룹 최대 10종목의 번호 선택을 종목 티커로 안전하게 연결한다.
+11. 기존 5분 만료·타 채팅방 선택 차단·모의 시세 실패·중복 request_id 및 기존 DB/로그 보존을 검증한다.
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ from unittest.mock import patch
 os.environ.setdefault('ANGAE_TOKEN', 'T'*64)
 from fastapi.testclient import TestClient
 from app.main import create_app
-from app.market import StockQuoteError
+from app.market import Stock, StockQuoteError, WATCHLIST
 from app.selection_menu import StockSelectionMenus, MENU_TTL_SECONDS
 
 
@@ -88,12 +90,39 @@ class MenuSelectionUnitTests(unittest.TestCase):
             self.menus.choose(self.db,'방','다른사람','1')
         with self.assertRaisesRegex(StockQuoteError, '없는 번호'):
             self.menus.choose(self.db,'방','나','9')
-        with self.assertRaisesRegex(StockQuoteError, '1~9'):
+        with self.assertRaisesRegex(StockQuoteError, '1~10'):
             self.menus.choose(self.db,'방','나','22')
         sub=self.menus.choose(self.db,'방','나','6')
         self.assertTrue(sub.menu_active)
         self.assertIn('마이크론',sub.reply)
         self.assertEqual(self.menus.choose(self.db,'방','나','1').execute_argument,'분석 삼성전자')
+
+
+    def test_quoted_stocks_use_exact_tickers_and_ten(self):
+        self.menus.open_quotes('방','나', WATCHLIST)
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'다른방','나','3')
+        third=self.menus.choose(self.db,'방','나','3')
+        self.assertEqual(third.execute_argument,'분석 MU')
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'방','나','4')
+        self.menus.open_quotes('방','나', WATCHLIST)
+        self.assertEqual(self.menus.choose(self.db,'방','나','8').execute_argument,'분석 WDC')
+        ten=tuple(Stock('같은별명',f'TEST{i}', 'USD','미국','America/New_York') for i in range(10))
+        self.menus.open_quotes('방','나', ten)
+        self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
+        with self.assertRaisesRegex(StockQuoteError,'1~10'):
+            self.menus.choose(self.db,'방','나','11')
+
+    def test_quote_menu_invalid_lengths_and_expiry(self):
+        with self.assertRaisesRegex(StockQuoteError,'1~10'):
+            self.menus.open_quotes('방','나', tuple())
+        with self.assertRaisesRegex(StockQuoteError,'1~10'):
+            self.menus.open_quotes('방','나', WATCHLIST+WATCHLIST)
+        self.menus.open_quotes('방','나', WATCHLIST)
+        self.now+=MENU_TTL_SECONDS
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'방','나','1')
 
 
 class MenuSelectionAPITests(unittest.TestCase):
@@ -153,6 +182,76 @@ class MenuSelectionAPITests(unittest.TestCase):
             args=[r[0] for r in db.execute('SELECT argument FROM jobs ORDER BY rowid').fetchall()]
             self.assertEqual(args[:4], ['분석 마이크론','메뉴','선택 1','선택 1'])
             self.assertEqual(len(args),6)  # 상대방 실패/마지막 닫힌 메뉴 실패 포함, 중복 미기록
+
+
+    def test_direct_memo7_quote_then_number_analysis_and_isolation(self):
+        with patch('app.main.execute_stock_command',return_value='💾 메모리7 시세 요약') as quote:
+            direct=self.post('메모리7').json()
+            self.assertTrue(direct['ok'])
+            self.assertTrue(direct['menu_active'])
+            self.assertIn('시세 요약',direct['reply'])
+            quote.assert_called_once()
+        with patch('app.main.fetch_history') as history, patch('app.main.individual_report',return_value='마이크론 5일 분석'):
+            wrong=self.post('선택 3',room='다른방').json()
+            self.assertFalse(wrong['ok'])
+            self.assertFalse(wrong['menu_active'])
+            selected=self.post('선택 3').json()
+            self.assertTrue(selected['ok'])
+            self.assertFalse(selected['menu_active'])
+            self.assertEqual(selected['reply'],'마이크론 5일 분석')
+            self.assertEqual(history.call_args.args[0].ticker,'MU')
+            self.assertFalse(self.post('선택 3').json()['ok'])
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
+
+    def test_root_menu_memo7_quote_then_eighth_analysis(self):
+        with patch('app.main.execute_stock_command',return_value='💾 메모리7 시세 요약'):
+            self.assertTrue(self.post('메뉴').json()['menu_active'])
+            quote=self.post('선택 2').json()
+            self.assertTrue(quote['menu_active'])
+        with patch('app.main.fetch_history') as history, patch('app.main.individual_report',return_value='웬디 분석'):
+            selected=self.post('선택 8').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,'WDC')
+            self.assertEqual(selected['reply'],'웬디 분석')
+
+    def test_group_tenth_quote_and_selected_analysis(self):
+        from app.watchlists import US_MARKET_CAP_PRESET
+        self.assertTrue(self.post('그룹생성 십종목').json()['ok'])
+        for ticker, alias in US_MARKET_CAP_PRESET:
+            self.assertTrue(self.post(f'추가 십종목 {ticker} {alias}').json()['ok'])
+        with patch('app.main.group_report',return_value='📊 십종목 관심종목 시세 요약') as group:
+            quote=self.post('십종목').json()
+            self.assertTrue(quote['ok'])
+            self.assertTrue(quote['menu_active'])
+            self.assertEqual(len(group.call_args.args[1]),10)
+        with patch('app.main.fetch_history') as history, patch('app.main.individual_report',return_value='일라이릴리 분석'):
+            selected=self.post('선택 10').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,'LLY')
+            self.assertEqual(selected['reply'],'일라이릴리 분석')
+
+    def test_legacy_memory7_command_opens_numeric_selection(self):
+        request = {'request_id':'legacy_memory7_000123', 'command':'메모리7',
+                   'argument':'', 'room':'방', 'sender':'나'}
+        with patch('app.main.execute_stock_command',return_value='💾 메모리7 시세 요약'):
+            response=self.client.post('/v1/commands',headers=self.headers,json=request).json()
+        self.assertTrue(response['ok'])
+        self.assertTrue(response['menu_active'])
+        with patch('app.main.fetch_history') as history, patch('app.main.individual_report',return_value='하이닉스 분석'):
+            selected=self.post('선택 2').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,'000660.KS')
+            self.assertEqual(selected['reply'],'하이닉스 분석')
+
+    def test_quote_failure_does_not_offer_selection(self):
+        from app.market import StockQuoteError
+        with patch('app.main.execute_stock_command',side_effect=StockQuoteError('무료 조회 실패')):
+            failed=self.post('메모리7').json()
+            self.assertFalse(failed['ok'])
+            self.assertFalse(failed['menu_active'])
+        self.assertFalse(self.post('선택 1').json()['ok'])
 
 
 if __name__=='__main__':

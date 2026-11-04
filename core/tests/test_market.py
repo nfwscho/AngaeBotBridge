@@ -7,6 +7,7 @@
 5. API 연결 실패와 일부 종목 누락의 독립 처리 및 전체 실패 오류를 확인한다.
 6. 네트워크/AI 호출 없이 모의 데이터만 사용하고 기존 로그·DB를 건드리지 않는다.
 7. 허용되지 않은 watchlist 인자 또는 명령에 대해 외부 API를 호출하지 않는다.
+8. v0.5.6 메모리7의 정확한 1~8 번호, 공급자 실패 시 번호 자릿수 보존, 기존 가격/출처·시차/캐시를 검사한다.
 """
 from __future__ import annotations
 
@@ -80,6 +81,11 @@ class StockTests(unittest.TestCase):
         self.assertIn('SKHY : 조회 불가',result)
         self.assertIn('씨게이트 : 조회 불가',result)
         self.assertIn('2종목 조회 실패',result)
+        self.assertIn('1. 삼성전자 :',result)
+        self.assertIn('4. SKHY : 조회 불가',result)
+        self.assertIn('7. 씨게이트 : 조회 불가',result)
+        self.assertIn('8. 웬디 :',result)
+        self.assertIn('번호 1~8',result)
         self.assertLess(result.index('삼성전자 :'),result.index('하이닉스 :'))
         self.assertLess(result.index('하이닉스 :'),result.index('마이크론 :'))
 

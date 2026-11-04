@@ -39,6 +39,9 @@
 37. 1~6 숫자 메뉴는 채팅방·발신자별 5분 세션에서만 동작하고 AI/등록/삭제/매매는 재실행하지 않는다.
 38. 기존 성공한 읽기 명령만 최근 메뉴에서 가져오며 DB 스키마·jobs/events 원형·로그를 보존한다.
 39. API의 신규 menu_active 값은 Android에 메뉴 유지 여부를 알리고 기존 응답 필드는 바꾸지 않는다.
+40. v0.5.6은 성공한 메모리7/관심그룹 시세 조회 직후 동일 방·발신자 범위에 최대 10개 번호 선택 세션을 활성화한다.
+41. 숫자 선택은 기존 메뉴 분석 경로·인증·jobs/events·dedup·쓰기 잠금 밖 시세 조회를 재사용하며 추가 DB 테이블이 없다.
+42. 시세 공급자 전체 실패 시 메뉴를 새로 열지 않고, 기존 S20+ 배터리/앱 UI/로그·설정은 그대로 보존한다.
 """
 from __future__ import annotations
 
@@ -62,7 +65,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus
 
-VERSION = "0.5.5"
+VERSION = "0.5.6"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
@@ -154,6 +157,10 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     pass
                 elif request.command == "메모리7" or (request.command == "주식" and resolved_argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command(request.command, resolved_argument)
+                    # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
+                    if request.room.strip() and request.sender.strip():
+                        selection_menus.open_quotes(request.room, request.sender, WATCHLIST)
+                        stock_menu_active = True
                 elif request.command == "주식" and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
                     if len(parts) < 2:
@@ -183,6 +190,10 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, resolved_argument.strip())
                     stock_reply = group_report(resolved_argument.strip(), stocks)
+                    # 방/발신자에 실제 등록된 그룹 종목만 원래 출력 순서대로 선택 가능.
+                    if stocks:
+                        selection_menus.open_quotes(request.room, request.sender, stocks)
+                        stock_menu_active = True
             except StockQuoteError as error:
                 stock_error = error
         with lock:

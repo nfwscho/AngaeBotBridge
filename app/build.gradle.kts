@@ -12,6 +12,9 @@
 // 11. v0.4.3 숫자 선택/5분 제한을 추가하며 같은 패키지명과 기존 설정/로그/서명 호환을 유지한다.
 // 12. v0.4.4에서는 모든 명령의 카카오톡 응답 맨 아래에 S20+ 배터리 잔량/충전 상태를 표시한다.
 // 13. 기존 권한/SQLite/설정/AI OFF/주식 분석/Python Core·로그 및 모든 UI를 유지하고 versionCode를 8로 증가한다.
+// 14. v0.4.5 메모리7·관심그룹의 번호 선택/최대 10번 지원, RemoteInput 성공 시에만 메뉴 활성화한다.
+// 15. 배터리 표시/주식 분석/기존 5분 메뉴/채팅방·발신자/앱 설정과 전체 로그를 보존하고 새 권한은 없다.
+// 16. 기존 서명/패키지명으로 덮어쓰기 설치할 수 있도록 versionCode 9, versionName 0.4.5로 올린다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -25,8 +28,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.4.4"
+        versionCode = 9
+        versionName = "0.4.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

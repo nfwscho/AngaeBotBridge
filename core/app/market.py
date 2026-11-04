@@ -24,6 +24,10 @@
 21. 해외 시세 추가 경로는 키오시아 단일 종목만 허용하고 한국 2종목·미국 5종목·캐시/출력은 유지한다.
 22. 모든 신규 오류는 기존 조회 불가로 격리하며 토큰/요청 원문은 기록하지 않는다.
 23. 데이터 공급자는 비공식/지연/접근 차단 가능하고 재판매·실시간 거래용으로 사용하지 않는다.
+24. v0.5.6은 메모리7 원본 8종목에 1~8 번호를 붙이고 조회 불가 항목도 자리/순서를 유지한다.
+25. 기존 통화/시세/날짜/30초 캐시/무료 공급자 폴백/오류·로그는 그대로 보존한다.
+26. 번호 실행은 별도 selection_menu.py에서 원래 종목 티커로 매핑해 5일·21일·63일 분석을 실행한다.
+27. 가격 알림·자동거래·스케줄러·배터리 표시(Android 담당)에는 변경을 가하지 않는다.
 """
 from __future__ import annotations
 
@@ -530,15 +534,15 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
         if item is not None:
             day = item.market_time.date()
             latest_dates[item.stock.market] = max(day, latest_dates.get(item.stock.market, day))
-    for stock, item in zip(WATCHLIST, quotes):
+    for index, (stock, item) in enumerate(zip(WATCHLIST, quotes), start=1):
         if item is None:
-            lines.append(f'{stock.name} : 조회 불가')
+            lines.append(f'{index}. {stock.name} : 조회 불가')
         else:
             success += 1
             line = quote_line(item)
             if item.market_time.date() < latest_dates[stock.market]:
                 line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
-            lines.append(line)
+            lines.append(f'{index}. {line}')
             dates[stock.market] = item.market_time.strftime('%m/%d')
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
@@ -548,6 +552,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
     lines.append('※ 네이버 금융(한국) / Yahoo Finance·Japan(미국·일본) 공개/지연 시세 가능 · 정규장 기준')
+    lines.append('※ 5분 내 번호 1~8만 보내면 해당 종목의 5일·1개월·3개월 분석')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote:
         with _CACHE_LOCK:

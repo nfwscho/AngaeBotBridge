@@ -14,6 +14,10 @@
 12. 기존 주식 메모리7/그룹/미국시총10/5일·1/3개월 변동성·AI OFF/Android 권한/로그를 보존한다.
 13. 가격 알림/자동매매/예약발신/미인가 사용자의 숫자 명령 실행을 추가하지 않는다.
 14. 단위 테스트 시 단조 시계를 주입하여 목록 만료/범위 격리/잘못된 번호를 외부 인터넷 없이 검사한다.
+15. v0.5.6은 정상 시세 조회 후 메모리7 8종목 또는 사용자 그룹 최대 10종목의 번호를 분석 명령으로 연결한다.
+16. 목록에 표시된 원래 순서/종목코드를 메모리에만 저장하여 동일 이름·별칭 또는 공급자 실패가 있어도 정확한 종목을 선택한다.
+17. '10'을 지원하지만 '10개'·'123'과 메뉴가 없는 숫자는 무시하며 5분 만료·방/발신자 격리와 잠금을 유지한다.
+18. 기존 메인 메뉴/최근 사용 명령/분석 하위 메뉴/SQLite 원본 기록·AI OFF·배터리 표시는 그대로 보존한다.
 """
 from __future__ import annotations
 
@@ -23,7 +27,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from .market import StockQuoteError
+from .market import Stock, StockQuoteError
 
 MENU_TTL_SECONDS = 300
 MAX_MENU_SESSIONS = 200
@@ -87,6 +91,17 @@ class StockSelectionMenus:
         self._save(key, choices)
         return MenuAnswer(self._render('📊 앙개봇 주식 메뉴', choices), menu_active=True)
 
+    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...]) -> None:
+        """현재 시세표 번호와 정확히 같은 순서로 종목분석 선택 목록을 5분간 보관한다."""
+        key = self._key(room, sender)
+        if not stocks or len(stocks) > 10:
+            raise StockQuoteError('선택 가능한 시세 종목 수는 1~10개여야 합니다.')
+        # 별칭이나 표시 이름이 중복돼도 고정된 허용 티커로만 분석한다.
+        # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
+        choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
+                        for stock in stocks)
+        self._save(key, choices)
+
     @staticmethod
     def _recent(db: sqlite3.Connection, room: str, sender: str) -> tuple[MenuChoice, ...]:
         # 실행 가능한 성공한 읽기 명령만 표시. 그룹을 삭제했으면 과거 조회도 재실행하지 않는다.
@@ -114,8 +129,8 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'[1-9]', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~9 중에서 선택하세요.')
+        if re.fullmatch(r'(?:10|[1-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():

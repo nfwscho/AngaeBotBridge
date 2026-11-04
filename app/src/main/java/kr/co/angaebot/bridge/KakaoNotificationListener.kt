@@ -18,6 +18,9 @@
  * 16. v0.4.4 모든 허용 명령(로컬/주식/숫자 메뉴/AI/오류)의 답장 마지막에 S20+ 배터리 수준/충전 상태를 추가한다.
  * 17. 배터리는 답장 직전에 ACTION_BATTERY_CHANGED sticky 정보를 읽고 별도 권한/네트워크/상시 감시를 추가하지 않는다.
  * 18. 기존 알림 승인·차단, 호출어, 중복 지문, COMMAND/PYTHON/REPLY 단계, RemoteInput 본문 기록을 보존한다.
+ * 19. v0.4.5는 정상 인증 Core의 메모리7/사용자그룹 시세표에 menu_active가 있을 때도 번호 선택 게이트를 연다.
+ * 20. 기존 주/숫자 메뉴/한글 종목 분석, 5분·방/발신자 제한, 배터리·모든 기존 로깅/RemoteInput을 유지한다.
+ * 21. 알림 권한·토큰·UI/SQLite/AI OFF·명령의 기존 동작은 변경하지 않으며 가격 알림·매매 기능을 넣지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -159,7 +162,9 @@ class KakaoNotificationListener : NotificationListenerService() {
             when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {
                     logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
-                    if ((parsed.name == "주식" && parsed.argument == "메뉴") || numericSelection != null) {
+                    // 새 시세 요약도 다음 숫자 선택 메뉴이므로 인증 Core의 menu_active가 true일 때 열어준다.
+                    // 기존 메뉴와 숫자 선택의 종료 규칙은 유지하고 외부 응답/실패는 메뉴를 열지 않는다.
+                    if ((parsed.name == "주식" && parsed.argument == "메뉴") || nextMenuActive || numericSelection != null) {
                         menuGate.setActive(message.room, message.sender, nextMenuActive)
                     }
                 }

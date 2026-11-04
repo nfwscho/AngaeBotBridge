@@ -5,6 +5,8 @@
  * 3. 무관한 일반 대화·10개 이상 번호·한글 숫자 등을 선택으로 오인하지 않음.
  * 4. 기존 Kotlin 파서의 '앙개야' 장문 명령, 주 분 분석, 주 목록, 상태/테스트를 그대로 유지.
  * 5. Android SQLite/앱 설정/운영 로그/외부 Python 서버/실기기 사용 없이 순수 단위 테스트.
+ * 6. v0.4.5는 메모리7 및 관심종목 시세표에서 번호 10/10번/10.까지 허용하고 10개/123/1만원은 거부한다.
+ * 7. 기존 숫자 메뉴 1~9, 5분 만료, 방·발신자 격리, 명령·배터리/SQLite/로그 흐름을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -20,6 +22,9 @@ class MenuSelectionGateTest {
         gate.setActive("방", "나", true)
         for (number in listOf("1", "1번", "1.", "1)", "1 선택")) {
             assertEquals(ParseResult.Command("주식", "선택 1"), gate.parseSelection(number, "방", "나"))
+        }
+        for (number in listOf("10", "10번", "10.", "10)", "10 선택")) {
+            assertEquals(ParseResult.Command("주식", "선택 10"), gate.parseSelection(number, "방", "나"))
         }
         assertNull(gate.parseSelection("1", "다른방", "나"))
         assertNull(gate.parseSelection("1", "방", "다른사람"))
@@ -39,7 +44,7 @@ class MenuSelectionGateTest {
     @Test fun doNotConfuseEverydayMessages() {
         val gate = MenuSelectionGate(clockMs = { 0L })
         gate.setActive("방", "나", true)
-        for (text in listOf("123", "10", "1만원", "1만원이야", "주", "1만원 줘", "1번가", "1/2", "ㅈㅅ")) {
+        for (text in listOf("123", "10개", "11", "1만원", "1만원이야", "주", "1만원 줘", "1번가", "1/2", "ㅈㅅ")) {
             assertNull(gate.parseSelection(text, "방", "나"))
         }
     }

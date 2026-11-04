@@ -23,6 +23,8 @@
 21. v0.5.2 주식 도움말에 조회 전용 5거래일/1개월/3개월 변동성 분석 명령을 추가한다.
 22. 과거 가격 분석은 history.py에서만 처리하므로 기존 그룹 등록·수정·삭제·소유자 구분을 변경하지 않는다.
 23. 목표가 알림·예약·자동발송·주식 주문 기능은 포함하지 않으며 기존 DB·로그 보존 정책을 유지한다.
+24. v0.5.6은 기존 사용자 관심그룹 시세 요약에 실제 저장 순서대로 1~10 번호를 붙인다.
+25. 숫자 번호는 동일 사용자·채팅방의 5분 메뉴 선택에서만 기존 종목 분석으로 연결되며 그룹 CRUD/DB는 변경하지 않는다.
 24. v0.5.3 종목 분석·추가·삭제에 한글 기업명/영문 티커·한국 종목코드를 모두 허용한다.
 25. 미국시총10 기업명과 기존 메모리7의 한국·미국·일본 별칭, 구글/웨스턴 디지털 등 명확한 동의어를 지원한다.
 26. 사용자가 부여한 별칭은 동일 방·발신자에게만 보이고, 모호한 별칭은 종목을 추정하지 않고 오류를 표시한다.
@@ -201,12 +203,12 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
     lines = [f"📊 {name} 관심종목 시세 요약"]
     dates: dict[str, str] = {}
     failed = 0
-    for stock, quote in zip(stocks, quotes):
+    for index, (stock, quote) in enumerate(zip(stocks, quotes), start=1):
         if quote is None:
-            lines.append(f"{stock.name} : 조회 불가")
+            lines.append(f"{index}. {stock.name} : 조회 불가")
             failed += 1
         else:
-            lines.append(quote_line(quote))
+            lines.append(f"{index}. {quote_line(quote)}")
             dates[stock.market] = quote.market_time.strftime("%m/%d")
     if failed == len(stocks):
         raise StockQuoteError(f"'{name}' 그룹의 모든 시세를 조회하지 못했습니다.")
@@ -215,6 +217,7 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
     lines.append("※ 무료 비공식·지연 시세 가능 / 투자 주문 기능 없음")
+    lines.append(f"※ 5분 내 번호 1~{len(stocks)}만 보내면 해당 종목의 5일·1개월·3개월 분석")
     return "\n".join(lines)
 
 

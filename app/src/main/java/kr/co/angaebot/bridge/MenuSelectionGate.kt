@@ -2,6 +2,8 @@
  * 앙개봇 Android Bridge v0.4.3 숫자 메뉴 선택 게이트 — 전체 기능·보존 사항
  * 1. 오직 기존 카카오톡 방/발신자 허용 검사가 통과한 다음에 호출되는 순수 Kotlin 보조 모듈이다.
  * 2. '주' 또는 정상적인 인증 Core 주식 메뉴 응답 이후에만 숫자 1~9를 선택 명령으로 변환한다.
+ * 12. v0.4.5는 메모리7 8종목/관심그룹 최대 10종목 시세표 선택을 위해 숫자 10도 허용한다.
+ * 13. '10개'/'123'/'1만원' 같은 일상 문장은 차단하고 기존 5분·채팅방/발신자 격리·토큰/로그를 보존한다.
  * 3. '1', '1번', '1.', '1)', '1 선택'처럼 숫자로 시작하는 간단한 선택 문법을 지원한다.
  * 4. '1만원', '10개', '123', '주변' 등 일반 채팅/잘못된 숫자는 단축 명령으로 해석하지 않는다.
  * 5. 각 메뉴는 같은 room/sender 쌍에서만 유효하며 다른 사용자나 채팅방에 전파하지 않는다.
@@ -19,7 +21,7 @@ class MenuSelectionGate(
 ) {
     companion object {
         const val MENU_TTL_MS = 300_000L
-        private val SELECTION = Regex("^([1-9])(?:번|[.)])?(?:\\s+.*)?$")
+        private val SELECTION = Regex("^(10|[1-9])(?:번|[.)])?(?:\\s+.*)?$")
     }
     private data class Scope(val room: String, val sender: String)
     private val expiresAt = mutableMapOf<Scope, Long>()

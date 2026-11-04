@@ -167,11 +167,30 @@ class WatchlistUnitTests(unittest.TestCase):
         self.assertIn('삼성전자 : 221,500원 (▲', report)
         self.assertIn('마이크론 : $800.00 (▽', report)
         self.assertIn('키오시아 : 조회 불가', report)
+        self.assertIn('1. 삼성전자 :',report)
+        self.assertIn('2. 마이크론 :',report)
+        self.assertIn('3. 키오시아 : 조회 불가',report)
+        self.assertIn('번호 1~3',report)
         self.assertIn('현지 거래일:', report)
         self.assertTrue(report.index('삼성전자') < report.index('마이크론') < report.index('키오시아'))
         with self.assertRaisesRegex(StockQuoteError, '모든 시세'):
             group_report('지수', load_group(self.db,self.room,self.sender,'지수'),
                          fetcher=lambda _: (_ for _ in ()).throw(StockQuoteError('blocked')))
+
+    def test_group_quote_tenth_row_numbered_no_network(self):
+        from app.watchlists import US_MARKET_CAP_PRESET
+        self.run_cmd('그룹생성 십종목')
+        for ticker, alias in US_MARKET_CAP_PRESET:
+            self.run_cmd(f'추가 십종목 {ticker} {alias}')
+        stocks = load_group(self.db, self.room, self.sender, '십종목')
+        self.assertEqual(len(stocks),10)
+        moment = datetime(2026,11,4,15,0,tzinfo=timezone.utc)
+        def fake(stock):
+            return Quote(stock, 100.0, 95.0, 5.263, moment, moment)
+        report=group_report('십종목',stocks,fetcher=fake)
+        self.assertIn('1. 엔비디아 :',report)
+        self.assertIn('10. 일라이릴리 :',report)
+        self.assertIn('번호 1~10',report)
 
     def test_reads_and_writes_do_not_call_network(self):
         with patch('app.watchlists.fetch_quote') as network:

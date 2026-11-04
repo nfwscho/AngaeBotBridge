@@ -16,7 +16,7 @@
 11. FastAPI 런처 시작 로그의 버전 문자열을 0.4.1로 갱신하고 로그 이벤트 형식은 유지한다.
 12. v0.4.2 런처 버전만 갱신하고 이전 로그 형식/단일실행/SSH/Watchdog 기능을 보존한다.
 14. v0.5.3에서 한글 종목 별칭 조회가 추가되어도 재시작·단일 인스턴스·로그 보관은 이전과 같다.
-15. v0.5.5 자원정리 회귀테스트에도 기존 runit 단일실행/서버 로그 보존/락/포트 점유검사는 변경하지 않는다.
+15. v0.5.6 자원정리 회귀테스트에도 기존 runit 단일실행/서버 로그 보존/락/포트 점유검사는 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def launch(core: Path = CORE) -> int:
     finally:
         if output > 2:
             os.close(output)
-    marker = f'CORE_START version=0.5.5 pid={os.getpid()}'
+    marker = f'CORE_START version=0.5.6 pid={os.getpid()}'
     if archived:
         marker += f' previous_log_archived={archived.name}'
     os.write(2, (marker + '\n').encode('utf-8'))

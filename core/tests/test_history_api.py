@@ -110,7 +110,7 @@ class HistoryAPITests(unittest.TestCase):
         self.assertIn('일봉',fail['reply'])
         self.assertIn('56,088',self.send('123*456',command='계산').json()['reply'])
         self.assertIn('OFF',self.send(command='AI상태').json()['reply'])
-        self.assertIn('v0.5.5',self.send(command='서버상태').json()['reply'])
+        self.assertIn('v0.5.6',self.send(command='서버상태').json()['reply'])
         with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs WHERE ok=0').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
