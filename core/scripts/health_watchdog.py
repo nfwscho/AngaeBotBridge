@@ -1,19 +1,22 @@
 """
-앙개봇 v0.2.1 Python 상태 감시기 — 모든 기능 상세 주석
-1. 기존 v0.2.0 FastAPI `/v1/health` 엔드포인트에 127.0.0.1로만 접속한다.
-2. .env에 저장된 기존 ANGAE_TOKEN을 읽어 인증한다. 토큰은 절대 로그에 남기지 않는다.
-3. 서버 미응답/오류가 3회 연속이면 `runit sv restart angaebot-core`를 실행한다.
-4. 검사 간격 30초, HTTP 타임아웃 4초. 정상 복구 시 상태 전환을 기록한다.
-5. watchdog 서비스 자체도 runit이 감시하므로 예외 종료 시 재시작된다.
-6. logs/watchdog.log에 기록을 추가하며 기존 로그와 SQLite DB는 수정/삭제하지 않는다.
-7. Android 앱의 수신, 명령, UI 및 SQLite 로그 로직에는 영향을 주지 않는다.
-8. Android가 Termux 전체를 강제 종료하는 상황을 복구할 수는 없다.
+앙개봇 v0.3.1 FastAPI 감시기 — 기존 및 신규 기능 전체 설명
+1. 127.0.0.1:8765/v1/health에 X-AngaeBot-Token 인증으로 30초마다 연결한다.
+2. 기존 WATCHDOG_STARTED/HEALTH_OK/HEALTH_FAILED/RESTART_REQUESTED 로그 표기를 유지한다.
+3. 연속 3회 실패 시 기존 runit `sv restart angaebot-core`를 통해 서버만 재시작한다.
+4. 반복 장애 시 최대 5분 지수 백오프로 무한 재시작 폭주를 방지하고 백오프를 기록한다.
+5. 매 검사마다 .env 토큰을 다시 읽어 설정 변경 후에도 watchdog을 중단하지 않는다.
+6. logs/watchdog.log가 2 MiB 이상이면 logs/archive로 이동한 뒤 새로운 파일에 기록한다.
+7. 이전 로그 아카이브와 server.log, DB, 모든 사용자 인증정보를 삭제하지 않는다.
+8. 기존 watchdog runit 실행, Android 수신·명령·빠른답장·로그 UI를 변경하지 않는다.
+9. 자체 SSH·시스템 앱·외부 서버를 재시작하지 않고 새 패키지를 설치하지 않는다.
+10. 오류 로그에는 토큰 값·요청 질문 본문을 출력하지 않는다.
 """
 from __future__ import annotations
 
 import os
 import subprocess
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -22,14 +25,22 @@ from urllib.request import Request, urlopen
 CORE = Path(__file__).resolve().parents[1]
 INTERVAL = 30
 THRESHOLD = 3
+MAX_BACKOFF = 300
+WATCHDOG_LOG_MAX_BYTES = 2 * 1024 * 1024
 HEALTH_URL = 'http://127.0.0.1:8765/v1/health'
 
 
 def log(message: str) -> None:
     folder = CORE / 'logs'
     folder.mkdir(parents=True, exist_ok=True)
+    logfile = folder / 'watchdog.log'
+    if logfile.exists() and logfile.stat().st_size >= WATCHDOG_LOG_MAX_BYTES:
+        archive = folder / 'archive'
+        archive.mkdir(parents=True, exist_ok=True)
+        target = archive / f'watchdog_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}_{os.getpid()}.log'
+        logfile.rename(target)
     timestamp = datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')
-    with (folder / 'watchdog.log').open('a', encoding='utf-8') as fh:
+    with logfile.open('a', encoding='utf-8') as fh:
         fh.write(f'{timestamp} {message}\n')
 
 
@@ -62,27 +73,49 @@ def restart_service() -> bool:
         return False
 
 
+@dataclass
+class WatchdogState:
+    failures: int = 0
+    attempts: int = 0
+    next_retry: float = 0.0
+    was_healthy: bool | None = None
+
+    def step(self, ok: bool, now: float, restart=restart_service, logger=log) -> None:
+        if ok:
+            if self.was_healthy is not True:
+                logger('HEALTH_OK')
+            self.failures = 0
+            self.attempts = 0
+            self.next_retry = 0.0
+            self.was_healthy = True
+            return
+        self.failures += 1
+        if self.was_healthy is not False:
+            logger('HEALTH_FAILED')
+        self.was_healthy = False
+        if self.failures < THRESHOLD or now < self.next_retry:
+            return
+        success = restart()
+        logger('RESTART_REQUESTED success=' + str(success).lower())
+        delay = min(MAX_BACKOFF, INTERVAL * (2 ** min(self.attempts, 4)))
+        self.attempts += 1
+        self.next_retry = now + delay
+        self.failures = 0
+        logger('RESTART_BACKOFF seconds=' + str(delay))
+
+
 def main() -> None:
-    token = token_from_env()
-    failures = 0
-    was_healthy = None
+    state = WatchdogState()
     log('WATCHDOG_STARTED interval=30s threshold=3')
     while True:
-        ok = health_ok(token)
-        if ok:
-            if was_healthy is not True:
-                log('HEALTH_OK')
-            failures = 0
-            was_healthy = True
-        else:
-            failures += 1
-            if was_healthy is not False:
-                log('HEALTH_FAILED')
-            was_healthy = False
-            if failures >= THRESHOLD:
-                success = restart_service()
-                log('RESTART_REQUESTED success=' + str(success).lower())
-                failures = 0
+        try:
+            token = token_from_env()
+            healthy = health_ok(token)
+        except (OSError, ValueError, RuntimeError):
+            healthy = False
+            if state.was_healthy is not False:
+                log('TOKEN_LOAD_FAILED')
+        state.step(healthy, time.monotonic())
         time.sleep(INTERVAL)
 
 

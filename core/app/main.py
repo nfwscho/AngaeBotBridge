@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.3.0 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.3.1 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -12,6 +12,7 @@
 10. AI 응답 실패 시 기존 로컬 Python 명령은 계속 동작하고 비밀키/원문을 에러 로그로 노출하지 않는다.
 11. 기존 create_app 주입 테스트 구조와 응답 중복 필드를 유지한다.
 12. 임의 셸·파일 접근, 외부 PC 제어, AI 도구 호출 등 위험한 실행 기능은 제공하지 않는다.
+13. v0.3.1 서버 단일 실행/로그 보관/runit 복구는 별도 운영 스크립트가 처리하며 API 호환은 유지한다.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화"}
 
 
