@@ -23,6 +23,9 @@
 21. 주가 분석은 조회 시에만 실행하며 자동 가격 감시·목표가 알림·예약 발송·주식 주문은 구현하지 않는다.
 22. 공급자 정보는 무료 비공식/지연 데이터이므로 실제 증권사·거래소와 차이가 날 수 있음을 표시한다.
 23. 테스트용 opener/fetcher/now 주입을 허용하여 외부 인터넷 없이 시차·수익률·변동성·장애를 회귀 검증한다.
+24. Termux에서 tzdata/시스템 IANA 시간대 DB가 누락되더라도 한국/일본은 고정 UTC+9 시간대로 안전하게 처리한다.
+25. 미국 New York의 DST는 추정하지 않으며 시간대 DB가 없으면 정확한 오류를 반환한다.
+26. 배포 전 tzdata 검증/설치는 별도 Termux 배포 스크립트에서만 시행하고 기존 서버·DB·로그는 보존한다.
 """
 from __future__ import annotations
 
@@ -37,7 +40,7 @@ from statistics import stdev
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .market import Stock, WATCHLIST, StockQuoteError
 from .watchlists import resolve_stock
@@ -86,11 +89,23 @@ def _finite_positive(value: object) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _exchange_timezone(stock: Stock):
+    """거래소별 공식 IANA TZ를 사용하되 Termux 고정 UTC+9 시장은 안전하게 복구."""
+    try:
+        return ZoneInfo(stock.timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        # 대한민국/일본은 현대 주식 거래일 구간에 서머타임이 없으므로 UTC+9가 정확하다.
+        if stock.timezone_name in ('Asia/Seoul', 'Asia/Tokyo'):
+            return timezone(timedelta(hours=9))
+        # 뉴욕은 DST가 있으므로 고정 UTC-5 대체값을 사용하면 일봉 날짜가 틀어진다.
+        raise StockQuoteError('미국 거래소 시간대 데이터가 없습니다. Termux Python에 tzdata 설치가 필요합니다.') from exc
+
+
 def _local_now(stock: Stock, now: datetime | None = None) -> datetime:
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise StockQuoteError('시각 정보가 불완전합니다.')
-    return now.astimezone(ZoneInfo(stock.timezone_name))
+    return now.astimezone(_exchange_timezone(stock))
 
 
 def _is_finished_session(stock: Stock, trade_date: date, now: datetime) -> bool:
@@ -138,7 +153,7 @@ def parse_yahoo_history(stock: Stock, payload: dict, *, now: datetime | None = N
             raise StockQuoteError('일봉 날짜와 종가 수가 다릅니다.')
         if not isinstance(adjusted, list):
             adjusted = []
-        tz = ZoneInfo(stock.timezone_name)
+        tz = _exchange_timezone(stock)
         # 수정종가 일부가 누락된 경우 서로 다른 조정 기준을 섞지 않고 전체를 원종가 기준으로 계산.
         valid_close_indices = [i for i, c in enumerate(candles) if _finite_positive(c) is not None]
         fully_adjusted = (len(adjusted) == len(dates) and

@@ -13,7 +13,11 @@
 # 11. 성공 시 인증된 /v1/health가 정확히 v0.5.2인지 확인하고 ASCII 로그로 결과와 백업 경로를 남긴다.
 # 12. OpenAI/유료 API·주식 주문·가격알림·예약 발송·보이지 않는 주기 감시는 실행하거나 설치하지 않는다.
 # 13. 사용자 소유 stock_groups/stock_items, 과거 events/jobs/ai_sessions/ai_turns는 변경·삭제하지 않는다.
-# 14. 로그 삭제/테이블 리셋/의존성 자동 업데이트·다른 서비스 강제종료 없이 최소 변경만 적용한다.
+# 14. 로그 삭제/테이블 리셋/불필요한 의존성 업데이트·다른 서비스 강제종료 없이 최소 변경만 적용한다.
+# 15. Termux에 없을 수 있는 IANA 시간대 DB(Asia/Seoul, Asia/Tokyo, America/New_York)를 사전에 확인한다.
+# 16. DB가 누락된 경우에만 순수 Python tzdata wheel을 해당 .venv에 한정 설치하고 3개 시장 시간대를 재검사한다.
+# 17. 시간대 설치/검증 실패 시 기존 운영 소스를 수정하거나 Core를 재시작하기 전에 중단한다.
+# 18. 기존 125건 회귀 테스트와 모든 SQLite/로그/메모리7/사용자그룹/미국시총10/AI OFF를 보존한다.
 set -Eeuo pipefail
 CORE="$HOME/angaebot/core"
 UPDATE="$HOME/angaebot/update_v052"
@@ -48,6 +52,30 @@ for row in "${ITEMS[@]}"; do
     cp -p "$target" "$BACKUP/$target"
   fi
 done
+# Android/Termux는 /usr/share/zoneinfo가 없는 경우가 있다. Python의 순수 데이터 휠만 보충한다.
+# 실행 중인 서비스를 건드리기 전에 검사하므로 온라인 설치 실패 시 기존 Core/DB는 그대로이다.
+check_market_timezones() {
+    .venv/bin/python - <<'PYCODE'
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+try:
+    for name in ('Asia/Seoul', 'Asia/Tokyo', 'America/New_York'):
+        ZoneInfo(name)
+except ZoneInfoNotFoundError:
+    raise SystemExit(1)
+PYCODE
+}
+if ! check_market_timezones; then
+    echo '[INFO] Python market time zones missing. Installing tzdata (pure-Python package only).'
+    if ! .venv/bin/python -m pip install --disable-pip-version-check --only-binary=:all: 'tzdata>=2025.2,<2028'; then
+        echo '[ERROR] tzdata installation failed; existing Core source and service unchanged.' >&2
+        exit 3
+    fi
+    if ! check_market_timezones; then
+        echo '[ERROR] Missing IANA market time zones even after tzdata install.' >&2
+        exit 3
+    fi
+fi
+printf '[OK] IANA market time zones available: Seoul / Tokyo / New York\n'
 APPLIED=0
 RESTARTED=0
 ROLLED_BACK=0

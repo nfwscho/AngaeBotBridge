@@ -10,6 +10,8 @@
 8. 그룹 종목별 일부 실패를 격리하고 등록 순서·메모리7 기초 watchlist를 유지한다.
 9. 외부 URL/AI 호출/알림/예약/매매 없이 모의 응답·고정 시각만으로 테스트한다.
 10. 개인 기록·실제 SQLite·환경변수·로그를 읽거나 변경하지 않는다.
+11. Termux의 ZoneInfo/tzdata 누락을 모의로 재현하여 한국/일본 UTC+9 안전 동작을 확인한다.
+12. 미국 시장 DST를 고정 offset으로 잘못 대체하지 않고 명확한 설치 오류를 주는지 확인한다.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import json
 import math
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfoNotFoundError
 from unittest.mock import patch
 
 from app.market import WATCHLIST, StockQuoteError
@@ -42,6 +45,22 @@ def yahoo_payload(stock, times, closes, adjusted=None):
 
 
 class HistoryUnitTests(unittest.TestCase):
+    def test_missing_iana_database_uses_safe_asian_fallback_only(self):
+        from app.history import _local_now, parse_yahoo_history
+        now = datetime(2026, 11, 5, 1, 0, tzinfo=timezone.utc)  # KST 10:00
+        with patch('app.history.ZoneInfo', side_effect=ZoneInfoNotFoundError('missing IANA data')):
+            for stock in (WATCHLIST[0], WATCHLIST[5]):
+                with self.subTest(stock=stock.ticker):
+                    local = _local_now(stock, now)
+                    self.assertEqual(local.hour, 10)
+                    self.assertEqual(local.utcoffset(), timedelta(hours=9))
+            # DST 적용 미국은 UTC-5를 임의로 고정하지 않아 과거 거래일이 틀어지지 않는다.
+            with self.assertRaisesRegex(StockQuoteError, 'tzdata'):
+                _local_now(WATCHLIST[2], now)
+            with self.assertRaisesRegex(StockQuoteError, 'tzdata'):
+                parse_yahoo_history(WATCHLIST[2], yahoo_payload(WATCHLIST[2],
+                    [int(datetime(2026,11,4,15,tzinfo=timezone.utc).timestamp())], [100]), now=now)
+
     def test_21_and_63_return_and_annualized_log_volatility(self):
         series = bars(75)
         one, three = period_result(series,21), period_result(series,63)
