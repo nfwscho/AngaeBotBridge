@@ -30,6 +30,9 @@
 28. 모든 역사적 시세 조회는 DB 쓰기 락 밖에서만 시행하고 SQLite 테이블·인증키·메모리7 기존 가격 모듈은 그대로 유지한다.
 29. 그룹 분석은 해당 room/sender의 기존 그룹만 접근할 수 있고 5분 캐시·요청시간 제한으로 과도한 트래픽을 피한다.
 30. 가격 조건 알림·예약/자동발신·주식 자동주문은 구현하지 않으며 OpenAI/Ollama의 활성화 없이 분석 명령을 실행한다.
+31. v0.5.3 주식 분석의 대상 종목을 한글 기업명/티커·사용자별 저장 별칭으로 조회하며 그룹명 우선순위를 유지한다.
+32. 중복 또는 다른 사용자의 별칭을 무단 조회하지 않고 종목코드가 모호하면 명확하게 거부한다.
+33. 기존 FastAPI 인증·중복 실행 방지·DB 잠금 밖 시세 조회·전체 운영 로그 및 과거 시세 로직을 보존한다.
 """
 from __future__ import annotations
 
@@ -49,10 +52,10 @@ from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import details, command_stats, recent_errors, uptime_report
 from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
-                         execute_group_command, resolve_stock)
+                         execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 
-VERSION = "0.5.2"
+VERSION = "0.5.3"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
@@ -131,9 +134,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply = execute_stock_command(request.command, request.argument)
                 elif request.command == "주식" and is_analysis_request(request.argument):
                     parts = request.argument.split()
-                    if len(parts) != 2:
-                        raise StockQuoteError("사용법: 앙개야 주식 분석 MU (또는 그룹명/메모리7)")
-                    target = parts[1]
+                    if len(parts) < 2:
+                        raise StockQuoteError("사용법: 앙개야 주식 분석 마이크론 (또는 삼성전자/하이닉스/그룹명)")
+                    target = ' '.join(parts[1:])
                     if target == "메모리7":
                         stock_reply = history_group_report("메모리7", WATCHLIST)
                     else:
@@ -146,7 +149,14 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         if stocks is not None:
                             stock_reply = history_group_report(target, stocks)
                         else:
-                            stock_reply = individual_report(fetch_history(resolve_stock(target)))
+                            try:
+                                stock = resolve_stock(target)
+                            except StockQuoteError as invalid_name:
+                                with closing(connect()) as read_db:
+                                    stock = resolve_saved_alias(read_db, request.room, request.sender, target)
+                                if stock is None:
+                                    raise invalid_name
+                            stock_reply = individual_report(fetch_history(stock))
                 elif request.command == "주식" and is_group_quote_request(request.argument):
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, request.argument.strip())

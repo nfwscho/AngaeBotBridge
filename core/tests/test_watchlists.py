@@ -9,6 +9,7 @@
 7. 사용자 명령으로 외부 URL, 임의 셸·파일 명령, 유료 API가 실행되지 않음을 확인한다.
 8. 모든 테스트는 임시 SQLite 파일에서만 수행하고 실제 Termux 로그/DB/토큰은 변경하지 않는다.
 9. v0.5.1 그룹당 최대 10종목과 고정 미국시총10 프리셋/기존 그룹 보호를 추가 검사한다.
+10. v0.5.3 유명 종목의 정확한 한글 이름·동의어 해석, 사용자별 저장 별칭·모호성 및 삭제를 검증한다.
 """
 from __future__ import annotations
 
@@ -111,6 +112,30 @@ class WatchlistUnitTests(unittest.TestCase):
         with self.assertRaisesRegex(StockQuoteError, '최대'):
             self.run_cmd('그룹생성 추가그룹')
 
+    def test_korean_company_names_and_saved_alias(self):
+        expected = {
+            '마이크론': 'MU', '삼성전자': '005930.KS', '하이닉스': '000660.KS',
+            'SK하이닉스': '000660.KS', 'SK하이닉스ADR': 'SKHY',
+            '엔비디아': 'NVDA', '애플': 'AAPL', '구글': 'GOOGL',
+            '웨스턴 디지털': 'WDC', '시게이트': 'STX',
+            '키오시아': '285A.T', '테슬라': 'TSLA',
+        }
+        for name, ticker in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(resolve_stock(name).ticker, ticker)
+        self.run_cmd('그룹생성 반도체')
+        self.run_cmd('추가 반도체 NVDA 내GPU')
+        from app.watchlists import resolve_saved_alias
+        own = resolve_saved_alias(self.db, self.room, self.sender, '내GPU')
+        self.assertEqual(own.ticker, 'NVDA')
+        self.assertIsNone(resolve_saved_alias(self.db, '다른방', self.sender, '내GPU'))
+        self.assertIn('삭제했습니다', self.run_cmd('삭제 반도체 내GPU'))
+        self.run_cmd('추가 반도체 MU 같은별칭')
+        self.run_cmd('그룹생성 미국')
+        self.run_cmd('추가 미국 AAPL 같은별칭')
+        with self.assertRaisesRegex(StockQuoteError, '여러 종목'):
+            resolve_saved_alias(self.db, self.room, self.sender, '같은별칭')
+
     def test_stock_symbols_validation(self):
         expected = [('삼성전자', '005930.KS', 'KRW'), ('005930', '005930.KS', 'KRW'),
                     ('285A.T', '285A.T', 'JPY'), ('mu', 'MU', 'USD'), ('000660', '000660.KS', 'KRW')]
@@ -154,7 +179,7 @@ class WatchlistUnitTests(unittest.TestCase):
                 self.run_cmd(cmd)
             network.assert_not_called()
         self.assertIn('그룹생성', command_help())
-        self.assertIn('주식 분석 MU', command_help())
+        self.assertIn('주식 분석 마이크론', command_help())
         self.assertTrue(is_group_quote_request('반도체'))
         self.assertFalse(is_group_quote_request('목록'))
         self.assertFalse(is_group_quote_request('추가 반도체 MU'))

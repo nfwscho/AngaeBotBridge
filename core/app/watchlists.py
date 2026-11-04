@@ -23,6 +23,10 @@
 21. v0.5.2 주식 도움말에 조회 전용 5거래일/1개월/3개월 변동성 분석 명령을 추가한다.
 22. 과거 가격 분석은 history.py에서만 처리하므로 기존 그룹 등록·수정·삭제·소유자 구분을 변경하지 않는다.
 23. 목표가 알림·예약·자동발송·주식 주문 기능은 포함하지 않으며 기존 DB·로그 보존 정책을 유지한다.
+24. v0.5.3 종목 분석·추가·삭제에 한글 기업명/영문 티커·한국 종목코드를 모두 허용한다.
+25. 미국시총10 기업명과 기존 메모리7의 한국·미국·일본 별칭, 구글/웨스턴 디지털 등 명확한 동의어를 지원한다.
+26. 사용자가 부여한 별칭은 동일 방·발신자에게만 보이고, 모호한 별칭은 종목을 추정하지 않고 오류를 표시한다.
+27. 이름에서 티커로만 변환하며 조회 공급자·기존 SQLite·메모리7·운영 로그와 AI OFF는 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -91,9 +95,38 @@ def _name(text: str, *, allow_reserved: bool = False) -> str:
     return name
 
 
+# 알려진 종목만 한글 이름으로 매칭한다. 데이터 제공자·티커/통화는 기존 설정을 그대로 사용.
+_KNOWN_NAME_TICKERS = {s.name.replace(' ', '').upper(): s.ticker for s in WATCHLIST}
+_KNOWN_NAME_TICKERS.update({name.replace(' ', '').upper(): ticker for ticker, name in US_MARKET_CAP_PRESET})
+_KNOWN_NAME_TICKERS.update({
+    'SK하이닉스': '000660.KS', '에스케이하이닉스': '000660.KS',
+    'SK하이닉스ADR': 'SKHY', '하이닉스ADR': 'SKHY',
+    '구글': 'GOOGL', '시게이트': 'STX',
+    '웨스턴디지털': 'WDC', '스페이스엑스': 'SPCX',
+})
+
+
+def resolve_saved_alias(db: sqlite3.Connection, room: str, sender: str, name: str) -> Stock | None:
+    """본인 채팅방에 저장한 정확한 별칭만 조회한다. 서로 다른 티커가 중복되면 거부."""
+    _scope(room, sender)
+    target = name.strip()
+    if not _ALIAS.fullmatch(target):
+        return None
+    matches = db.execute("""SELECT alias,ticker,currency,market,timezone_name FROM stock_items
+        WHERE room=? AND sender=? AND alias=? ORDER BY sort_order""",
+        (room, sender, target)).fetchall()
+    unique = {row[1]: Stock(*row) for row in matches}
+    if len(unique) > 1:
+        raise StockQuoteError(f"'{target}' 별칭이 여러 종목에 사용됩니다. 종목명을 고유하게 지정하거나 티커를 사용하세요.")
+    return next(iter(unique.values()), None)
+
+
 def resolve_stock(value: str, alias: str = "") -> Stock:
-    """기존 8개 이름/티커 또는 고정 형식의 KR/US/JP 티커만 허용."""
-    v = value.strip().upper()
+    """메모리7·미국시총10의 기업명과 동의어를 기존 정확한 티커/통화로 변환."""
+    readable = value.strip()
+    normalized_name = ''.join(readable.split()).upper()
+    mapped_ticker = _KNOWN_NAME_TICKERS.get(normalized_name)
+    v = mapped_ticker or readable.upper()
     if re.fullmatch(r"\d{6}", v):
         v += ".KS"
     known = next((s for s in WATCHLIST if s.ticker.upper() == v or s.name.upper() == v), None)
@@ -110,7 +143,8 @@ def resolve_stock(value: str, alias: str = "") -> Stock:
         else:
             raise StockQuoteError("종목코드 형식이 올바르지 않습니다. 예: MU / 005930 / 285A.T")
         default_alias = ticker
-    display = alias.strip() or default_alias
+    # 한글 이름으로 요청한 경우 친숙한 이름을 출력한다. 티커 입력 시 기존 표시 방식 유지.
+    display = alias.strip() or (normalized_name if mapped_ticker else default_alias)
     if not _ALIAS.fullmatch(display):
         raise StockQuoteError("종목 별칭은 공백 없이 한글·영문·숫자·.·_·- 1~24자로 지정하세요.")
     return Stock(display, ticker, currency, market, tz)
@@ -121,13 +155,14 @@ def command_help() -> str:
             "앙개야 주식 목록\n"
             "앙개야 주식 그룹생성 반도체\n"
             "앙개야 주식 프리셋 미국시총10\n"
-            "앙개야 주식 추가 반도체 MU 마이크론\n"
-            "앙개야 주식 추가 반도체 005930 삼성전자\n"
+            "앙개야 주식 추가 반도체 마이크론\n"
+            "앙개야 주식 추가 반도체 삼성전자\n"
             "앙개야 주식 반도체\n"
-            "앙개야 주식 분석 MU (5일·1개월·3개월)\n"
+            "앙개야 주식 분석 마이크론 (5일·1개월·3개월)\n"
+            "앙개야 주식 분석 삼성전자 / 하이닉스 / 엔비디아\n"
             "앙개야 주식 분석 메모리7\n"
             "앙개야 주식 분석 반도체\n"
-            "앙개야 주식 삭제 반도체 MU\n"
+            "앙개야 주식 삭제 반도체 마이크론\n"
             "앙개야 주식 그룹삭제 반도체 확인\n"
             "※ 메모리7은 원본 보존 · 그룹당 최대 10종목\n"
             "※ 미국시총10은 2026-11-04 고정 구성(순위 자동 변경 없음) · AI/API 키 불필요")
@@ -277,7 +312,16 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
         if len(parts) != 3:
             raise StockQuoteError("사용법: 앙개야 주식 삭제 반도체 MU")
         name = _name(parts[1])
-        stock = resolve_stock(parts[2])
+        try:
+            stock = resolve_stock(parts[2])
+        except StockQuoteError as error:
+            # 기존 그룹에 직접 등록한 별칭도 삭제 허용. 다른 채팅방/그룹은 절대 조회하지 않음.
+            row = db.execute("""SELECT ticker FROM stock_items
+                WHERE room=? AND sender=? AND group_name=? AND alias=?""",
+                (room, sender, name, parts[2])).fetchone()
+            if row is None:
+                raise error
+            stock = resolve_stock(row[0])
         result = db.execute("DELETE FROM stock_items WHERE room=? AND sender=? AND group_name=? AND ticker=?",
                             (room, sender, name, stock.ticker)).rowcount
         if not result:
