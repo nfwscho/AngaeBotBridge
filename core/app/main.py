@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.3 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.5.0 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -19,6 +19,11 @@
 17. 시세 조회는 외부 무료 HTTPS 시세 API만 사용하며 OpenAI API/앱 권한/기존 로그·DB를 변경하지 않는다.
 18. 중복 요청 확인 후 시세 조회는 SQLite 쓰기 잠금 밖에서 진행해 기존 명령 지연을 최소화한다.
 19. v0.4.3 국내 주식 네이버 금융과 키오시아 일본 공급자 폴백을 추가하고 API/로그 호환을 유지한다.
+20. v0.5.0 '주식 목록/그룹생성/추가/삭제/그룹삭제/그룹조회'를 추가하며 메모리7 원본을 보호한다.
+21. 관심종목은 room/sender별 신규 stock_groups/stock_items 테이블에만 저장하며 기존 DB/로그는 보존한다.
+22. 그룹 CRUD는 jobs/events 기록과 같은 SQLite 트랜잭션에서 실행하여 요청 ID 중복 실행을 막는다.
+23. 관심그룹 시세 조회는 SQLite 쓰기 락 밖에서 시행하고 다른 명령의 응답 및 로그를 유지한다.
+24. 새 기능은 기존 Android Bridge '주식' 명령을 그대로 사용해 APK 재설치 및 AI 설정을 요구하지 않는다.
 """
 from __future__ import annotations
 
@@ -37,8 +42,10 @@ from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import details, command_stats, recent_errors, uptime_report
 from .market import StockQuoteError, execute_stock_command
+from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
+                         execute_group_command)
 
-VERSION = "0.4.3"
+VERSION = "0.5.0"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
@@ -83,6 +90,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
             prompt TEXT NOT NULL, reply TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         db.execute("""CREATE INDEX IF NOT EXISTS idx_ai_turn_context
             ON ai_turns(room, sender, generation, id)""")
+        # v0.5.0: 관심종목 테이블만 추가. 기존 jobs/events/ai 데이터는 절대 변경하지 않는다.
+        init_schema(db)
 
     api = FastAPI(title="AngaeBot Core", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -110,7 +119,13 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                 return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
             try:
-                stock_reply = execute_stock_command(request.command, request.argument)
+                # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
+                if request.command == "메모리7" or (request.command == "주식" and request.argument.strip() == "메모리7"):
+                    stock_reply = execute_stock_command(request.command, request.argument)
+                elif request.command == "주식" and is_group_quote_request(request.argument):
+                    with closing(connect()) as read_db:
+                        stocks = load_group(read_db, request.room, request.sender, request.argument.strip())
+                    stock_reply = group_report(request.argument.strip(), stocks)
             except StockQuoteError as error:
                 stock_error = error
         with lock:
@@ -125,7 +140,13 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     if request.command in {"주식", "메모리7"}:
                         if stock_error is not None:
                             raise stock_error
-                        reply = stock_reply
+                        if stock_reply is not None:
+                            reply = stock_reply
+                        elif request.command == "주식":
+                            reply = execute_group_command(db, request.room, request.sender, request.argument)
+                        else:
+                            # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
+                            reply = execute_stock_command(request.command, request.argument)
                     elif request.command == "상세상태":
                         reply = details(int(time.monotonic() - began))
                     elif request.command == "통계":
