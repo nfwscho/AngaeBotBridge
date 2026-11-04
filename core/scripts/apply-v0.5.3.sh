@@ -21,6 +21,8 @@
 # 19. 한글 종목명·회사 동의어·채팅방/발신자 전용 별칭 조회·동명 다종목 충돌 검사를 추가한다.
 # 20. 이전 v0.5.1에서 바로 갱신하더라도 v0.5.2의 history.py 최신 시간대 핫픽스를 함께 배포한다.
 # 21. 종목 목표가 알림·주기적 감시·자동 발신·주식 거래는 추가하지 않는다.
+# 22. v0.5.3 서버를 재시작한 뒤 인증된 /v1/health 응답의 버전을 정확히 0.5.3으로 검사한다.
+# 23. 성공 시 이 검사를 통과해야만 배포 완료하고 실패 시 기존 소스 백업으로 복원한다.
 set -Eeuo pipefail
 CORE="$HOME/angaebot/core"
 UPDATE="$HOME/angaebot/update_v053"
@@ -83,6 +85,7 @@ printf '[OK] IANA market time zones available: Seoul / Tokyo / New York\n'
 APPLIED=0
 RESTARTED=0
 ROLLED_BACK=0
+EXPECTED_VERSION='0.5.3'
 rollback() {
   if [ "$ROLLED_BACK" -eq 1 ] || [ "$APPLIED" -ne 1 ]; then return 0; fi
   ROLLED_BACK=1
@@ -134,10 +137,10 @@ except (OSError, ValueError, TypeError, KeyError):
     print('')
 PY
   )
-  if [ "$VERSION" = '0.5.2' ]; then break; fi
+  if [ "$VERSION" = "$EXPECTED_VERSION" ]; then break; fi
 done
-if [ "$VERSION" != '0.5.2' ]; then
-  printf '[ERROR] Health version expected 0.5.2, got %s\n' "${VERSION:-none}" >&2
+if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
+  printf '[ERROR] Health version expected %s, got %s\n' "$EXPECTED_VERSION" "${VERSION:-none}" >&2
   rollback
   exit 1
 fi
