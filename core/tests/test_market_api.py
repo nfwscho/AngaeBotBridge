@@ -6,8 +6,10 @@
 4. 시세 전체 조회 실패를 기존 jobs/events에 실패로 기록하고 계산은 계속 작동한다.
 5. 예상하지 못한 명령을 거부하고 같은 request_id의 다른 명령 충돌을 방지한다.
 6. 실패한 타인의 채팅 기록을 열람하거나 기존 데이터/로그를 삭제하지 않는다.
+7. v0.5.4 SQLite 테스트 조회는 contextlib.closing을 사용해 트랜잭션뿐 아니라 연결도 명시적으로 닫으며 ResourceWarning을 방지한다.
 """
 from __future__ import annotations
+from contextlib import closing
 
 import os
 import sqlite3
@@ -50,7 +52,7 @@ class StockApiTests(unittest.TestCase):
             self.assertEqual(again['reply'],a['reply'])
             self.assertTrue(again['duplicate'])
             mock.assert_called_once()
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],1)
 
@@ -67,7 +69,7 @@ class StockApiTests(unittest.TestCase):
         ok=self.request('계산','123*456',request_id='stock_request_000003').json()
         self.assertTrue(ok['ok'])
         self.assertIn('56,088',ok['reply'])
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs WHERE ok=0').fetchone()[0],1)
 
     def test_invalid_stock_name_no_web(self):

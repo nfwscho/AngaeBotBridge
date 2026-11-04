@@ -33,6 +33,8 @@
 31. v0.5.3 주식 분석의 대상 종목을 한글 기업명/티커·사용자별 저장 별칭으로 조회하며 그룹명 우선순위를 유지한다.
 32. 중복 또는 다른 사용자의 별칭을 무단 조회하지 않고 종목코드가 모호하면 명확하게 거부한다.
 33. 기존 FastAPI 인증·중복 실행 방지·DB 잠금 밖 시세 조회·전체 운영 로그 및 과거 시세 로직을 보존한다.
+34. v0.5.4 SQLite 연결 수명 검증: 기존 FastAPI 연결을 명시적으로 닫고 있음을 새로운 회귀 테스트로 확인한다.
+35. 주식 시세·기록·인증·메모리7·한글 별칭·21/63일 변동성·AI OFF 및 모든 기존 DB/로그/Android 동작을 유지한다.
 """
 from __future__ import annotations
 
@@ -55,7 +57,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 

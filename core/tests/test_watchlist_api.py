@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.3 관심종목 FastAPI 통합 테스트 — 전체 기능 상세 설명
+앙개봇 v0.5.4 관심종목 FastAPI 통합 테스트 — 전체 기능 상세 설명
 1. 새 관심종목 명령에 기존 인증 헤더가 필수인지 검증한다.
 2. SQLite 요청 ID 중복 실행 시 그룹 추가가 반복되지 않는지 검증한다.
 3. 같은 요청 ID에 다른 명령/인수를 쓰면 HTTP 409가 유지되는지 검증한다.
@@ -8,10 +8,12 @@
 6. 실패한 그룹 조작/시세는 jobs/events의 기존 ERROR 및 ok 필드를 통해 보존된다.
 7. 기존 고정 메모리7, 계산·시간·서버상태 및 AI OFF 명령 응답을 변경하지 않는다.
 8. 네트워크 없이 임시 DB에서만 테스트하고 인증키/실제 로그/Android UI는 전혀 변경하지 않는다.
-9. v0.5.3 과거 시세 분석은 읽기 전용이고 기존 그룹/사용자 ID/기능이 보존되는지 확인한다.
-11. v0.5.3 한글 종목명 조회는 별칭 외 다른 그룹/시세/로그를 손상시키지 않는다.
+9. v0.5.4 과거 시세 분석은 읽기 전용이고 기존 그룹/사용자 ID/기능이 보존되는지 확인한다.
+11. v0.5.4 한글 종목명 조회는 별칭 외 다른 그룹/시세/로그를 손상시키지 않는다.
+12. v0.5.4 SQLite 테스트 조회는 contextlib.closing을 사용해 트랜잭션뿐 아니라 연결도 명시적으로 닫으며 ResourceWarning을 방지한다.
 """
 from __future__ import annotations
+from contextlib import closing
 
 import os
 import sqlite3
@@ -69,7 +71,7 @@ class WatchlistAPITests(unittest.TestCase):
         self.assertTrue(first['ok'])
         self.assertTrue(second['duplicate'])
         self.assertEqual(first['reply'],second['reply'])
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM stock_groups').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],1)
@@ -83,7 +85,7 @@ class WatchlistAPITests(unittest.TestCase):
         good=self.cmd('123*456',command='계산').json()
         self.assertTrue(good['ok'])
         self.assertIn('56,088',good['reply'])
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs WHERE ok=0').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],2)
             self.assertTrue({'stock_groups','stock_items','jobs','events','ai_turns'} <=
@@ -99,7 +101,7 @@ class WatchlistAPITests(unittest.TestCase):
             self.assertIn('없습니다',result['reply'])
             result=self.cmd('그룹삭제 비밀 확인',room=room,sender=sender).json()
             self.assertFalse(result['ok'])
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM stock_items').fetchone()[0],1)
 
     def test_empty_scope_and_unexpected_group_error(self):
@@ -116,7 +118,7 @@ class WatchlistAPITests(unittest.TestCase):
     def test_existing_mechanics_and_ai_off(self):
         status=self.cmd(command='서버상태').json()
         self.assertTrue(status['ok'])
-        self.assertIn('v0.5.3',status['reply'])
+        self.assertIn('v0.5.4',status['reply'])
         self.assertIn('OFF',self.cmd(command='AI상태').json()['reply'])
         self.assertIn('KST',self.cmd(command='시간').json()['reply'])
 

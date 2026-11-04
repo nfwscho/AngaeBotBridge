@@ -10,8 +10,10 @@
 8. 모든 시세 값은 모의 제공자로 만들며 실시간 API, AI, 거래 주문, 네트워크를 호출하지 않는다.
 9. FastAPI 요청 인증과 동일 request_id 중복 방지를 유지하고 jobs/events 기존 로그를 보존한다.
 10. 실제 Termux DB/.env/기존 로그를 변경하지 않고 임시 데이터베이스만 사용한다.
+11. v0.5.4 SQLite 테스트 조회는 contextlib.closing을 사용해 트랜잭션뿐 아니라 연결도 명시적으로 닫으며 ResourceWarning을 방지한다.
 """
 from __future__ import annotations
+from contextlib import closing
 
 import os
 import sqlite3
@@ -128,7 +130,7 @@ class MarketCapAPIIntegrationTests(unittest.TestCase):
         self.assertTrue(repeated.json()['duplicate'])
         self.assertEqual(self.cmd('목록',request_id=original).status_code,409)
         self.assertIn('10종목',self.cmd('목록').json()['reply'])
-        with sqlite3.connect(self.dbfile) as db:
+        with closing(sqlite3.connect(self.dbfile)) as db:
             self.assertEqual(db.execute('select count(*) from stock_items').fetchone()[0],10)
             self.assertEqual(db.execute('select count(*) from jobs').fetchone()[0],2)
             self.assertEqual(db.execute('select count(*) from events').fetchone()[0],2)

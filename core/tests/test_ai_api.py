@@ -1,4 +1,7 @@
-"""앙개봇 v0.3.0 AI API 회귀 테스트 — 기존 API 유지/문맥/중복요청/초기화/실패 격리/토큰 인증."""
+"""앙개봇 v0.3.0 AI API 회귀 테스트 — 기존 API 유지/문맥/중복요청/초기화/실패 격리/토큰 인증.
+1. v0.5.4 SQLite 테스트 조회는 contextlib.closing을 사용해 트랜잭션뿐 아니라 연결도 명시적으로 닫으며 ResourceWarning을 방지한다.
+"""
+from contextlib import closing
 import os
 import sqlite3
 import tempfile
@@ -68,7 +71,7 @@ class AIApiTests(unittest.TestCase):
             self.assertTrue(self.cmd('대화초기화').json()['ok'])
             self.cmd('질문','초기화 다음')
             self.assertEqual(inputs[-1][1],[])
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute('select count(*) from ai_turns').fetchone()[0],4)
             self.assertGreaterEqual(db.execute('select count(*) from jobs').fetchone()[0],5)
             self.assertGreaterEqual(db.execute('select count(*) from events').fetchone()[0],5)
@@ -81,11 +84,11 @@ class AIApiTests(unittest.TestCase):
     def test_disabled_memory_does_not_store_turns(self):
         with patch('app.main.AISettings.from_env',return_value=config(memory=False)),patch('app.main.get_ai_reply',return_value='응답'):
             self.cmd('질문','안녕')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute('select count(*) from ai_turns').fetchone()[0],0)
 
     def test_old_tables_remain(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db:
             tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue({'jobs','events','ai_turns','ai_sessions'} <= tables)
 
