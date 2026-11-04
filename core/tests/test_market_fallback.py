@@ -8,6 +8,9 @@
 6. 다른 종목을 일본 URL로 조회하지 못하고 원본·토큰·사용자 기록을 수정하지 않는다.
 7. 실제 외부 네트워크를 호출하지 않고 정해진 모의 응답만 사용한다.
 8. 기존 8종목 명령, 가격 부호, 거래일, 부분 오류 격리와 저장 로그를 보존한다.
+9. v0.5.7 폴링 우선/모바일 보조/종목코드 불일치/장마감·지연·실시간 조건을 검증한다.
+10. KRX와 NXT 또는 미확인 거래소의 시간외 가격을 분리하며 이전 거래일 값/잘못된 데이터를 제외한다.
+11. Yahoo 가격을 실시간으로 잘못 표시하지 않고, 기존 한국·미국·일본·캐시·번호 선택을 유지한다.
 """
 from __future__ import annotations
 import io
@@ -59,7 +62,7 @@ class MarketFallbackTests(unittest.TestCase):
         q=fetch_naver_quote(WATCHLIST[0],opener=opener,now=NOW)
         self.assertEqual(q.price,221500)
         self.assertEqual(len(urls),2)
-        self.assertIn('/domestic/stock/005930',urls[1])
+        self.assertIn('/api/stock/005930/basic',urls[1])
 
     def test_domestic_all_naver_fail_then_existing_yahoo(self):
         s=WATCHLIST[0]

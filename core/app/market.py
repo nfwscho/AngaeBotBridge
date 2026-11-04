@@ -28,6 +28,13 @@
 25. 기존 통화/시세/날짜/30초 캐시/무료 공급자 폴백/오류·로그는 그대로 보존한다.
 26. 번호 실행은 별도 selection_menu.py에서 원래 종목 티커로 매핑해 5일·21일·63일 분석을 실행한다.
 27. 가격 알림·자동거래·스케줄러·배터리 표시(Android 담당)에는 변경을 가하지 않는다.
+28. v0.5.7은 국내 KRX 현재가를 네이버 폴링 JSON 우선으로 조회하고 모바일 JSON은 2순위로 사용한다.
+29. 국내 시세는 KRX 본장 현재가와 네이버가 별도로 제공하는 장전·장후 가격을 구분해 출력한다.
+30. KRX 실시간표시는 지연시간 0분, OPEN, 3분 이내 체결, 응답 시각의 신선도가 모두 확인된 경우에만 허용한다.
+31. 장마감·오래된 체결·시세상태 미확인·Yahoo 대체 가격을 실시간으로 표시하지 않으며 시각과 출처를 함께 기록한다.
+32. 시간외 거래소가 메타데이터에서 확인되지 않으면 NXT로 단정하지 않고 별도 시간외 시세로 표시한다.
+33. 제공자 URL/개별 사용자 그룹·티커/로그/DB·가격 분석·메모리7 번호 메뉴·캐시·Android 배터리 기능은 모두 보존한다.
+34. 추가 권한·인증키·AI API·주기적 폴링·자동 주문·가격 알림/예약 발신은 도입하지 않는다.
 """
 from __future__ import annotations
 
@@ -37,7 +44,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from html.parser import HTMLParser
@@ -80,6 +87,27 @@ class StockQuoteError(ValueError):
 
 
 @dataclass(frozen=True)
+class AfterMarketQuote:
+    """본장 시세와 섞지 않는 네이버 장전/장후 시장의 별도 체결 정보."""
+    price: float
+    percent: float
+    market_time: datetime
+    session: str
+    status: str
+    exchange: str
+
+
+@dataclass(frozen=True)
+class DomesticQuoteMetadata:
+    """검증된 국내 시세의 공급자·세션·지연 표기·시간외 정보를 보존."""
+    provider: str
+    market_status: str
+    delay_minutes: int | None
+    snapshot_time: datetime | None
+    after_market: AfterMarketQuote | None = None
+
+
+@dataclass(frozen=True)
 class Quote:
     stock: Stock
     price: float
@@ -87,6 +115,7 @@ class Quote:
     percent: float
     market_time: datetime
     fetched_at: datetime
+    domestic: DomesticQuoteMetadata | None = None
 
 
 def _timezone(name: str):
@@ -231,15 +260,100 @@ def _parse_local_market_time(value: object, now: datetime, tz_name: str) -> date
     return timestamp
 
 
-def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None) -> Quote:
-    """네이버 공개 JSON: 현재가+전일 증감률을 검증하고 원 시세가 없으면 중단."""
+def _naver_delay_minutes(data: dict) -> int | None:
+    """실제 네이버 지연 메타데이터(0분/분 단위)만 신뢰한다."""
+    exchange = data.get('stockExchangeType')
+    if not isinstance(exchange, dict):
+        return None
+    value = exchange.get('delayTime')
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str) and value.isdecimal():
+        value = int(value)
+    return value if isinstance(value, int) and 0 <= value <= 120 else None
+
+
+def _naver_snapshot_time(value: object) -> datetime | None:
+    """폴링 서버 응답의 기준 시각(yyyyMMddHHmmss)을 검증하되 값이 없으면 임의로 생성하지 않는다."""
+    if not isinstance(value, str) or not re.fullmatch(r'\d{14}', value):
+        return None
+    try:
+        return datetime.strptime(value, '%Y%m%d%H%M%S').replace(tzinfo=timezone(timedelta(hours=9)))
+    except ValueError:
+        return None
+
+
+def _naver_after_market(data: dict, stock: Stock, now: datetime, regular_time: datetime,
+                        previous_close: float) -> AfterMarketQuote | None:
+    """시간외 가격을 선택적으로 해석하고 잘못된 값·거래일은 본장 가격에 반영하지 않는다."""
+    # NXT를 이름으로 확인할 수 있는 응답과 거래소 정보 없는 이전 호환 응답을 구분한다.
+    raw = data.get('nxtOverMarketPriceInfo')
+    exchange = 'NXT'
+    if not isinstance(raw, dict):
+        raw = data.get('overMarketPriceInfo')
+        exchange = '거래소 미확인'
+    if not isinstance(raw, dict):
+        return None
+    period = raw.get('tradingSessionType')
+    if period not in ('AFTER_MARKET', 'BEFORE_MARKET', 'PRE_MARKET'):
+        return None
+    price = _numeric_text(raw.get('overPrice'))
+    if price is None:
+        return None
+    try:
+        at = _parse_local_market_time(raw.get('localTradedAt'), now, stock.timezone_name)
+    except StockQuoteError:
+        return None
+    if at.date() < regular_time.date():
+        return None
+    if period == 'AFTER_MARKET' and at <= regular_time:
+        # 본장 마감 전에 남은 과거 시간외 값을 최신 별도 체결가로 출력하지 않는다.
+        return None
+    pct = (price / previous_close - 1) * 100
+    if not math.isfinite(pct) or not -99.9 < pct < 1000:
+        return None
+    # 네이버 제공 시간외 등락률이 있으면 별도 체결가와 정합성 확인.
+    listed = _numeric_text(raw.get('fluctuationsRatio'), allow_zero=True)
+    if listed is None and isinstance(raw.get('fluctuationsRatio'), str):
+        try:
+            listed = float(raw['fluctuationsRatio'].replace(',', '').replace('−', '-'))
+        except ValueError:
+            listed = None
+    if listed is not None and math.isfinite(listed):
+        direction = raw.get('compareToPreviousPrice')
+        if isinstance(direction, dict):
+            direction = direction.get('name')
+        if isinstance(direction, str):
+            if direction.upper() in ('FALLING', 'LOWER', 'DOWN'):
+                listed = -abs(listed)
+            elif direction.upper() in ('RISING', 'HIGHER', 'UP'):
+                listed = abs(listed)
+            elif direction.upper() in ('UNCHANGED', 'SAME', 'FLAT'):
+                listed = 0.0
+        if abs(listed - pct) > 0.35:
+            return None
+    status = raw.get('overMarketStatus')
+    return AfterMarketQuote(price, pct, at,
+                            '장후' if period == 'AFTER_MARKET' else '장전',
+                            status.upper() if isinstance(status, str) else '', exchange)
+
+
+def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None,
+                      provider: str = '모바일', snapshot_time: datetime | None = None) -> Quote:
+    """네이버 공개 JSON: 본장/시간외 분리, 가격·시각·지연 메타데이터 검증."""
     if stock.ticker not in ('005930.KS', '000660.KS'):
         raise StockQuoteError('네이버 국내 종목만 지원')
     now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    if not isinstance(data, dict):
+        raise StockQuoteError('네이버 시세 데이터 형식 오류')
     code = stock.ticker.split('.')[0]
     if 'itemCode' in data and str(data['itemCode']) != code:
         raise StockQuoteError('네이버 종목코드 불일치')
     if 'stockCode' in data and str(data['stockCode']) != code:
+        raise StockQuoteError('네이버 종목코드 불일치')
+    if 'symbolCode' in data and str(data['symbolCode']) != code:
         raise StockQuoteError('네이버 종목코드 불일치')
     price = _numeric_text(data.get('closePrice'))
     pct_value = _numeric_text(data.get('fluctuationsRatio'), allow_zero=True)
@@ -269,26 +383,72 @@ def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None) 
     previous = price / (1 + pct_value / 100)
     if not math.isfinite(previous) or previous <= 0:
         raise StockQuoteError('전일가 계산 실패')
-    return Quote(stock, price, previous, pct_value, trade_time, now.astimezone(timezone(timedelta(hours=9))))
+    market_status = data.get('marketStatus')
+    market_status = market_status.upper() if isinstance(market_status, str) else ''
+    meta = DomesticQuoteMetadata(
+        provider=provider,
+        market_status=market_status,
+        delay_minutes=_naver_delay_minutes(data),
+        snapshot_time=snapshot_time,
+        after_market=_naver_after_market(data, stock, now, trade_time, previous))
+    return Quote(stock, price, previous, pct_value, trade_time,
+                 now.astimezone(timezone(timedelta(hours=9))), meta)
+
+
+def _should_retry_mobile(stock: Stock, quote: Quote, now: datetime) -> bool:
+    """KRX 폴링 데이터가 장중 오래된 때만 모바일 조회를 추가하여 불필요한 호출/배터리를 절약."""
+    meta = quote.domestic
+    if meta is None or meta.provider != '폴링':
+        return False
+    kst = now.astimezone(timezone(timedelta(hours=9)))
+    during_krx = (kst.weekday() < 5 and (9, 0) <= (kst.hour, kst.minute) < (15, 30))
+    if meta.market_status == 'OPEN':
+        age = (now - quote.market_time).total_seconds()
+        snapshot_age = ((now - meta.snapshot_time).total_seconds()
+                        if meta.snapshot_time is not None else float('inf'))
+        return age > 180 or snapshot_age > 180 or meta.delay_minutes not in (0, None)
+    if during_krx and quote.market_time.date() < kst.date():
+        return True
+    return False
 
 
 def fetch_naver_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
+    """폴링 우선, 장중 폴링 갱신이 오래되면 모바일 신규 데이터도 비교. 실패 시 Yahoo는 fetch_quote 담당."""
     if stock.market != '한국':
         raise StockQuoteError('국내 종목만 조회 가능')
     code = stock.ticker.partition('.')[0]
     now = now or datetime.now(timezone.utc)
-    failures = []
-    for url in (_NAVER_BASIC.format(code=code), _NAVER_POLLING.format(code=code)):
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    polling_quote = None
+    for url, source in ((_NAVER_POLLING.format(code=code), '폴링'),
+                        (_NAVER_BASIC.format(code=code), '모바일')):
         try:
             payload = _request_json(url, opener=opener)
+            snapshot_time = _naver_snapshot_time(payload.get('time')) if source == '폴링' else None
             if 'datas' in payload:
                 data = payload['datas']
                 if not isinstance(data, list) or not data:
                     raise StockQuoteError('네이버 응답 목록 비어 있음')
-                payload = data[0]
-            return parse_naver_quote(stock, payload, now=now)
-        except (StockQuoteError, HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, TypeError, IndexError) as error:
-            failures.append(type(error).__name__)
+                data = next((item for item in data if isinstance(item, dict) and
+                             str(item.get('itemCode') or item.get('stockCode') or '') == code), None)
+                if data is None:
+                    raise StockQuoteError('네이버 시세 종목 식별 오류')
+            else:
+                data = payload
+            quote = parse_naver_quote(stock, data, now=now, provider=source, snapshot_time=snapshot_time)
+            if source == '폴링':
+                if not _should_retry_mobile(stock, quote, now):
+                    return quote
+                polling_quote = quote
+                continue
+            if polling_quote is None or quote.market_time > polling_quote.market_time:
+                return quote
+            return polling_quote
+        except (StockQuoteError, HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, TypeError, IndexError):
+            continue
+    if polling_quote is not None:
+        return polling_quote
     raise StockQuoteError('네이버 무료 시세 조회 불가')
 
 
@@ -480,7 +640,9 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
         try:
             return fetch_naver_quote(stock, opener=opener, now=now)
         except StockQuoteError:
-            return fetch_yahoo_quote(stock, opener=opener, now=now)
+            # 네이버 장애 시 기존 Yahoo 가격을 표시하되 실시간 인증 정보가 없음을 명시.
+            quote = fetch_yahoo_quote(stock, opener=opener, now=now)
+            return replace(quote, domestic=DomesticQuoteMetadata('Yahoo 대체', '', None, None))
     if stock.ticker == '285A.T':
         # 기존 Yahoo Finance → Yahoo Japan 순서를 유지하고, 두 제공처 모두 실패할 때
         # 라쿠텐 증권의 공개 본장 시세(PTS 제외)로 마지막 보완한다.
@@ -504,9 +666,58 @@ def _formatted_price(value: float, currency: str) -> str:
     raise StockQuoteError('지원되지 않는 통화')
 
 
+def _domestic_status_text(item: Quote) -> str:
+    """네이버 시세의 지연/마감 상태를 실제 메타데이터와 거래시각으로 표시."""
+    meta = item.domestic
+    when = item.market_time.strftime('%m/%d %H:%M:%S')
+    if meta is None:
+        # Yahoo 폴백 등 공급자를 보증하지 못하는 경우 실시간이라고 표시하지 않는다.
+        return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
+    status = meta.market_status
+    delta = (item.fetched_at - item.market_time).total_seconds()
+    freshness = (0 <= delta <= 180)
+    server_fresh = (meta.snapshot_time is not None and
+                    -30 <= (item.fetched_at - meta.snapshot_time).total_seconds() <= 180)
+    if status in ('CLOSE', 'CLOSED', 'END'):
+        label = '장마감 종가'
+    elif status == 'OPEN':
+        if meta.provider == '폴링' and meta.delay_minutes == 0 and freshness and server_fresh:
+            label = '네이버 실시간표시(지연 0분)'
+        elif delta > 180:
+            label = '시세 갱신 지연/최종 체결가'
+        elif meta.delay_minutes is not None and meta.delay_minutes > 0:
+            label = f'지연 {meta.delay_minutes}분 표기'
+        else:
+            label = '실시간 여부 미확인'
+    elif status in ('BEFORE_OPEN', 'PRE_OPEN', 'PREPARE'):
+        label = '개장 전 최종가'
+    else:
+        label = '시장상태 미확인(최종 체결가)'
+    return f'   └ KRX {when} · {label} · 네이버 {meta.provider}'
+
+
+def _domestic_after_text(item: Quote) -> str:
+    """시간외 종목별 시세를 KRX 종가에 덮어쓰지 않으며 출처·거래소 불확실성을 표시."""
+    meta = item.domestic
+    aft = meta.after_market if meta is not None else None
+    if aft is None:
+        return ''
+    when = aft.market_time.strftime('%m/%d %H:%M:%S')
+    arrow = '▲' if aft.percent > 0.00001 else ('▽' if aft.percent < -0.00001 else '－')
+    status = '거래 중' if aft.status == 'OPEN' else ('마감' if aft.status == 'CLOSE' else '상태 미확인')
+    exchange = 'NXT' if aft.exchange == 'NXT' else '시간외(거래소 미확인)'
+    return (f'   └ {exchange} {aft.session} {_formatted_price(aft.price, item.stock.currency)} '
+            f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
+
+
 def quote_line(item: Quote) -> str:
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
-    return f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    if item.stock.market != '한국' or item.domestic is None:
+        # 종전 Quote 생성자/테스트 호출에 대해서는 출력 형식을 변경하지 않는다.
+        return body
+    extra = _domestic_after_text(item)
+    return body + '\n' + _domestic_status_text(item) + ('\n' + extra if extra else '')
 
 
 def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cache: bool = True) -> str:

@@ -42,6 +42,9 @@
 40. v0.5.6은 성공한 메모리7/관심그룹 시세 조회 직후 동일 방·발신자 범위에 최대 10개 번호 선택 세션을 활성화한다.
 41. 숫자 선택은 기존 메뉴 분석 경로·인증·jobs/events·dedup·쓰기 잠금 밖 시세 조회를 재사용하며 추가 DB 테이블이 없다.
 42. 시세 공급자 전체 실패 시 메뉴를 새로 열지 않고, 기존 S20+ 배터리/앱 UI/로그·설정은 그대로 보존한다.
+43. v0.5.7 한국 두 종목은 네이버 폴링 우선·지연/시장상태/체결시각 검증 결과를 기존 응답에 함께 표시한다.
+44. 네이버 시간외 가격은 KRX 본장과 분리하며 사용자 그룹·숫자 선택·이벤트/작업 로그·인증·AI OFF는 유지한다.
+45. Android Bridge 앱/배터리 정보·DB 스키마/세션·과거 종가/변동성 계산은 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -65,7 +68,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus
 
-VERSION = "0.5.6"
+VERSION = "0.5.7"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
