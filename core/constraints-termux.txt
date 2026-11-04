@@ -1,0 +1,5 @@
+# AngaeBot v0.2.2 Termux dependencies (Python 3.13 Android)
+# Pydantic 2.12.5 requires exactly pydantic-core 2.41.5.
+# Install-termux.sh obtains Android wheel via Termux User Repository first.
+pydantic==2.12.5
+pydantic-core==2.41.5
