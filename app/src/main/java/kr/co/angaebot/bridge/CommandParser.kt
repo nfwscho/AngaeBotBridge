@@ -11,6 +11,12 @@
  * 9. 기존 테스트/ping/상태의 로컬 처리, 호출어 인식 및 오류 반환 동작은 유지한다.
  * 10. 주식 메모리7과 메모리7은 별도 Python 명령이며 호출어/기존 파서는 변경하지 않는다.
  * 11. 기존 도움말/오류/로그 흐름을 그대로 두고 두 가지 시세 조회 사용법만 추가한다.
+ * 12. Android Bridge v0.4.2는 정확한 '주'를 기존 '주식' Python 명령으로 매핑하고, 기존 '앙개야' 명령을 모두 유지한다.
+ * 13. '주 분 삼성전자/마이크론/하이닉스/그룹명'은 '주식 분석 대상'으로 변경해 전달하며 '주 분'만 입력하면 기존 도움말을 제공한다.
+ * 14. '주 목록/메모리7/미국시총10/반도체'는 기존 주식 인수를 그대로 전달하여 데이터·그룹·시세 공급자·로그를 변경하지 않는다.
+ * 15. '주식/주분/주변/ㅈㅅ'처럼 공백 경계가 없는 대화는 단축어로 인식하지 않고, 호출어 빈 값은 기존처럼 무시한다.
+ * 16. Android 알림 수신, 허용 채팅방/발신자, 중복·요청 ID, 로그, RemoteInput, UI, 인증·AI OFF를 기존대로 보존한다.
+ * 17. 새 가격 알림/자동 발신/주식 주문은 추가하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,6 +29,20 @@ object CommandParser {
     fun parse(text: String, wakeWord: String): ParseResult {
         val message = text.trim()
         val prefix = wakeWord.trim()
+        if (prefix.isEmpty()) return ParseResult.NoTrigger
+        // 정확한 '주' 또는 '주' 다음 공백/탭/개행일 때만 동작한다.
+        // 사용자가 호출어를 '주'로 설정했다면 기존 호출어의 동작을 우선한다.
+        if (prefix != "주" && message.isNotEmpty() && message[0] == '주' &&
+            (message.length == 1 || message[1].isWhitespace())) {
+            val stockArgument = message.substring(1).trim()
+            if (stockArgument.isEmpty()) return ParseResult.Command("주식", "")
+            val action = stockArgument.takeWhile { !it.isWhitespace() }
+            if (action == "분") {
+                val target = stockArgument.substring(action.length).trim()
+                return ParseResult.Command("주식", if (target.isEmpty()) "도움말" else "분석 $target")
+            }
+            return ParseResult.Command("주식", stockArgument)
+        }
         if (prefix.isEmpty() || !message.startsWith(prefix)) return ParseResult.NoTrigger
         val rest = message.substring(prefix.length)
         if (rest.isNotEmpty() && !rest.first().isWhitespace()) return ParseResult.NoTrigger
@@ -38,7 +58,7 @@ object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
         "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.1 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
         "상태" -> "✅ 앙개봇 Bridge v0.4.1 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
-        "도움말", "help" -> "🤖 앙개봇 v0.4.1 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다."
+        "도움말", "help" -> "🤖 앙개봇 v0.4.1 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 주식 명령: 주 / 주 분 삼성전자 / 주 분 마이크론 / 주 목록"
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
     }
 }
