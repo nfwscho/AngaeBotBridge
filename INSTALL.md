@@ -13,19 +13,23 @@
 3. Android Studio 설치: https://developer.android.com/studio
 4. Android Studio **SDK Manager**에서 **Android API 36 SDK Platform** 설치. JDK는 Android Studio에 내장된 JDK를 사용합니다.
 
-## 2. Gradle Wrapper 설치 및 공식 파일 검증
+## 2. Gradle Wrapper 설치 및 공식 파일 검증 (v0.1.2 수정)
 
-이 배포 ZIP에는 인터넷 접근 제약으로 공식 `gradle-wrapper.jar`을 포함하지 못했습니다.
-PowerShell을 열고 프로젝트 루트로 이동한 다음 실행합니다.
+> 2026-11-04 수정: 기존 `services.gradle.org` 요청의 HTTP 404 문제에 대비해
+> 직접 배포 서버와 Gradle 공식 GitHub v8.14.3 태그를 순차 시도합니다.
+> 기존 Kotlin 앱 소스, UI, 설정 및 로그 로직은 변경하지 않았습니다.
 
 ```powershell
-cd D:\AngaeBot\AngaeBotBridge
+cd D:\stockproj\AngaeBotBridge
 powershell -ExecutionPolicy Bypass -File .\scripts\prepare-wrapper.ps1
+(Get-FileHash .\gradle\wrapper\gradle-wrapper.jar -Algorithm SHA256).Hash.ToLowerInvariant()
+.\gradlew.bat --version
 ```
 
-이 스크립트는 공식 `https://services.gradle.org/distributions/gradle-8.14.3-wrapper.jar`에서 받으며 SHA-256을 검증합니다.
-정상 SHA-256: `7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172`
-Gradle 자체 ZIP 다운로드도 `gradle-wrapper.properties`에 SHA-256 검증값이 지정되어 있습니다.
+정상 SHA-256: `7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172`  
+공식 참조: https://gradle.org/release-checksums/
+
+추가 안내: `GRADLE_WRAPPER_FIX.md`를 참고하세요. 기존 Git 저장소를 새로 초기화하지 마세요.
 
 ## 3. Android Studio 프로젝트 열기
 

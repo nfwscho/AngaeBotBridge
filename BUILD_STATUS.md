@@ -25,3 +25,31 @@
 - 갱신: `.gitignore`의 비밀키·로컬 데이터·빌드 결과 제외 규칙, `README.md` 안내
 - Kotlin 소스, AndroidManifest, Gradle 빌드 설정, 기존 설치 가이드, 실행·로그 동작: **변경 없음**
 - GitHub로 실제 push하거나 APK를 컴파일하지는 않았습니다.
+
+## 2026-11-04 Wrapper 404 복구 (패키지 v0.1.2)
+
+- 사용자 실환경에서 `services.gradle.org/distributions/gradle-8.14.3-wrapper.jar` 다운로드가 HTTP 404를 반환함.
+- 기존 `scripts/prepare-wrapper.ps1`에서 1차 직접 배포 서버, 2차 Gradle GitHub 태그를 사용하도록 개선.
+- Gradle 8.14.3 공식 Wrapper JAR SHA-256 검증 유지; 임시 파일 검증 후 설치.
+- 문서 갱신: `INSTALL.md`, `README.md`, `GRADLE_WRAPPER_FIX.md`.
+- **Kotlin 앱 소스·Gradle 빌드 버전·관리 UI·기존 로그 관련 파일 변경 없음.**
+- 실제 Gradle Wrapper 다운로드/Android 빌드/S20+ 검증은 사용자의 환경에서 시행해야 함.
+
+## 2026-11-04 Kotlin 컴파일 오류 수정 (패키지 v0.1.3)
+
+- 사용자 Gradle 로그에서 `MainActivity.kt:72`의 `Unresolved reference: fillViewport` 확인.
+- Android `ScrollView#setFillViewport(true)` 호출로 1줄 교체.
+- 기존 Kotlin 나머지 파일, UI 화면 구성, 명령 기능, SQLite 로그 로직, 기타 설정은 그대로 유지.
+- 단일 라인 diff 검사 통과, Android APK 빌드 결과는 사용자 PC에서 확인 필요.
+
+---
+
+## v0.2.0 변경·검증 현황 (2026-11-04)
+
+- v0.1.3 Android APK는 **사용자 기기에서 빌드/ADB 설치 성공, S25+에 실제 카톡 답장 수신 성공**.
+- v0.2.0 Kotlin 통신 연동, 관리 UI ②-A, AndroidKeyStore 토큰 암호화, 로컬 HTTP 네트워크 정책 작성.
+- v0.2.0 Python FastAPI/Core: 요청 인증, 계산/시간/서버상태, SQLite 중복 저장/로그 작성.
+- Python `unittest` 14건 통과, Kotlin `CommandParser` 회귀 검사 5건 통과.
+- Android XML 5개 파싱 검사 통과, Termux 셸 스크립트 구문 검사 통과.
+- 이 실행 환경에 Android SDK가 없으므로 v0.2.0 Android APK 빌드 및 S20+ 동작은 **미검증**.
+- 추가 실기기 검증: `docs/TEST_PLAN_v0.2.0.md`.

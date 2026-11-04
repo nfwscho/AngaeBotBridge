@@ -5,10 +5,12 @@
   2. 명시적인 채팅방 + 발신자 허용목록과 호출어를 모두 통과한 경우만 실행한다.
   3. '테스트/상태/도움말' 명령에 대해 RemoteInput 빠른 답장을 시도한다.
   4. SQLite로 수신·차단·중복·응답·예외 이벤트를 보관하고 UI에서 확인·내보낸다.
-  5. 기본 자동응답 OFF, 허용목록 비어 있음; 인터넷·SMS·접근성·저장소 권한 불필요.
+  5. 기본 자동응답 OFF, 허용목록 비어 있음; v0.2.0은 loopback Python을 위해 INTERNET만 추가하며 SMS/접근성/저장소 권한은 요구하지 않음.
+  7. Python 연결 기본 OFF; localhost 외 HTTP는 허용하지 않는다.
   6. 알림만으로는 실제 카카오 사용자 신원 확인이 불가능하므로 강력한 인증 아님.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -16,6 +18,7 @@
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
 
         <activity android:name=".MainActivity" android:exported="true">

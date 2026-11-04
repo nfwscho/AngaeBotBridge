@@ -1,3 +1,5 @@
+> 앙개봇 실제 프로젝트 설정 (2026-11-04): `D:\stockproj\AngaeBotBridge`, GitHub `https://github.com/nfwscho/AngaeBotBridge.git`, 브랜치 `main`. 이 문서 아래의 `D:\AngaeBot` 및 `YOUR_GITHUB_ID`는 초기 설명용 예시이며, 실제 작업 시 위 값을 사용하세요. Git 재초기화 또는 remote 재등록 불필요.
+
 # 앙개봇 Android Bridge — Git 및 GitHub 사용 가이드
 
 기준: **앱 소스 v0.1.0** / **Git 준비 문서 패키지 v0.1.1 (2026-11-04)**

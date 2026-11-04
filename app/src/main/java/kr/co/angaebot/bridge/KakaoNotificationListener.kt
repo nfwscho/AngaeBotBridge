@@ -8,7 +8,9 @@
  * 6. RemoteInput이 제공될 때만 알림 빠른 답장을 요청한다(최종 배달 보장 아님).
  * 7. 수신, 거절, 중복, 실행, 답장 요청, 오류, 서비스 연결/종료를 SQLite에 기록한다.
  * 8. UI에서 허용 목록, ON/OFF, 진단, 로그 열람/내보내기/삭제를 관리한다.
- * 9. INTERNET/SMS/접근성 권한 없이 S20+ 로컬에서 작동하며, 비공식 계정 자동화를
+ * 9. v0.2.0: 기존 세 명령은 Android에서 유지하며 계산/시간/서버상태만 인증된 loopback Python에 전달한다.
+ * 10. 새 Python 요청/결과/실패를 기존 SQLite 이벤트 로그에 추가하고, Python OFF/장애 시 기존 명령은 계속 작동한다.
+ * 11. INTERNET(로컬 127.0.0.1에 한정) 외 SMS/접근성 권한 없이 작동하며, 비공식 계정 자동화를
  *    대량 전송에 사용하지 않는다. 알림 표시 이름은 공식 신원 인증 자료가 아니다.
  */
 package kr.co.angaebot.bridge
@@ -23,11 +25,13 @@ class KakaoNotificationListener : NotificationListenerService() {
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var settings: BotConfig
     private lateinit var logger: LogRepository
+    private lateinit var pythonConfig: PythonBridgeConfig
 
     override fun onCreate() {
         super.onCreate()
         settings = BotConfig(this)
         logger = LogRepository(this)
+        pythonConfig = PythonBridgeConfig(this)
     }
 
     override fun onListenerConnected() {
@@ -92,7 +96,31 @@ class KakaoNotificationListener : NotificationListenerService() {
                 return
             }
             logger.log("INFO", "COMMAND", "command=${parsed.name} arg=${parsed.argument}", message.room, message.sender)
-            val response = LocalCommandExecutor.execute(parsed.name, parsed.argument)
+            val response = if (parsed.name in PythonBridgeClient.supportedCommands) {
+                try {
+                    val p = pythonConfig.load()
+                    if (!p.enabled) {
+                        // 기존 v0.1 로컬 명령은 한 글자도 바꾸지 않는다.
+                        LocalCommandExecutor.execute(parsed.name, parsed.argument)
+                    } else {
+                        logger.log("INFO", "PYTHON_REQUEST", "command=${parsed.name} requestId=$fingerprint", message.room, message.sender)
+                        when (val result = PythonBridgeClient.execute(p.token, fingerprint, parsed.name, parsed.argument, message.room, message.sender)) {
+                            is PythonOutcome.Success -> {
+                                logger.log(if (result.commandOk) "INFO" else "WARN", "PYTHON_RESULT",
+                                    "command=${parsed.name} ok=${result.commandOk} duplicate=${result.duplicate} reply=${result.reply}", message.room, message.sender)
+                                result.reply
+                            }
+                            is PythonOutcome.Failure -> {
+                                logger.log("ERROR", "PYTHON_FAILED", "command=${parsed.name} ${result.reason}", message.room, message.sender)
+                                "⚠️ 앙개봇 Python 연결 실패\n${result.reason}"
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.log("ERROR", "PYTHON_FAILED", "command=${parsed.name} ${e.javaClass.simpleName}", message.room, message.sender)
+                    "⚠️ Python 설정에 문제가 있습니다. 앙개봇 관리 화면에서 연결을 확인하세요."
+                }
+            } else LocalCommandExecutor.execute(parsed.name, parsed.argument)
             // 답장 전에 설정을 다시 읽어서 UI에서 OFF로 전환한 경우 답장하지 않는다.
             if (!settings.load().enabled) {
                 logger.log("WARN", "REJECT_DISABLED", "실행 도중 자동응답 OFF", message.room, message.sender)
