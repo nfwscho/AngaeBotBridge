@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.1 관심종목 단위 테스트 — 기존 기능 보존 및 신규 명령 검증 상세 설명
+앙개봇 v0.5.2 관심종목 단위 테스트 — 기존 기능 보존 및 신규 명령 검증 상세 설명
 1. 기존 메모리7 종목 8개와 티커/통화는 수정하지 않는다.
 2. 주식 그룹생성/목록/그룹삭제 및 별도 stock_groups 테이블 CRUD를 확인한다.
 3. 주식 추가/삭제와 한국·미국·일본 종목 정규화 및 원화/달러/엔을 확인한다.
@@ -154,6 +154,7 @@ class WatchlistUnitTests(unittest.TestCase):
                 self.run_cmd(cmd)
             network.assert_not_called()
         self.assertIn('그룹생성', command_help())
+        self.assertIn('주식 분석 MU', command_help())
         self.assertTrue(is_group_quote_request('반도체'))
         self.assertFalse(is_group_quote_request('목록'))
         self.assertFalse(is_group_quote_request('추가 반도체 MU'))

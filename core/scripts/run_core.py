@@ -12,6 +12,7 @@
 10. 실행 실패 및 중복 상태만 logs/launcher.log에 기록한다. 로그 본문에 토큰을 쓰지 않는다.
 11. v0.5.0 관심종목 그룹 운영도 기존 단일 실행/백업/포트 방침을 유지한다.
 12. v0.5.1 프리셋/그룹 10종목에서도 시작/중복잠금/로그/DB/기존 runit 처리 기능을 유지한다.
+13. v0.5.2 과거 시세 조회를 추가하더라도 Core 단일 실행·로그 보존·워치독 복구는 변경하지 않는다.
 11. FastAPI 런처 시작 로그의 버전 문자열을 0.4.1로 갱신하고 로그 이벤트 형식은 유지한다.
 12. v0.4.2 런처 버전만 갱신하고 이전 로그 형식/단일실행/SSH/Watchdog 기능을 보존한다.
 """
@@ -97,7 +98,7 @@ def launch(core: Path = CORE) -> int:
     finally:
         if output > 2:
             os.close(output)
-    marker = f'CORE_START version=0.5.1 pid={os.getpid()}'
+    marker = f'CORE_START version=0.5.2 pid={os.getpid()}'
     if archived:
         marker += f' previous_log_archived={archived.name}'
     os.write(2, (marker + '\n').encode('utf-8'))

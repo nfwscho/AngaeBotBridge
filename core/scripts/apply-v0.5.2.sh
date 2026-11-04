@@ -1,0 +1,114 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# 앙개봇 Python Core v0.5.2 Termux 안전 배포 — 전체 기능·UI·동작·로그 보존 상세 설명
+# 1. 기존 KakaoTalk NotificationListener/RemoteInput/Android UI·허용 채팅방/발신자 설정을 변경하지 않는다.
+# 2. 계산·시간·서버상태·AI상태(OFF)·상세상태·통계·최근오류·가동시간·대화초기화의 동작을 유지한다.
+# 3. 기존 메모리7 8종목 시세/한국·미국·일본 공급자와 30초 캐시·주식 관심그룹/미국시총10을 유지한다.
+# 4. '주식 분석 티커/그룹명/메모리7' 역사적 종가·5일/21일/63일 수익률·실현변동성 모듈만 추가한다.
+# 5. 소스 10개 파일만 수정·추가하며 기존 .env 비밀키/.venv/data SQLite/logs/백업은 손대지 않는다.
+# 6. SSH, runit watchdog, Android APK, 기존 부팅 자동시작 설정을 중단하거나 덮어쓰지 않는다.
+# 7. 원격 SCP로 업로드한 파일 전부를 확인한 후 수정 대상 원본을 별도 backups 폴더에 백업한다.
+# 8. 문법 검사 및 Python 전체 회귀 테스트가 통과하기 전에는 운영 Core 프로세스를 재시작하지 않는다.
+# 9. 단위 테스트는 고정 시험 토큰·분리된 임시 SQLite 파일을 사용하며 실제 운영 DB/기존 명령 기록을 보존한다.
+# 10. 오류 시 수정한 모든 파일을 이전 버전으로 자동 복원하고, 재시작했을 때만 기존 FastAPI를 다시 실행한다.
+# 11. 성공 시 인증된 /v1/health가 정확히 v0.5.2인지 확인하고 ASCII 로그로 결과와 백업 경로를 남긴다.
+# 12. OpenAI/유료 API·주식 주문·가격알림·예약 발송·보이지 않는 주기 감시는 실행하거나 설치하지 않는다.
+# 13. 사용자 소유 stock_groups/stock_items, 과거 events/jobs/ai_sessions/ai_turns는 변경·삭제하지 않는다.
+# 14. 로그 삭제/테이블 리셋/의존성 자동 업데이트·다른 서비스 강제종료 없이 최소 변경만 적용한다.
+set -Eeuo pipefail
+CORE="$HOME/angaebot/core"
+UPDATE="$HOME/angaebot/update_v052"
+cd "$CORE"
+ITEMS=(
+  'app/main.py:main.py'
+  'app/commands.py:commands.py'
+  'app/watchlists.py:watchlists.py'
+  'app/history.py:history.py'
+  'scripts/run_core.py:run_core.py'
+  'tests/test_ops.py:test_ops.py'
+  'tests/test_watchlists.py:test_watchlists.py'
+  'tests/test_watchlist_api.py:test_watchlist_api.py'
+  'tests/test_history.py:test_history.py'
+  'tests/test_history_api.py:test_history_api.py'
+)
+for item in "${ITEMS[@]}"; do
+  file="${item#*:}"
+  if [ ! -f "$UPDATE/$file" ]; then printf '[ERROR] Missing upload: %s\n' "$file" >&2; exit 2; fi
+done
+if [ ! -f .env ] || [ ! -x .venv/bin/python ] || [ ! -f scripts/restart-autostart.sh ]; then
+  echo '[ERROR] Missing existing .env/.venv/auto-start environment' >&2
+  exit 2
+fi
+umask 077
+BACKUP="$HOME/angaebot/backups/core_pre_v052_$(date +%Y%m%d_%H%M%S_%N)"
+mkdir -p "$BACKUP"
+for row in "${ITEMS[@]}"; do
+  target="${row%%:*}"
+  if [ -f "$target" ]; then
+    mkdir -p "$BACKUP/$(dirname "$target")"
+    cp -p "$target" "$BACKUP/$target"
+  fi
+done
+APPLIED=0
+RESTARTED=0
+ROLLED_BACK=0
+rollback() {
+  if [ "$ROLLED_BACK" -eq 1 ] || [ "$APPLIED" -ne 1 ]; then return 0; fi
+  ROLLED_BACK=1
+  trap - ERR
+  printf '[WARN] v0.5.2 validation failed: restoring previous source from %s\n' "$BACKUP" >&2
+  for row in "${ITEMS[@]}"; do
+    target="${row%%:*}"
+    if [ -f "$BACKUP/$target" ]; then
+      cp -p "$BACKUP/$target" "$target" || :
+    else
+      case "$target" in
+        app/history.py|tests/test_history.py|tests/test_history_api.py) rm -f "$target" || : ;;
+      esac
+    fi
+  done
+  if [ "$RESTARTED" -eq 1 ]; then bash scripts/restart-autostart.sh || :; fi
+}
+trap rollback ERR
+APPLIED=1
+for row in "${ITEMS[@]}"; do
+  target="${row%%:*}"
+  source="${row#*:}"
+  cp -p "$UPDATE/$source" "$target"
+done
+.venv/bin/python -m py_compile \
+  app/main.py app/commands.py app/watchlists.py app/history.py scripts/run_core.py \
+  tests/test_ops.py tests/test_watchlists.py tests/test_watchlist_api.py \
+  tests/test_history.py tests/test_history_api.py
+ANGAE_TOKEN='TEST_ONLY_TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT' \
+ANGAE_DB="$UPDATE/isolated_test_$(date +%s%N).db" \
+.venv/bin/python -m unittest discover -s tests -q
+# Regression checks passed: only now restart the existing FastAPI process.
+RESTARTED=1
+bash scripts/restart-autostart.sh
+VERSION=''
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 1
+  VERSION=$(.venv/bin/python - <<'PY'
+import json,sys
+sys.path.insert(0,'scripts')
+from health_watchdog import token_from_env
+from urllib.request import Request,urlopen
+try:
+    req=Request('http://127.0.0.1:8765/v1/health',headers={'X-AngaeBot-Token':token_from_env()})
+    with urlopen(req,timeout=2) as response:
+        obj=json.load(response)
+    print(obj.get('version','') if obj.get('ok') is True else '')
+except (OSError, ValueError, TypeError, KeyError):
+    print('')
+PY
+  )
+  if [ "$VERSION" = '0.5.2' ]; then break; fi
+done
+if [ "$VERSION" != '0.5.2' ]; then
+  printf '[ERROR] Health version expected 0.5.2, got %s\n' "${VERSION:-none}" >&2
+  rollback
+  exit 1
+fi
+trap - ERR
+printf '[OK] AngaeBot Python Core v0.5.2 installed successfully. Backup: %s\n' "$BACKUP"
+echo '[INFO] No Android APK/.env/SQLite/jobs/events/logs/watchdog/SSH/AI settings were modified.'

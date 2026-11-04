@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.5.1 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.5.2 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -26,6 +26,10 @@
 24. v0.5.1 '주식 프리셋 미국시총10'과 일반 그룹 최대 10종목을 기존 인증 API/SQLite 트랜잭션에 추가한다.
 25. 그룹 이름·종목의 기존 CRUD/조회, 날짜·무료 시세/오류/로그, AI OFF, 메모리7 8종목을 유지한다.
 26. 새 기능은 기존 Android Bridge '주식' 명령을 그대로 사용해 APK 재설치 및 AI 설정을 요구하지 않는다.
+27. v0.5.2 주식 분석 [티커/그룹명/메모리7]으로 5거래일 종가와 21·63거래일의 수익률·실현변동성을 조회한다.
+28. 모든 역사적 시세 조회는 DB 쓰기 락 밖에서만 시행하고 SQLite 테이블·인증키·메모리7 기존 가격 모듈은 그대로 유지한다.
+29. 그룹 분석은 해당 room/sender의 기존 그룹만 접근할 수 있고 5분 캐시·요청시간 제한으로 과도한 트래픽을 피한다.
+30. 가격 조건 알림·예약/자동발신·주식 자동주문은 구현하지 않으며 OpenAI/Ollama의 활성화 없이 분석 명령을 실행한다.
 """
 from __future__ import annotations
 
@@ -43,11 +47,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import details, command_stats, recent_errors, uptime_report
-from .market import StockQuoteError, execute_stock_command
+from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
-                         execute_group_command)
+                         execute_group_command, resolve_stock)
+from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
@@ -124,6 +129,24 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if request.command == "메모리7" or (request.command == "주식" and request.argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command(request.command, request.argument)
+                elif request.command == "주식" and is_analysis_request(request.argument):
+                    parts = request.argument.split()
+                    if len(parts) != 2:
+                        raise StockQuoteError("사용법: 앙개야 주식 분석 MU (또는 그룹명/메모리7)")
+                    target = parts[1]
+                    if target == "메모리7":
+                        stock_reply = history_group_report("메모리7", WATCHLIST)
+                    else:
+                        # 그룹의 room/sender 소유권을 검사하고, 없는 그룹명만 안전한 종목 티커로 판정.
+                        with closing(connect()) as read_db:
+                            belongs = read_db.execute(
+                                "SELECT 1 FROM stock_groups WHERE room=? AND sender=? AND name=?",
+                                (request.room, request.sender, target)).fetchone()
+                            stocks = load_group(read_db, request.room, request.sender, target) if belongs else None
+                        if stocks is not None:
+                            stock_reply = history_group_report(target, stocks)
+                        else:
+                            stock_reply = individual_report(fetch_history(resolve_stock(target)))
                 elif request.command == "주식" and is_group_quote_request(request.argument):
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, request.argument.strip())
