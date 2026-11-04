@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.5.0 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.5.1 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -23,7 +23,9 @@
 21. 관심종목은 room/sender별 신규 stock_groups/stock_items 테이블에만 저장하며 기존 DB/로그는 보존한다.
 22. 그룹 CRUD는 jobs/events 기록과 같은 SQLite 트랜잭션에서 실행하여 요청 ID 중복 실행을 막는다.
 23. 관심그룹 시세 조회는 SQLite 쓰기 락 밖에서 시행하고 다른 명령의 응답 및 로그를 유지한다.
-24. 새 기능은 기존 Android Bridge '주식' 명령을 그대로 사용해 APK 재설치 및 AI 설정을 요구하지 않는다.
+24. v0.5.1 '주식 프리셋 미국시총10'과 일반 그룹 최대 10종목을 기존 인증 API/SQLite 트랜잭션에 추가한다.
+25. 그룹 이름·종목의 기존 CRUD/조회, 날짜·무료 시세/오류/로그, AI OFF, 메모리7 8종목을 유지한다.
+26. 새 기능은 기존 Android Bridge '주식' 명령을 그대로 사용해 APK 재설치 및 AI 설정을 요구하지 않는다.
 """
 from __future__ import annotations
 
@@ -45,7 +47,7 @@ from .market import StockQuoteError, execute_stock_command
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command)
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 

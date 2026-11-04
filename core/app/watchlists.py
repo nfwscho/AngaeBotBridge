@@ -1,11 +1,11 @@
 """
-앙개봇 Python Core v0.5.0 관심종목 그룹 관리 모듈 — 전체 기능 상세 설명
+앙개봇 Python Core v0.5.1 관심종목 그룹 관리 모듈 — 전체 기능 상세 설명
 1. 기존 고정 '주식 메모리7' 8종목, 가격·등락률·시장별 거래일·캐시·원본 로그는 그대로 둔다.
 2. '주식 목록', '주식 그룹생성 그룹명', '주식 그룹삭제 그룹명 확인' 명령을 추가한다.
 3. '주식 추가 그룹명 티커 [별칭]', '주식 삭제 그룹명 티커', '주식 그룹명'을 추가한다.
 4. 그룹과 종목은 room/sender별 SQLite의 신규 stock_groups/stock_items 테이블에만 저장한다.
 5. 기존 jobs/events/AI 테이블, 인증 토큰, Android 설정 및 운영 로그는 변경하거나 삭제하지 않는다.
-6. 메모리7은 읽기 전용으로 보호하며 그룹 최대 10개, 그룹당 종목 최대 8개로 제한한다.
+6. 메모리7은 읽기 전용으로 보호하며 그룹 최대 10개, 그룹당 종목 최대 10개로 제한한다.
 7. 삼성·하이닉스 등 기존 8종목 이름·코드와 안전한 미국/한국/일본 종목코드를 입력할 수 있다.
 8. 티커는 엄격히 검증·정규화하고 사용자 입력 URL/호스트/셸 명령을 실행하지 않는다.
 9. 실제 시세는 기존 market.fetch_quote를 재사용하고 공급자 실패 시 '조회 불가'로 정확히 표시한다.
@@ -15,6 +15,11 @@
 13. 관리자/다른 채팅방에 종목정보가 혼합되지 않게 빈 scope는 거부한다.
 14. 주식 자동매매/예약발송/유료 API/AI 호출은 지원하지 않으며 비공식 시세임을 명시한다.
 15. 단위 테스트에서 독립 DB와 네트워크 모의 응답을 사용하도록 fetcher를 주입할 수 있다.
+16. v0.5.1 '주식 프리셋 미국시총10'을 추가해 미국 기업 시가총액 상위 10개를 한 번에 등록한다.
+17. 프리셋은 2026-11-04 공개 순위를 바탕으로 한 고정 스냅샷이며 자동 순위 재편성이나 매수·매도를 하지 않는다.
+18. Alphabet 복수 종류 주식은 한 기업으로 묶고, 미국 국적 기업만 포함하며 해외 발행사의 미국 ADR은 제외한다.
+19. 이미 존재하는 그룹·종목을 덮어쓰지 않고 기존 메모리7 및 다른 사용자 그룹·SQLite·로그를 모두 보존한다.
+20. 10개 종목 가격은 기존 무료 공급자로 병렬 조회하고 요청 시간 제한 내에 답장을 반환하도록 동시성을 조정한다.
 """
 from __future__ import annotations
 
@@ -28,14 +33,31 @@ from typing import Callable
 from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line
 
 MAX_GROUPS = 10
-MAX_ITEMS = 8
+MAX_ITEMS = 10
 # ASCII 대문자/숫자 이외 임의 URL, 경로, 셸 메타문자 금지.
 _US_TICKER = re.compile(r"^[A-Z]{1,5}(?:-[A-Z])?$")
 _KR_TICKER = re.compile(r"^\d{6}\.(?:KS|KQ)$")
 _JP_TICKER = re.compile(r"^[0-9A-Z]{3,5}\.T$")
 _GROUP = re.compile(r"^[가-힣A-Za-z0-9_-]{1,16}$")
 _ALIAS = re.compile(r"^[가-힣A-Za-z0-9_.-]{1,24}$")
-_RESERVED = {"목록", "도움말", "그룹생성", "그룹삭제", "추가", "삭제", "메모리7"}
+_RESERVED = {"목록", "도움말", "그룹생성", "그룹삭제", "추가", "삭제", "메모리7", "프리셋"}
+# 2026-11-04 미국 국적 상장기업 시가총액 상위권 고정 스냅샷(종목 구성 자동 갱신 안 함).
+# 출처: finhacker.cz/en/largest-us-companies-by-market-cap/ 와 stockanalysis.com/list/largest-us-companies/
+# 한 기업은 한 번만: Alphabet GOOGL 선택; 미국 상장 해외 법인(TSM 등)은 포함하지 않음.
+US_MARKET_CAP_PRESET_DATE = "2026-11-04"
+US_MARKET_CAP_PRESET_NAME = "미국시총10"
+US_MARKET_CAP_PRESET = (
+    ("NVDA", "엔비디아"),
+    ("AAPL", "애플"),
+    ("MSFT", "마이크로소프트"),
+    ("GOOGL", "알파벳"),
+    ("AMZN", "아마존"),
+    ("SPCX", "스페이스X"),
+    ("AVGO", "브로드컴"),
+    ("META", "메타"),
+    ("TSLA", "테슬라"),
+    ("LLY", "일라이릴리"),
+)
 
 
 def init_schema(db: sqlite3.Connection) -> None:
@@ -95,12 +117,14 @@ def command_help() -> str:
     return ("📋 관심종목 사용법\n"
             "앙개야 주식 목록\n"
             "앙개야 주식 그룹생성 반도체\n"
+            "앙개야 주식 프리셋 미국시총10\n"
             "앙개야 주식 추가 반도체 MU 마이크론\n"
             "앙개야 주식 추가 반도체 005930 삼성전자\n"
             "앙개야 주식 반도체\n"
             "앙개야 주식 삭제 반도체 MU\n"
             "앙개야 주식 그룹삭제 반도체 확인\n"
-            "※ 메모리7은 원본 보존 · AI/API 키 불필요")
+            "※ 메모리7은 원본 보존 · 그룹당 최대 10종목\n"
+            "※ 미국시총10은 2026-11-04 고정 구성(순위 자동 변경 없음) · AI/API 키 불필요")
 
 
 def is_group_quote_request(argument: str) -> bool:
@@ -131,7 +155,7 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
             return lookup(stock)
         except (StockQuoteError, OSError, ValueError, TimeoutError):
             return None
-    with ThreadPoolExecutor(max_workers=min(4, len(stocks))) as pool:
+    with ThreadPoolExecutor(max_workers=min(5, len(stocks))) as pool:
         quotes = list(pool.map(one, stocks))
     lines = [f"📊 {name} 관심종목 시세 요약"]
     dates: dict[str, str] = {}
@@ -171,6 +195,32 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
         lines.extend(f"{name} : {count}종목" for name, count in rows)
         lines.append("※ 그룹 추가: 주식 그룹생성 그룹명")
         return "\n".join(lines)
+    if action == "프리셋":
+        if len(parts) != 2 or parts[1] != US_MARKET_CAP_PRESET_NAME:
+            raise StockQuoteError("사용법: 앙개야 주식 프리셋 미국시총10")
+        name = US_MARKET_CAP_PRESET_NAME
+        if db.execute("SELECT 1 FROM stock_groups WHERE room=? AND sender=? AND name=?",
+                      (room, sender, name)).fetchone():
+            raise StockQuoteError("'미국시총10' 그룹이 이미 존재합니다. 기존 종목을 덮어쓰지 않습니다.")
+        count = db.execute("SELECT COUNT(*) FROM stock_groups WHERE room=? AND sender=?",
+                           (room, sender)).fetchone()[0]
+        if count >= MAX_GROUPS:
+            raise StockQuoteError(f"관심종목 그룹은 최대 {MAX_GROUPS}개까지 등록할 수 있습니다.")
+        if len(US_MARKET_CAP_PRESET) > MAX_ITEMS:
+            raise StockQuoteError("시총 프리셋 수가 그룹 제한을 초과했습니다.")
+        # SQLite 기존 요청 트랜잭션 안에서 그룹과 종목을 한꺼번에 생성한다.
+        # 코드와 이름을 모두 고정한 안전한 템플릿이며 기존 테이블/기록은 삭제하지 않는다.
+        stocks = tuple(resolve_stock(ticker, alias) for ticker, alias in US_MARKET_CAP_PRESET)
+        db.execute("INSERT INTO stock_groups(room,sender,name,created_at) VALUES (?,?,?,?)",
+                   (room, sender, name, int(time.time())))
+        db.executemany("""INSERT INTO stock_items
+            (room,sender,group_name,ticker,alias,currency,market,timezone_name,sort_order)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            [(room, sender, name, item.ticker, item.name, item.currency, item.market,
+              item.timezone_name, idx) for idx, item in enumerate(stocks, start=1)])
+        return (f"✅ {name} 그룹에 미국 기업 10종목 등록 완료.\n"
+                "조회: 앙개야 주식 미국시총10\n"
+                f"※ 구성 기준일 {US_MARKET_CAP_PRESET_DATE}, 시총 순위 자동 갱신 없음")
     if action == "그룹생성":
         if len(parts) != 2:
             raise StockQuoteError("사용법: 앙개야 주식 그룹생성 반도체")

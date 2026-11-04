@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.0 관심종목 FastAPI 통합 테스트 — 전체 기능 상세 설명
+앙개봇 v0.5.1 관심종목 FastAPI 통합 테스트 — 전체 기능 상세 설명
 1. 새 관심종목 명령에 기존 인증 헤더가 필수인지 검증한다.
 2. SQLite 요청 ID 중복 실행 시 그룹 추가가 반복되지 않는지 검증한다.
 3. 같은 요청 ID에 다른 명령/인수를 쓰면 HTTP 409가 유지되는지 검증한다.
@@ -114,7 +114,7 @@ class WatchlistAPITests(unittest.TestCase):
     def test_existing_mechanics_and_ai_off(self):
         status=self.cmd(command='서버상태').json()
         self.assertTrue(status['ok'])
-        self.assertIn('v0.5.0',status['reply'])
+        self.assertIn('v0.5.1',status['reply'])
         self.assertIn('OFF',self.cmd(command='AI상태').json()['reply'])
         self.assertIn('KST',self.cmd(command='시간').json()['reply'])
 

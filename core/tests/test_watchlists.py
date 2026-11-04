@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.0 관심종목 단위 테스트 — 기존 기능 보존 및 신규 명령 검증 상세 설명
+앙개봇 v0.5.1 관심종목 단위 테스트 — 기존 기능 보존 및 신규 명령 검증 상세 설명
 1. 기존 메모리7 종목 8개와 티커/통화는 수정하지 않는다.
 2. 주식 그룹생성/목록/그룹삭제 및 별도 stock_groups 테이블 CRUD를 확인한다.
 3. 주식 추가/삭제와 한국·미국·일본 종목 정규화 및 원화/달러/엔을 확인한다.
@@ -8,6 +8,7 @@
 6. 가격 응답은 mock만 사용하고 시세 실패·거래일·표시 순서·그룹 공란을 검증한다.
 7. 사용자 명령으로 외부 URL, 임의 셸·파일 명령, 유료 API가 실행되지 않음을 확인한다.
 8. 모든 테스트는 임시 SQLite 파일에서만 수행하고 실제 Termux 로그/DB/토큰은 변경하지 않는다.
+9. v0.5.1 그룹당 최대 10종목과 고정 미국시총10 프리셋/기존 그룹 보호를 추가 검사한다.
 """
 from __future__ import annotations
 
@@ -98,10 +99,10 @@ class WatchlistUnitTests(unittest.TestCase):
     def test_limits_and_confirmation(self):
         self.run_cmd('그룹생성 첫그룹')
         # 지원하는 정확한 미국 티커만 등록
-        for symbol in ('AA', 'BB', 'CC', 'DD', 'EE', 'FF', 'GG', 'HH'):
+        for symbol in ('AA', 'BB', 'CC', 'DD', 'EE', 'FF', 'GG', 'HH', 'II', 'JJ'):
             self.run_cmd(f'추가 첫그룹 {symbol}')
         with self.assertRaisesRegex(StockQuoteError, '최대'):
-            self.run_cmd('추가 첫그룹 II')
+            self.run_cmd('추가 첫그룹 KK')
         with self.assertRaisesRegex(StockQuoteError, '확인'):
             self.run_cmd('그룹삭제 첫그룹')
         self.assertEqual(len(load_group(self.db, self.room, self.sender, '첫그룹')), MAX_ITEMS)

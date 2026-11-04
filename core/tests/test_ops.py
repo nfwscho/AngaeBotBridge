@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.0 운영 명령 회귀 테스트 — 전체 검사 기능 상세 안내
+앙개봇 v0.5.1 운영 명령 회귀 테스트 — 전체 검사 기능 상세 안내
 1. 인증 없는 운영 명령을 거부하고 응답 스키마·중복 요청 ID를 유지하는지 검사한다.
 2. 통계에 저장된 Python 명령만 포함하며 조회 직전 건수로 집계하는지 검사한다.
 3. 방/발신자별 SQLite 필터로 다른 대화의 명령·오류가 노출되지 않는지 검사한다.
@@ -8,7 +8,7 @@
 6. 포맷된 가동시간과 Python Core 버전, AI OFF에서 기존 계산·시간·상태를 유지하는지 확인한다.
 7. 운영 명령 실행 후 기존 jobs/events/AI 테이블은 모두 보존하는지 확인한다.
 8. tests는 임시 SQLite DB를 이용하며 실제 Termux 토큰·로그·카카오톡을 변경하지 않는다.
-9. v0.5.0 서버 버전 응답만 갱신하고 기존 운영 명령 테스트 조건을 유지한다.
+9. v0.5.1 서버 버전 응답만 갱신하고 기존 운영 명령 테스트 조건을 유지한다.
 """
 from __future__ import annotations
 
@@ -46,9 +46,9 @@ class OpsTests(unittest.TestCase):
 
     def test_health_and_legacy_math(self):
         response = self.client.get("/v1/health", headers=self.headers)
-        self.assertEqual(response.json()["version"], "0.5.0")
+        self.assertEqual(response.json()["version"], "0.5.1")
         self.assertIn("156,176", self.call("계산", "344*454").json()["reply"])
-        self.assertIn("v0.5.0", self.call("서버상태").json()["reply"])
+        self.assertIn("v0.5.1", self.call("서버상태").json()["reply"])
         self.assertIn("KST", self.call("시간").json()["reply"])
 
     def test_authentication_and_unknown_command(self):
