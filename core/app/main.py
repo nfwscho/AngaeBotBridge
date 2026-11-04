@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.3.1 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.4.0 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -13,6 +13,8 @@
 11. 기존 create_app 주입 테스트 구조와 응답 중복 필드를 유지한다.
 12. 임의 셸·파일 접근, 외부 PC 제어, AI 도구 호출 등 위험한 실행 기능은 제공하지 않는다.
 13. v0.3.1 서버 단일 실행/로그 보관/runit 복구는 별도 운영 스크립트가 처리하며 API 호환은 유지한다.
+14. v0.4.0 상세상태/통계/최근오류/가동시간 명령을 추가하고 기존 모든 명령/로그·DB 구조를 보존한다.
+15. 운영 조회는 같은 채팅방·발신자 기록만 반환하며 AI OFF에서 작동하고 별도 원격 실행은 없다.
 """
 from __future__ import annotations
 
@@ -29,9 +31,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
+from .ops import details, command_stats, recent_errors, uptime_report
 
-VERSION = "0.3.1"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화"}
+VERSION = "0.4.0"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간"}
 
 
 class CommandRequest(BaseModel):
@@ -99,7 +102,15 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                     return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
                 try:
-                    if request.command == "AI상태":
+                    if request.command == "상세상태":
+                        reply = details(int(time.monotonic() - began))
+                    elif request.command == "통계":
+                        reply = command_stats(db, request.room, request.sender)
+                    elif request.command == "최근오류":
+                        reply = recent_errors(db, request.room, request.sender)
+                    elif request.command == "가동시간":
+                        reply = uptime_report(int(time.monotonic() - began))
+                    elif request.command == "AI상태":
                         reply = AISettings.from_env().status_text()
                     elif request.command == "대화초기화":
                         db.execute("""INSERT INTO ai_sessions(room,sender,generation)
