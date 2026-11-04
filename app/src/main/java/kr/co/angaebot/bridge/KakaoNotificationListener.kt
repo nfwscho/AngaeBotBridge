@@ -15,6 +15,9 @@
  * 13. 기존 RECEIVE/COMMAND/PYTHON_REQUEST/RESULT/REPLY/오류 로그와 SHA-256 중복 방지를 유지한다.
  * 14. 메뉴 활성화는 인증된 Python menu_active 응답을 실제 RemoteInput에 요청한 이후에만 허용한다.
  * 15. 기존 주식 분석/그룹/메모리7/AI OFF/자동응답 OFF/앱 UI/토큰/권한은 변경하지 않는다.
+ * 16. v0.4.4 모든 허용 명령(로컬/주식/숫자 메뉴/AI/오류)의 답장 마지막에 S20+ 배터리 수준/충전 상태를 추가한다.
+ * 17. 배터리는 답장 직전에 ACTION_BATTERY_CHANGED sticky 정보를 읽고 별도 권한/네트워크/상시 감시를 추가하지 않는다.
+ * 18. 기존 알림 승인·차단, 호출어, 중복 지문, COMMAND/PYTHON/REPLY 단계, RemoteInput 본문 기록을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -150,8 +153,10 @@ class KakaoNotificationListener : NotificationListenerService() {
                 logger.log("WARN", "REJECT_DISABLED", "실행 도중 자동응답 OFF", message.room, message.sender)
                 return
             }
-            logger.log("INFO", "REPLY_ATTEMPT", response, message.room, message.sender)
-            when (val outcome = ReplyManager.reply(this, sbn.notification, response)) {
+            // 실제로 전송할 답장에만 배터리 정보를 추가해 기존 Python/로컬 명령 결과를 수정하지 않는다.
+            val replyWithBattery = BatteryStatusReporter.append(this, response)
+            logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
+            when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {
                     logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
                     if ((parsed.name == "주식" && parsed.argument == "메뉴") || numericSelection != null) {

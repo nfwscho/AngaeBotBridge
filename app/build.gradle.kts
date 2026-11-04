@@ -10,6 +10,8 @@
 // 9. versionCode를 5 -> 6으로, Android Bridge versionName을 0.4.1 -> 0.4.2로 올려 삭제 없는 업그레이드를 지원한다.
 // 10. 주식 주문, 예약, 자동 알림, 앱 권한 확대, 추가 서버·유료 API는 새로 넣지 않는다.
 // 11. v0.4.3 숫자 선택/5분 제한을 추가하며 같은 패키지명과 기존 설정/로그/서명 호환을 유지한다.
+// 12. v0.4.4에서는 모든 명령의 카카오톡 응답 맨 아래에 S20+ 배터리 잔량/충전 상태를 표시한다.
+// 13. 기존 권한/SQLite/설정/AI OFF/주식 분석/Python Core·로그 및 모든 UI를 유지하고 versionCode를 8로 증가한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -23,8 +25,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4.3"
+        versionCode = 8
+        versionName = "0.4.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

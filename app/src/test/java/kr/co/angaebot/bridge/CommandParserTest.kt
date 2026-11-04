@@ -10,6 +10,7 @@
  * 8. Android 알림·채팅방/발신자 허용·중복 방지·SQLite 로그·RemoteInput·기존 UI를 변경하지 않는 순수 Kotlin 단위 테스트이다.
  * 9. 가격 알림/주기 감시/AI 강제 활성화/자동 주문/자동 발송은 추가하거나 검사 중 실행하지 않는다.
  * v0.4.3: 단축 주가 메뉴를 열고 기존 긴 호출어의 도움말 및 별칭을 보존하는지 검사한다.
+ * v0.4.4: 설치 버전 상태 텍스트만 0.4.4로 갱신하고 기존 단축 명령/숫자 메뉴 전체 회귀 테스트를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -45,7 +46,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙개야 주식 메모리7"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.3"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.4"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주(메뉴)"))
     }
 
