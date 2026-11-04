@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.1 읽기 전용 운영 명령 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.4.2 읽기 전용 운영 명령 — 전체 구현 기능 상세 설명
 1. '상세상태': Python Core/Watchdog/SSH의 runit 상태와 SSH 로컬 8022 포트를 읽기만 한다.
 2. '통계': 기존 SQLite jobs를 채팅방·발신자별로 집계하고 성공·실패·명령 TOP5를 표시한다.
 3. '최근오류': 같은 방·발신자의 실패 작업 5건에서 시간·명령·오류 메시지만 제한해 보여준다.
@@ -13,6 +13,7 @@
 11. 같은 request_id 재전송은 기존 main.py SQLite jobs 중복 방지로 처리한다.
 12. OpenAI/Ollama는 호출하지 않고, AI가 OFF여도 기존 계산·시간·상태 및 새 명령을 사용한다.
 13. v0.4.1에서는 기존 운영 명령의 출력·로그·SQL을 유지하고 상세상태 버전 표시만 최신화한다.
+14. v0.4.2에서도 SQLite 조회 범위와 상세상태·통계·최근오류·가동시간 내용을 유지한다.
 """
 from __future__ import annotations
 
@@ -65,7 +66,7 @@ def ssh_status(port: int = 8022) -> str:
 
 
 def details(uptime_seconds: int, *, services=service_status, ssh=ssh_status) -> str:
-    return ("🛠 앙개봇 운영 상세상태 (v0.4.1)\n"
+    return ("🛠 앙개봇 운영 상세상태 (v0.4.2)\n"
             f"Python Core: {services('angaebot-core')}\n"
             f"Watchdog: {services('angaebot-watchdog')}\n"
             f"SSH 서비스: {services('sshd')}\n"

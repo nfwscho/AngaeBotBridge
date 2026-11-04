@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.1 실행기 — 모든 기능 상세 설명
+앙개봇 Python Core v0.4.2 실행기 — 모든 기능 상세 설명
 1. 기존 start-termux.sh의 .env 인증키 로딩, FastAPI 앱, 127.0.0.1:8765 바인딩을 유지한다.
 2. data/.core-run.lock에 POSIX flock을 걸어 runit/수동 실행 중복을 방지한다.
 3. 잠금 FD를 uvicorn 프로세스에 상속해 exec 이후에도 단일 실행 상태를 유지한다.
@@ -11,6 +11,7 @@
 9. 새로운 암호/네트워크 포트/외부 PC 명령/비밀정보 출력 기능을 추가하지 않는다.
 10. 실행 실패 및 중복 상태만 logs/launcher.log에 기록한다. 로그 본문에 토큰을 쓰지 않는다.
 11. FastAPI 런처 시작 로그의 버전 문자열을 0.4.1로 갱신하고 로그 이벤트 형식은 유지한다.
+12. v0.4.2 런처 버전만 갱신하고 이전 로그 형식/단일실행/SSH/Watchdog 기능을 보존한다.
 """
 from __future__ import annotations
 
@@ -94,7 +95,7 @@ def launch(core: Path = CORE) -> int:
     finally:
         if output > 2:
             os.close(output)
-    marker = f'CORE_START version=0.4.1 pid={os.getpid()}'
+    marker = f'CORE_START version=0.4.2 pid={os.getpid()}'
     if archived:
         marker += f' previous_log_archived={archived.name}'
     os.write(2, (marker + '\n').encode('utf-8'))

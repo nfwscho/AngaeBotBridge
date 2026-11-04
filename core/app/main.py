@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.1 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.4.2 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -18,6 +18,7 @@
 16. v0.4.1 주식 메모리7/메모리7 명령을 추가하며 한국·미국·일본 8개 종목의 전일 대비 등락률을 제공한다.
 17. 시세 조회는 외부 무료 HTTPS 시세 API만 사용하며 OpenAI API/앱 권한/기존 로그·DB를 변경하지 않는다.
 18. 중복 요청 확인 후 시세 조회는 SQLite 쓰기 잠금 밖에서 진행해 기존 명령 지연을 최소화한다.
+19. v0.4.2 국내 주식 네이버 금융과 키오시아 일본 공급자 폴백을 추가하고 API/로그 호환을 유지한다.
 """
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import details, command_stats, recent_errors, uptime_report
 from .market import StockQuoteError, execute_stock_command
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
