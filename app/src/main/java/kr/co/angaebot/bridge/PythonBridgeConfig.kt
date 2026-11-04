@@ -1,12 +1,12 @@
 /*
- * 앙개봇 Android Bridge v0.2.0 — 전체 프로그램 기능 및 Python 설정 보호
- * 1) 기존 카카오톡 알림 수신/명령 추출/허용 채팅방+발신자/호출어/자동답장 기능은 유지한다.
- * 2) 기존 SQLite 로그/중복 감지/모든 UI/로그 내보내기/긴급 OFF 기능을 그대로 유지한다.
- * 3) Python 연결은 기본 OFF이며 기존 '테스트/상태/도움말'은 항상 Android 로컬에서 처리한다.
- * 4) 연결을 ON으로 설정한 경우 '계산/시간/서버상태'만 S20+의 127.0.0.1:8765로 전달한다.
- * 5) API 토큰은 AndroidKeyStore AES-GCM으로 암호화해 앱 내부 SharedPreferences에 보관한다.
- * 6) 토큰을 콘솔, 응답, SQLite 로그에 기록하지 않고 Android 백업도 비활성화한다.
- * 7) 허용 목록의 표시 이름은 강력한 계정 인증이 아니므로 원격 PC/파일 명령은 허용하지 않는다.
+ * 앙개봇 Android Bridge v0.3.0 — 전체 기능/보안 안내
+ * 1. v0.2의 Python 인증 토큰 AES-GCM AndroidKeyStore 암호화 저장을 그대로 유지한다.
+ * 2. Python 연결 ON/OFF, 기존 SharedPreferences 이름 및 암호 키 별칭을 유지한다.
+ * 3. 기존 설정 저장/읽기/토큰 검증/로그 정책과 허용 채팅방·발신자 설정을 유지한다.
+ * 4. 새 '자연어 자동 전달' 설정을 별도 bool로 보존하고 기본값을 OFF로 한다.
+ * 5. 자연어 모드를 사용자가 명시적으로 켜기 전에는 모르는 명령을 AI로 전달하지 않는다.
+ * 6. 실시간 AI API 인증키는 Android에 저장하지 않고 Termux의 .env에만 저장한다.
+ * 7. 기존 설치 앱을 업데이트해도 이전 Python 토큰/설정이 유지되도록 한다.
  */
 package kr.co.angaebot.bridge
 
@@ -21,7 +21,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** 별도 보조 설정: 기존 BotConfig의 키/기본값/저장 흐름을 변경하지 않는다. */
-data class PythonBridgeSettings(val enabled: Boolean, val token: String)
+data class PythonBridgeSettings(val enabled: Boolean, val token: String, val freeformEnabled: Boolean = false)
 
 class PythonBridgeConfig(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("angaebot_python_v02", Context.MODE_PRIVATE)
@@ -30,17 +30,18 @@ class PythonBridgeConfig(context: Context) {
         val enabled = prefs.getBoolean("enabled", false)
         val stored = prefs.getString("token_encrypted", null)
         val token = if (stored.isNullOrBlank()) "" else decrypt(stored)
-        return PythonBridgeSettings(enabled, token)
+        return PythonBridgeSettings(enabled, token, prefs.getBoolean("ai_freeform_enabled", false))
     }
 
-    fun save(enabled: Boolean, tokenInput: String) {
+    fun save(enabled: Boolean, tokenInput: String, freeformEnabled: Boolean = false) {
         val token = tokenInput.trim()
         if (enabled) require(token.length >= 32 && token.length <= 256 && token.all { it.isLetterOrDigit() || it in "_-" }) {
             "Python 토큰은 32~256자의 영문/숫자/_/- 이어야 합니다."
         }
         val encrypted = if (token.isBlank()) null else encrypt(token)
         val ok = prefs.edit().putBoolean("enabled", enabled)
-            .putString("token_encrypted", encrypted).commit()
+            .putString("token_encrypted", encrypted)
+            .putBoolean("ai_freeform_enabled", freeformEnabled).commit()
         check(ok) { "Python 설정 저장에 실패했습니다." }
     }
 

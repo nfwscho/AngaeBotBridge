@@ -1,17 +1,15 @@
 /*
- * 앙개봇 Android Bridge v0.1 — 모든 구현 기능
- * 1. NotificationListenerService로 카카오톡(com.kakao.talk)의 신규/삭제 알림을 감지한다.
- * 2. 단체방 식별이 모호하거나 본문/발신자가 없는 알림은 거부하고 원인을 로그로 남긴다.
- * 3. 기본 자동응답 OFF; 정확한 채팅방 이름과 발신자 이름의 명시적 허용목록을 적용한다.
- * 4. 호출어 '앙개야' 뒤의 테스트/상태/도움말만 로컬에서 실행한다.
- * 5. 갱신·재게시 알림의 명령 중복 실행을 SQLite 지문과 2분 TTL로 차단한다.
- * 6. RemoteInput이 제공될 때만 알림 빠른 답장을 요청한다(최종 배달 보장 아님).
- * 7. 수신, 거절, 중복, 실행, 답장 요청, 오류, 서비스 연결/종료를 SQLite에 기록한다.
- * 8. UI에서 허용 목록, ON/OFF, 진단, 로그 열람/내보내기/삭제를 관리한다.
- * 9. v0.2.0: 기존 세 명령은 Android에서 유지하며 계산/시간/서버상태만 인증된 loopback Python에 전달한다.
- * 10. 새 Python 요청/결과/실패를 기존 SQLite 이벤트 로그에 추가하고, Python OFF/장애 시 기존 명령은 계속 작동한다.
- * 11. INTERNET(로컬 127.0.0.1에 한정) 외 SMS/접근성 권한 없이 작동하며, 비공식 계정 자동화를
- *    대량 전송에 사용하지 않는다. 알림 표시 이름은 공식 신원 인증 자료가 아니다.
+ * 앙개봇 Android Bridge v0.3.0 — 전체 알림/명령/로그 기능 안내
+ * 1. 기존 NotificationListenerService/카카오톡 패키지 검증/마지막 알림 선택 기능을 모두 보존한다.
+ * 2. 기본 자동응답 OFF, 정확한 방·발신자 허용목록, 호출어 검증 및 거절 로그를 유지한다.
+ * 3. SHA-256 이벤트 지문과 SQLite TTL 중복방지 및 모든 RECEIVE/COMMAND/REPLY 로그를 유지한다.
+ * 4. 기존 테스트·상태·도움말 등 Android 로컬 명령을 그대로 처리한다.
+ * 5. 계산·시간·서버상태 및 신규 AI 명령을 선택형 인증된 loopback Python에 전달한다.
+ * 6. 자연어 모드가 별도로 ON인 경우에만 기존 미등록 명령을 AI 질문으로 전달한다.
+ * 7. AI 기능/Python OFF 또는 장애가 발생해도 기존 명령과 RemoteInput 답장 흐름은 유지한다.
+ * 8. PYTHON_REQUEST/RESULT/FAILED를 기존 SQLite 로그에 추가하고 토큰은 기록하지 않는다.
+ * 9. 답장 직전 긴급 OFF 상태 재검증, RemoteInput 실패 기록, 서비스 생명주기 로그를 유지한다.
+ * 10. AI 네트워크 처리에 시간 제한을 걸고 셸/파일/PC 제어 등 위험한 명령은 지원하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -96,15 +94,26 @@ class KakaoNotificationListener : NotificationListenerService() {
                 return
             }
             logger.log("INFO", "COMMAND", "command=${parsed.name} arg=${parsed.argument}", message.room, message.sender)
-            val response = if (parsed.name in PythonBridgeClient.supportedCommands) {
+            // 명시적으로 켠 자연어 모드에서만 미등록 명령을 AI 질문으로 전달한다.
+            // 기존 로컬 명령 및 기존 Python 3개 명령의 우선순위는 그대로 보존한다.
+            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help")
+            val explicitPython = parsed.name in PythonBridgeClient.supportedCommands
+            val freeform = if (!isLocal && !explicitPython) {
+                try { val p = pythonConfig.load(); p.enabled && p.freeformEnabled } catch (_: Exception) { false }
+            } else false
+            val forwardName = if (freeform) "질문" else parsed.name
+            val forwardArgument = if (freeform) {
+                (parsed.name + " " + parsed.argument).trim()
+            } else parsed.argument
+            val response = if (explicitPython || freeform) {
                 try {
                     val p = pythonConfig.load()
                     if (!p.enabled) {
                         // 기존 v0.1 로컬 명령은 한 글자도 바꾸지 않는다.
                         LocalCommandExecutor.execute(parsed.name, parsed.argument)
                     } else {
-                        logger.log("INFO", "PYTHON_REQUEST", "command=${parsed.name} requestId=$fingerprint", message.room, message.sender)
-                        when (val result = PythonBridgeClient.execute(p.token, fingerprint, parsed.name, parsed.argument, message.room, message.sender)) {
+                        logger.log("INFO", "PYTHON_REQUEST", "command=${parsed.name} forwarded=$forwardName requestId=$fingerprint", message.room, message.sender)
+                        when (val result = PythonBridgeClient.execute(p.token, fingerprint, forwardName, forwardArgument, message.room, message.sender)) {
                             is PythonOutcome.Success -> {
                                 logger.log(if (result.commandOk) "INFO" else "WARN", "PYTHON_RESULT",
                                     "command=${parsed.name} ok=${result.commandOk} duplicate=${result.duplicate} reply=${result.reply}", message.room, message.sender)

@@ -1,5 +1,10 @@
-// AngaeBot Bridge v0.2: 기존 카카오톡 알림 수신/명령 필터/응답/SQLite 로그/관리 UI 보존.
-// 기존 3개 명령은 로컬, 새 3개 명령만 Termux FastAPI로 loopback 인증 요청; SMS/접근성은 불필요.
+// 앙개봇 Android Bridge v0.3.0 전체 빌드 기능 상세 설명
+// 1. 기존 applicationId, 패키지, targetSdk/compileSdk/minSdk, JDK17/Kotlin 빌드 옵션을 보존한다.
+// 2. 기존 KakaoTalk NotificationListenerService, RemoteInput, SQLite/UI 기능을 포함한다.
+// 3. 기존 Termux Python FastAPI loopback 연결과 추가 AI 명령을 지원한다.
+// 4. AndroidKeyStore 기반 Python 인증키 암호화 및 자연어 모드 선택 설정을 지원한다.
+// 5. 기존 unit test 설정과 release buildType, Gradle 플러그인을 유지한다.
+// 6. versionCode 3, versionName 0.3.0으로 기존 앱 삭제 없는 APK 업그레이드를 가능하게 한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,8 +18,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

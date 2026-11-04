@@ -1,18 +1,15 @@
 /*
- * 앙개봇 Android Bridge v0.1 — 전체 프로그램 기능 및 운영 원칙
- * 1. S20+의 보조 카카오톡(com.kakao.talk) 신규 알림만 NotificationListenerService로 수신한다.
- * 2. 기본 OFF이며, 승인된 정확한 채팅방명 + 발신자명 + '앙개야' 호출어가 모두 필요하다.
- * 3. '테스트', '상태', '도움말'을 S20+에서 직접 처리하고 RemoteInput으로 답장을 시도한다.
- * 4. 중복 알림 방지(SQLite), 모든 수신/거절/명령/응답/오류 영구 로그를 제공한다.
- * 5. 관리 UI: 권한 안내, ON/OFF, 호출어, 방/발신자 허용목록, 저장, 오프라인 테스트,
- *    최근 로그/전체 로그 수, TXT 전체 내보내기, 확인 후 로그 삭제, 연결 상태 표시.
- * 6. 비활성화 및 빈 허용목록으로 안전한 초기 상태를 보장하고, 인터넷/SMS 권한 불필요.
- * 7. 카카오톡 알림은 실제 계정/채팅방 고유 ID를 제공하지 않을 수 있어 표시 이름만으로
- *    강한 사용자 인증을 할 수 없다. 개인용 테스트만 허용하고 고위험 명령은 지원하지 않는다.
- * 8. 답장 액션 요청 성공은 상대방 카카오톡 도착 확인이 아니며, 알림 없이는 보낼 수 없다.
- * 9. v0.2.0: 기존 UI/4개 섹션/로그 내보내기/긴급 OFF/로컬 테스트 기능을 그대로 둔다.
- * 10. 새 ②-A Python 연결 섹션에서 인증 토큰을 암호화 저장하고 로컬 연결을 비동기 시험한다.
- * 11. Python 명령은 계산/시간/서버상태에 한정하며 연결 OFF여도 기존 3개 명령은 정상 동작한다.
+ * 앙개봇 Android Bridge v0.3.0 — 전체 관리 UI 기능/동작 상세 안내
+ * 1. v0.2의 S20+ 알림 권한/연결 상태, 허용 채팅방·발신자·호출어 관리, 자동응답 OFF를 유지한다.
+ * 2. 기존 ①~④ 화면 순서, ON/OFF, 긴급 OFF, 저장 및 5초 상태·로그 갱신을 유지한다.
+ * 3. 기존 Python ②-A 섹션의 토큰 AES-GCM 암호화 저장/연결 시험/UI 비동기 처리를 보존한다.
+ * 4. 새 자연어 AI 전송 스위치는 기본 OFF이며 기존 Python ON/OFF와 별도로 저장한다.
+ * 5. 기존 로컬 명령 문법 검사, 최근 이벤트 로그 열람, 전체 TXT 내보내기를 유지한다.
+ * 6. 기존 로그/중복기록 삭제는 명시적 확인 후에만 실행하고 SQLite 내역을 임의로 제거하지 않는다.
+ * 7. 전체 로그 내보내기 파일명은 한글 깨짐 방지를 위해 영문으로 저장하며 내용은 한글 그대로 유지한다.
+ * 8. AI 제공자/실제 API 키는 Termux .env에서 설정하여 Android에 비밀키를 복제하지 않는다.
+ * 9. 기존 계정 신원 한계, 카카오톡 알림 빠른답장 방식, 응답 결과의 한계를 계속 고지한다.
+ * 10. 모든 로컬 로그 단계와 서비스 수명주기, 기존 사용자 설정과 AndroidKeyStore 별칭을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -45,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var config: BotConfig
     private lateinit var pythonConfig: PythonBridgeConfig
     private lateinit var pythonSwitch: Switch
+    private lateinit var aiFreeformSwitch: Switch
     private lateinit var pythonTokenInput: EditText
     private lateinit var logs: LogRepository
     private lateinit var powerSwitch: Switch
@@ -86,7 +84,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.2.0 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.3.0 · 카카오톡 자동응답 + Python AI 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -133,13 +131,20 @@ class MainActivity : Activity() {
 
         root.addView(space(12))
         root.addView(section("②-A Python 명령 엔진 (Termux)"))
-        root.addView(label("기존 테스트/상태/도움말은 Android에서 계속 처리합니다. Python ON일 때만 계산/시간/서버상태가 127.0.0.1:8765로 전달됩니다.", 12f))
+        root.addView(label("기존 테스트/상태/도움말은 Android에서 처리합니다. Python ON 시 계산/시간/서버상태/질문/요약/AI상태/대화초기화가 127.0.0.1:8765로 전달됩니다.", 12f))
         pythonSwitch = Switch(this).apply {
             text = "Python 연결 활성화 (기본 OFF)"
             textSize = 16f
             setPadding(0, dp(4), 0, dp(4))
         }
         root.addView(pythonSwitch)
+        aiFreeformSwitch = Switch(this).apply {
+            text = "일반 자연어 질문도 AI로 전달 (기본 OFF)"
+            textSize = 15f
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        root.addView(aiFreeformSwitch)
+        root.addView(label("앙개야 질문 안녕? / 앙개야 요약 ... / 앙개야 AI상태 / 앙개야 대화초기화\n자연어 모드를 켜면 '앙개야 오늘 날씨 알려줘'도 질문으로 전달합니다. 실시간 검색은 별도 연동이 필요합니다.", 12f))
         root.addView(label("Termux .env의 ANGAE_TOKEN (기기에 암호화 저장)", 14f, true))
         pythonTokenInput = input(singleLine = true, hint = "64자 인증 토큰을 복사해서 붙여넣으세요")
         pythonTokenInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -196,9 +201,11 @@ class MainActivity : Activity() {
         try {
             val python = pythonConfig.load()
             pythonSwitch.isChecked = python.enabled
+            aiFreeformSwitch.isChecked = python.freeformEnabled
             pythonTokenInput.setText(python.token)
         } catch (e: Exception) {
             pythonSwitch.isChecked = false
+            aiFreeformSwitch.isChecked = false
             pythonTokenInput.setText("")
             logs.log("ERROR", "PYTHON_SETTINGS_FAILED", "${e.javaClass.simpleName}: 저장된 토큰 확인 필요")
         }
@@ -224,8 +231,8 @@ class MainActivity : Activity() {
     /** v0.2.0 설정은 기존 카카오톡 허용 목록과 완전히 별개로 저장한다. */
     private fun savePythonSettings() {
         try {
-            pythonConfig.save(pythonSwitch.isChecked, pythonTokenInput.text.toString())
-            logs.log("INFO", "PYTHON_SETTINGS_SAVED", "enabled=${pythonSwitch.isChecked} tokenProvided=${pythonTokenInput.text.isNotBlank()}")
+            pythonConfig.save(pythonSwitch.isChecked, pythonTokenInput.text.toString(), aiFreeformSwitch.isChecked)
+            logs.log("INFO", "PYTHON_SETTINGS_SAVED", "enabled=${pythonSwitch.isChecked} tokenProvided=${pythonTokenInput.text.isNotBlank()} aiFreeform=${aiFreeformSwitch.isChecked}")
             Toast.makeText(this, "Python 설정을 저장했습니다.", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             pythonSwitch.isChecked = try { pythonConfig.load().enabled } catch (_: Exception) { false }
@@ -294,7 +301,7 @@ class MainActivity : Activity() {
     }
 
     private fun exportLogs() {
-        val fileName = "GPT_${SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())}_앙개봇_전체로그_v0.2.0.txt"
+        val fileName = "GPT_${SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())}_AngaeBot_LogExport_v0.3.0.txt"
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "text/plain"

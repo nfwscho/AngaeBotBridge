@@ -1,5 +1,5 @@
 """
-앙개봇 v0.2.0 Python 명령 엔진 — 전체 기능 상세 안내
+앙개봇 v0.3.0 Python 명령 엔진 — 전체 기능 상세 안내
 1. Galaxy S20+의 Termux에서 FastAPI로 전달된 허용 명령만 실행한다.
 2. '계산': Python eval 없이 제한된 AST로 +,-,*,/,//,%,** 및 괄호를 계산한다.
 3. 과도한 입력, 큰 숫자, 깊은 트리, 지수 폭증, 0으로 나누기를 거부한다.
@@ -7,6 +7,8 @@
 5. '서버상태': Python 엔진이 정상 실행 중인지 간략히 답한다.
 6. 파일/PC 제어, 임의 명령 실행, 외부 접속, 주식 주문은 지원하지 않는다.
 7. 기존 Android의 테스트/상태/도움말 및 카카오톡 응답/SQLite 로그는 변경하지 않는다.
+8. AI 질문/요약/AI상태/대화초기화는 별도 ai_engine 및 FastAPI에서 처리한다.
+9. 임의 셸/원격 PC 접근 없이 기존 수치 제한 및 시간 명령을 유지한다.
 """
 from __future__ import annotations
 
@@ -92,5 +94,5 @@ def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
         now = datetime.now(timezone(timedelta(hours=9)))
         return "🕐 서울 현재 시각: " + now.strftime("%Y-%m-%d %H:%M:%S KST")
     if name == "서버상태":
-        return f"🐍 앙개봇 Python v0.2.0 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
+        return f"🐍 앙개봇 Python v0.3.0 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
     raise CommandError("허용되지 않은 Python 명령입니다.")

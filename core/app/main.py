@@ -1,14 +1,17 @@
 """
-앙개봇 v0.2.0 FastAPI 서버 — 전체 기능 상세 안내
-1. S20+ 내부 loopback(127.0.0.1:8765)에서만 구동되도록 시작 스크립트가 제한한다.
-2. 모든 HTTP 엔드포인트에 X-AngaeBot-Token 인증을 요구하고 compare_digest로 검사한다.
-3. GET /v1/health: 인증 후 Python 엔진의 버전/상태를 간단히 반환한다.
-4. POST /v1/commands: 요청 ID로 중복 실행을 막고 허용 명령만 실행한다.
-5. SQLite jobs, events 테이블에 명령 수신/결과/실패를 저장하며 자동 로그 삭제하지 않는다.
-6. 임의 셸 명령, 파일 조작, 외부 PC 원격 작업을 수행하지 않는다.
-7. 토큰은 환경 변수에서만 읽고 DB, 응답, 로그에 기록하지 않는다.
-8. 기존 Android의 카톡 수신/RemoteInput/허용 채팅방/로그/UI 동작을 수정하지 않는다.
-9. create_app() 주입 방식으로 API 단위 테스트 가능; 중복 요청은 저장된 응답을 돌려준다.
+앙개봇 Python Core v0.3.0 FastAPI 서버 — 전체 구현 기능 상세 설명
+1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
+2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
+3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
+4. v0.3 새 명령 '질문', '요약', 'AI상태', '대화초기화'를 안전하게 추가한다.
+5. AI 제공자는 OpenAI 또는 Ollama의 호환 Chat Completions API를 환경변수로 선택한다.
+6. 기존 .env의 인증키와 모든 SQLite 데이터/이전 작업 로그/Android UI를 변경·삭제하지 않는다.
+7. AI 기능은 기본 OFF이며 활성화/설정 전에는 외부로 사용자 질문을 보내지 않는다.
+8. 대화는 표시 채팅방·발신자 단위의 SQLite 별도 테이블로 분리하고 최근 6회(설정값)만 문맥에 사용한다.
+9. '대화초기화'는 새 세대로 전환할 뿐 기존 jobs/events/대화 로그를 삭제하지 않는다.
+10. AI 응답 실패 시 기존 로컬 Python 명령은 계속 동작하고 비밀키/원문을 에러 로그로 노출하지 않는다.
+11. 기존 create_app 주입 테스트 구조와 응답 중복 필드를 유지한다.
+12. 임의 셸·파일 접근, 외부 PC 제어, AI 도구 호출 등 위험한 실행 기능은 제공하지 않는다.
 """
 from __future__ import annotations
 
@@ -24,16 +27,17 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
+from .ai_engine import AIError, AISettings, get_ai_reply
 
-VERSION = "0.2.0"
-SUPPORTED = {"계산", "시간", "서버상태"}
+VERSION = "0.3.0"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화"}
 
 
 class CommandRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
     command: str = Field(min_length=1, max_length=24)
-    argument: str = Field(default="", max_length=160)
+    argument: str = Field(default="", max_length=1000)
     room: str = Field(default="", max_length=100)
     sender: str = Field(default="", max_length=100)
 
@@ -60,6 +64,16 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         db.execute("""CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT, event_time INTEGER NOT NULL,
             level TEXT NOT NULL, stage TEXT NOT NULL, detail TEXT NOT NULL)""")
+        # 새 테이블만 추가. 기존 jobs/events와 이전 로그는 절대 변경하거나 삭제하지 않는다.
+        db.execute("""CREATE TABLE IF NOT EXISTS ai_sessions (
+            room TEXT NOT NULL, sender TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(room, sender))""")
+        db.execute("""CREATE TABLE IF NOT EXISTS ai_turns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
+            room TEXT NOT NULL, sender TEXT NOT NULL, generation INTEGER NOT NULL,
+            prompt TEXT NOT NULL, reply TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        db.execute("""CREATE INDEX IF NOT EXISTS idx_ai_turn_context
+            ON ai_turns(room, sender, generation, id)""")
 
     api = FastAPI(title="AngaeBot Core", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -84,9 +98,37 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                     return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
                 try:
-                    reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
+                    if request.command == "AI상태":
+                        reply = AISettings.from_env().status_text()
+                    elif request.command == "대화초기화":
+                        db.execute("""INSERT INTO ai_sessions(room,sender,generation)
+                            VALUES (?,?,1) ON CONFLICT(room,sender)
+                            DO UPDATE SET generation = generation + 1""", (request.room, request.sender))
+                        reply = "🧠 이 대화의 이전 AI 문맥을 초기화했습니다. (기존 로그는 보존됩니다.)"
+                    elif request.command in {"질문", "요약"}:
+                        settings = AISettings.from_env()
+                        gen_row = db.execute("SELECT generation FROM ai_sessions WHERE room=? AND sender=?",
+                                             (request.room, request.sender)).fetchone()
+                        generation = gen_row[0] if gen_row else 0
+                        history = []
+                        if settings.memory_enabled and settings.context_turns > 0 and request.command == "질문":
+                            history = db.execute("""SELECT prompt,reply FROM ai_turns
+                                WHERE room=? AND sender=? AND generation=?
+                                ORDER BY id DESC LIMIT ?""",
+                                (request.room, request.sender, generation, settings.context_turns)).fetchall()
+                            history = list(reversed(history))
+                        reply = get_ai_reply(settings, request.argument,
+                                             history=history, summarize=request.command == "요약")
+                        if settings.memory_enabled and request.command == "질문":
+                            db.execute("""INSERT INTO ai_turns
+                                (request_id,room,sender,generation,prompt,reply,created_at)
+                                VALUES (?,?,?,?,?,?,?)""",
+                                (request.request_id, request.room, request.sender, generation,
+                                 request.argument, reply, int(time.time())))
+                    else:
+                        reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except CommandError as error:
+                except (CommandError, AIError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())
