@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.0 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.4.1 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -15,6 +15,9 @@
 13. v0.3.1 서버 단일 실행/로그 보관/runit 복구는 별도 운영 스크립트가 처리하며 API 호환은 유지한다.
 14. v0.4.0 상세상태/통계/최근오류/가동시간 명령을 추가하고 기존 모든 명령/로그·DB 구조를 보존한다.
 15. 운영 조회는 같은 채팅방·발신자 기록만 반환하며 AI OFF에서 작동하고 별도 원격 실행은 없다.
+16. v0.4.1 주식 메모리7/메모리7 명령을 추가하며 한국·미국·일본 8개 종목의 전일 대비 등락률을 제공한다.
+17. 시세 조회는 외부 무료 HTTPS 시세 API만 사용하며 OpenAI API/앱 권한/기존 로그·DB를 변경하지 않는다.
+18. 중복 요청 확인 후 시세 조회는 SQLite 쓰기 잠금 밖에서 진행해 기존 명령 지연을 최소화한다.
 """
 from __future__ import annotations
 
@@ -32,9 +35,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import details, command_stats, recent_errors, uptime_report
+from .market import StockQuoteError, execute_stock_command
 
-VERSION = "0.4.0"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간"}
+VERSION = "0.4.1"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
 class CommandRequest(BaseModel):
@@ -93,6 +97,21 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
     def command(request: CommandRequest):
         if request.command not in SUPPORTED:
             raise HTTPException(status_code=400, detail="지원하지 않는 명령")
+        # 외부 주식 시세는 DB의 쓰기 트랜잭션 밖에서 조회해 다른 명령 처리 지연을 막는다.
+        # 중복 요청은 조회 전에 확인하고, 기록 시에는 아래의 기존 잠금으로 다시 검증한다.
+        stock_reply = None
+        stock_error = None
+        if request.command in {"주식", "메모리7"}:
+            with closing(connect()) as read_db:
+                old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
+            if old is not None:
+                if old[0] != request.command or old[1] != request.argument:
+                    raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
+                return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
+            try:
+                stock_reply = execute_stock_command(request.command, request.argument)
+            except StockQuoteError as error:
+                stock_error = error
         with lock:
             with closing(connect()) as db, db:
                 db.execute("BEGIN IMMEDIATE")
@@ -102,7 +121,11 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                     return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
                 try:
-                    if request.command == "상세상태":
+                    if request.command in {"주식", "메모리7"}:
+                        if stock_error is not None:
+                            raise stock_error
+                        reply = stock_reply
+                    elif request.command == "상세상태":
                         reply = details(int(time.monotonic() - began))
                     elif request.command == "통계":
                         reply = command_stats(db, request.room, request.sender)
@@ -140,7 +163,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except (CommandError, AIError) as error:
+                except (CommandError, AIError, StockQuoteError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())

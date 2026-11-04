@@ -1,5 +1,5 @@
 /*
- * 앙개봇 Android Bridge v0.4.0 — 전체 기능/네트워크 안내
+ * 앙개봇 Android Bridge v0.4.1 — 전체 기능/네트워크 안내
  * 1. v0.2 Python 연결/상태검사/토큰 인증/중복 request_id/JSON 처리 기능을 보존한다.
  * 2. 계산·시간·서버상태의 기존 타임아웃과 오류 처리·반환 형식을 유지한다.
  * 3. 질문·요약·AI상태·대화초기화 명령을 기존 FastAPI /v1/commands로 전달한다.
@@ -9,6 +9,8 @@
  * 7. Android에서 직접 OpenAI/Ollama에 접속하거나 AI 키/질문을 외부 저장소에 기록하지 않는다.
  * 8. v0.4.0: 상세상태·통계·최근오류·가동시간을 기존 로컬 인증 FastAPI로 전달한다.
  * 9. 기존 모든 요청/결과/오류 코드 및 로그 사용 방식을 보존하고 추가 명령만 허용한다.
+ * 10. v0.4.1은 주식 메모리7/메모리7을 20초 읽기 제한으로 인증된 Python에 전달한다.
+ * 11. 8개 해외 시세의 외부 HTTP 호출은 Android가 아닌 Python Core가 수행한다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,8 +25,9 @@ sealed interface PythonOutcome {
 
 object PythonBridgeClient {
     private const val BASE = "http://127.0.0.1:8765"
-    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간")
+    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7")
     private val aiCommands = setOf("질문", "요약")
+    private val stockCommands = setOf("주식", "메모리7")
 
     fun health(token: String): PythonOutcome = request("GET", "/v1/health", token, null)
 
@@ -36,17 +39,17 @@ object PythonBridgeClient {
             .put("argument", argument.take(if (name in aiCommands) 1000 else 160))
             .put("room", room.take(100))
             .put("sender", sender.take(100))
-        return request("POST", "/v1/commands", token, payload, name in aiCommands)
+        return request("POST", "/v1/commands", token, payload, name in aiCommands, name in stockCommands)
     }
 
-    private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false): PythonOutcome {
+    private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false, isStock: Boolean = false): PythonOutcome {
         if (token.length < 32) return PythonOutcome.Failure("Python 인증 토큰이 설정되지 않았습니다.")
         var connection: HttpURLConnection? = null
         try {
             connection = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 connectTimeout = 2_000
-                readTimeout = if (isAi) 25_000 else 4_000
+                readTimeout = if (isAi) 25_000 else if (isStock) 23_000 else 4_000
                 setRequestProperty("X-AngaeBot-Token", token)
                 setRequestProperty("Accept", "application/json")
                 if (payload != null) {
