@@ -17,7 +17,7 @@
 15. v0.5.1은 프리셋 그룹/10종목 제한만 확장하고 계산·시간·에러/운영 로그 기능을 그대로 유지한다.
 16. v0.5.2는 주식 분석 명령을 분리 모듈에서 처리하며 기존 계산·시간/로그·상태 코드를 그대로 유지한다.
 17. v0.5.3 한글 종목 조회는 관심그룹/분석 모듈에서 처리하므로 계산·시간 기능과 원래 로그를 변경하지 않는다.
-18. v0.5.4 SQLite 자원 정리 테스트/배포를 추가하면서 기존 계산·시간·서버상태 응답/로그 흐름을 보존한다.
+18. v0.5.5에서도 기존 계산·시간·서버상태와 모든 SQLite 로그를 보존하며 주식 숫자 선택은 별도 selection_menu.py에서 처리한다.
 """
 from __future__ import annotations
 
@@ -103,5 +103,5 @@ def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
         now = datetime.now(timezone(timedelta(hours=9)))
         return "🕐 서울 현재 시각: " + now.strftime("%Y-%m-%d %H:%M:%S KST")
     if name == "서버상태":
-        return f"🐍 앙개봇 Python v0.5.4 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
+        return f"🐍 앙개봇 Python v0.5.5 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
     raise CommandError("허용되지 않은 Python 명령입니다.")

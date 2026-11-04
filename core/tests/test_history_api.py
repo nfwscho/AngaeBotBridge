@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.4 주식 분석 API 회귀 테스트 — 기존 기능 및 안전 규칙 총정리
+앙개봇 v0.5.5 주식 분석 API 회귀 테스트 — 기존 기능 및 안전 규칙 총정리
 1. 인증 없는 과거 종가 요청을 HTTP 401로 차단하고 허용 티커·명령만 처리한다.
 2. 단일 종목/메모리7/소유자 그룹 분석을 기존 /v1/commands 흐름으로 제공한다.
 3. 다른 채팅방/발신자의 그룹은 조회·유출할 수 없음을 검증한다.
@@ -9,8 +9,8 @@
 7. 테스트 시 외부 HTTP와 AI 호출을 모의 실행하여 무료 API 제한/키/실제 사용자 DB를 보호한다.
 8. 이전 메모리7·미국시총10/반도체 그룹·Kakao Android 설정·로그에 영향을 주지 않는다.
 9. 목표가 알림·주기적 감시·자동발신·주식 주문 기능을 의도적으로 추가하지 않는다.
-10. v0.5.4 마이크론·삼성전자·하이닉스·미국시총10 한글 종목과 저장 별칭 분석을 검사한다.
-11. v0.5.4 SQLite 테스트 조회는 contextlib.closing을 사용해 트랜잭션뿐 아니라 연결도 명시적으로 닫으며 ResourceWarning을 방지한다.
+10. v0.5.5 마이크론·삼성전자·하이닉스·미국시총10 한글 종목과 저장 별칭 분석을 검사한다.
+11. v0.5.5 sqlite3.Connection 문맥 관리자는 연결 종료를 보장하지 않으므로 closing(...)으로 명시적으로 닫아 ResourceWarning을 방지한다.
 """
 from __future__ import annotations
 from contextlib import closing
@@ -110,7 +110,7 @@ class HistoryAPITests(unittest.TestCase):
         self.assertIn('일봉',fail['reply'])
         self.assertIn('56,088',self.send('123*456',command='계산').json()['reply'])
         self.assertIn('OFF',self.send(command='AI상태').json()['reply'])
-        self.assertIn('v0.5.4',self.send(command='서버상태').json()['reply'])
+        self.assertIn('v0.5.5',self.send(command='서버상태').json()['reply'])
         with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs WHERE ok=0').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)

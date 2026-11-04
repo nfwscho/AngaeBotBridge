@@ -10,6 +10,11 @@
  * 8. PYTHON_REQUEST/RESULT/FAILED를 기존 SQLite 로그에 추가하고 토큰은 기록하지 않는다.
  * 9. 답장 직전 긴급 OFF 상태 재검증, RemoteInput 실패 기록, 서비스 생명주기 로그를 유지한다.
  * 10. AI 네트워크 처리에 시간 제한을 걸고 셸/파일/PC 제어 등 위험한 명령은 지원하지 않는다.
+ * 11. v0.4.3은 활성 주식 메뉴가 열린 방/발신자에게서만 맨 앞 숫자 선택을 수신한다.
+ * 12. 숫자 인식은 허용목록 확인 이후 실행하고, 비활성/만료/다른 방/발신자의 숫자는 기존처럼 무시한다.
+ * 13. 기존 RECEIVE/COMMAND/PYTHON_REQUEST/RESULT/REPLY/오류 로그와 SHA-256 중복 방지를 유지한다.
+ * 14. 메뉴 활성화는 인증된 Python menu_active 응답을 실제 RemoteInput에 요청한 이후에만 허용한다.
+ * 15. 기존 주식 분석/그룹/메모리7/AI OFF/자동응답 OFF/앱 UI/토큰/권한은 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -24,6 +29,7 @@ class KakaoNotificationListener : NotificationListenerService() {
     private lateinit var settings: BotConfig
     private lateinit var logger: LogRepository
     private lateinit var pythonConfig: PythonBridgeConfig
+    private val menuGate = MenuSelectionGate()
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +72,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             logger.log("INFO", "RECEIVE", "type=${message.identification} text=${message.text}", message.room, message.sender)
             val config = settings.load()
             if (!config.enabled) {
+                menuGate.setActive(message.room, message.sender, false)
                 logger.log("INFO", "REJECT_DISABLED", "자동응답 OFF", message.room, message.sender)
                 return
             }
@@ -77,10 +84,16 @@ class KakaoNotificationListener : NotificationListenerService() {
                 logger.log("WARN", "REJECT_SENDER", "발신자 허용목록에 없음", message.room, message.sender)
                 return
             }
-            val parsed = CommandParser.parse(message.text, config.wakeWord)
+            // 정확한 허용 방/발신자에서만 지난 5분 내 주식 메뉴의 숫자 선택을 허용한다.
+            val numericSelection = menuGate.parseSelection(message.text, message.room, message.sender)
+            val parsed = numericSelection ?: CommandParser.parse(message.text, config.wakeWord)
             if (parsed !is ParseResult.Command) {
                 logger.log("INFO", "IGNORE_PREFIX", "호출어 없음", message.room, message.sender)
                 return
+            }
+            // 메뉴가 열린 상태에서 다른 명령으로 전환하면 기존 번호 선택을 즉시 무효화한다.
+            if (numericSelection == null && !(parsed.name == "주식" && parsed.argument == "메뉴")) {
+                menuGate.setActive(message.room, message.sender, false)
             }
             val identity = "${sbn.key}|${message.room}|${message.sender}|${message.messageTime}|${message.text}"
             val fingerprint = MessageDigest.getInstance("SHA-256")
@@ -105,6 +118,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             val forwardArgument = if (freeform) {
                 (parsed.name + " " + parsed.argument).trim()
             } else parsed.argument
+            var nextMenuActive = false
             val response = if (explicitPython || freeform) {
                 try {
                     val p = pythonConfig.load()
@@ -115,6 +129,7 @@ class KakaoNotificationListener : NotificationListenerService() {
                         logger.log("INFO", "PYTHON_REQUEST", "command=${parsed.name} forwarded=$forwardName requestId=$fingerprint", message.room, message.sender)
                         when (val result = PythonBridgeClient.execute(p.token, fingerprint, forwardName, forwardArgument, message.room, message.sender)) {
                             is PythonOutcome.Success -> {
+                                nextMenuActive = result.commandOk && result.menuActive
                                 logger.log(if (result.commandOk) "INFO" else "WARN", "PYTHON_RESULT",
                                     "command=${parsed.name} ok=${result.commandOk} duplicate=${result.duplicate} reply=${result.reply}", message.room, message.sender)
                                 result.reply
@@ -137,9 +152,20 @@ class KakaoNotificationListener : NotificationListenerService() {
             }
             logger.log("INFO", "REPLY_ATTEMPT", response, message.room, message.sender)
             when (val outcome = ReplyManager.reply(this, sbn.notification, response)) {
-                ReplyOutcome.Requested -> logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
-                ReplyOutcome.NoAction -> logger.log("WARN", "REPLY_UNAVAILABLE", "답장 가능한 알림 액션이 없음", message.room, message.sender)
-                is ReplyOutcome.Failed -> logger.log("ERROR", "REPLY_FAILED", outcome.reason, message.room, message.sender)
+                ReplyOutcome.Requested -> {
+                    logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
+                    if ((parsed.name == "주식" && parsed.argument == "메뉴") || numericSelection != null) {
+                        menuGate.setActive(message.room, message.sender, nextMenuActive)
+                    }
+                }
+                ReplyOutcome.NoAction -> {
+                    if (numericSelection != null) menuGate.setActive(message.room, message.sender, false)
+                    logger.log("WARN", "REPLY_UNAVAILABLE", "답장 가능한 알림 액션이 없음", message.room, message.sender)
+                }
+                is ReplyOutcome.Failed -> {
+                    if (numericSelection != null) menuGate.setActive(message.room, message.sender, false)
+                    logger.log("ERROR", "REPLY_FAILED", outcome.reason, message.room, message.sender)
+                }
             }
         } catch (t: Exception) {
             Log.e("AngaeBotBridge", "notification processing error", t)

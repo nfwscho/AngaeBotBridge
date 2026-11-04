@@ -11,6 +11,8 @@
  * 9. 기존 모든 요청/결과/오류 코드 및 로그 사용 방식을 보존하고 추가 명령만 허용한다.
  * 10. v0.4.1은 주식 메모리7/메모리7을 20초 읽기 제한으로 인증된 Python에 전달한다.
  * 11. 8개 해외 시세의 외부 HTTP 호출은 Android가 아닌 Python Core가 수행한다.
+ * 12. v0.4.3에서는 주식 메뉴의 menu_active 필드만 안전하게 추가로 해석하고 기존 응답/에러/타임아웃을 유지한다.
+ * 13. 토큰/SQLite/카톡 RemoteInput/AI 설정은 수정하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -19,7 +21,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 sealed interface PythonOutcome {
-    data class Success(val reply: String, val duplicate: Boolean, val commandOk: Boolean) : PythonOutcome
+    data class Success(val reply: String, val duplicate: Boolean, val commandOk: Boolean, val menuActive: Boolean = false) : PythonOutcome
     data class Failure(val reason: String) : PythonOutcome
 }
 
@@ -79,7 +81,7 @@ object PythonBridgeClient {
             }
             val reply = json.optString("reply", "")
             if (reply.isBlank()) return PythonOutcome.Failure("Python 응답에 내용이 없습니다.")
-            return PythonOutcome.Success(reply.take(1800), json.optBoolean("duplicate", false), json.optBoolean("ok", false))
+            return PythonOutcome.Success(reply.take(1800), json.optBoolean("duplicate", false), json.optBoolean("ok", false), json.optBoolean("menu_active", false))
         } catch (e: java.net.ConnectException) {
             return PythonOutcome.Failure("Python 서버에 연결되지 않습니다. Termux 실행 상태를 확인하세요.")
         } catch (e: java.net.SocketTimeoutException) {

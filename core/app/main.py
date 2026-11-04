@@ -33,8 +33,12 @@
 31. v0.5.3 주식 분석의 대상 종목을 한글 기업명/티커·사용자별 저장 별칭으로 조회하며 그룹명 우선순위를 유지한다.
 32. 중복 또는 다른 사용자의 별칭을 무단 조회하지 않고 종목코드가 모호하면 명확하게 거부한다.
 33. 기존 FastAPI 인증·중복 실행 방지·DB 잠금 밖 시세 조회·전체 운영 로그 및 과거 시세 로직을 보존한다.
-34. v0.5.4 SQLite 연결 수명 검증: 기존 FastAPI 연결을 명시적으로 닫고 있음을 새로운 회귀 테스트로 확인한다.
-35. 주식 시세·기록·인증·메모리7·한글 별칭·21/63일 변동성·AI OFF 및 모든 기존 DB/로그/Android 동작을 유지한다.
+34. v0.5.4 SQLite 자원 정리: 기존 FastAPI 모든 연결의 명시적 close 보증을 별도 회귀 테스트로 검사하며 동작·로그·DB는 그대로 보존한다.
+35. 기존 주식명·별칭·그룹·메모리7·과거시세·AI OFF 및 인증/중복요청 흐름은 변경하지 않는다.
+36. v0.5.5은 '주식 메뉴' / '주식 선택 숫자' 요청을 인증된 기존 API에서 처리한다.
+37. 1~6 숫자 메뉴는 채팅방·발신자별 5분 세션에서만 동작하고 AI/등록/삭제/매매는 재실행하지 않는다.
+38. 기존 성공한 읽기 명령만 최근 메뉴에서 가져오며 DB 스키마·jobs/events 원형·로그를 보존한다.
+39. API의 신규 menu_active 값은 Android에 메뉴 유지 여부를 알리고 기존 응답 필드는 바꾸지 않는다.
 """
 from __future__ import annotations
 
@@ -56,8 +60,9 @@ from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
+from .selection_menu import StockSelectionMenus
 
-VERSION = "0.5.4"
+VERSION = "0.5.5"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
@@ -77,6 +82,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
     path = Path(database_path or os.environ.get("ANGAE_DB", "data/angaebot_core.db"))
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = RLock()
+    selection_menus = StockSelectionMenus()
     began = time.monotonic()
 
     def connect():
@@ -123,6 +129,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         # 중복 요청은 조회 전에 확인하고, 기록 시에는 아래의 기존 잠금으로 다시 검증한다.
         stock_reply = None
         stock_error = None
+        stock_menu_active = False
+        resolved_argument = request.argument
         if request.command in {"주식", "메모리7"}:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
@@ -131,11 +139,23 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                 return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
             try:
+                # 짧은 메뉴/번호 선택은 동일한 인증·dedup·jobs/events 흐름에서 먼저 해석한다.
+                if request.command == "주식" and request.argument.strip() == "메뉴":
+                    menu = selection_menus.open(request.room, request.sender)
+                    stock_reply, stock_menu_active = menu.reply, menu.menu_active
+                elif request.command == "주식" and request.argument.startswith("선택 "):
+                    with closing(connect()) as read_db:
+                        menu = selection_menus.choose(read_db, request.room, request.sender,
+                                                      request.argument[3:].strip())
+                    stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
+                    resolved_argument = menu.execute_argument
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
-                if request.command == "메모리7" or (request.command == "주식" and request.argument.strip() == "메모리7"):
-                    stock_reply = execute_stock_command(request.command, request.argument)
-                elif request.command == "주식" and is_analysis_request(request.argument):
-                    parts = request.argument.split()
+                if stock_reply is not None:
+                    pass
+                elif request.command == "메모리7" or (request.command == "주식" and resolved_argument.strip() == "메모리7"):
+                    stock_reply = execute_stock_command(request.command, resolved_argument)
+                elif request.command == "주식" and is_analysis_request(resolved_argument):
+                    parts = resolved_argument.split()
                     if len(parts) < 2:
                         raise StockQuoteError("사용법: 앙개야 주식 분석 마이크론 (또는 삼성전자/하이닉스/그룹명)")
                     target = ' '.join(parts[1:])
@@ -159,10 +179,10 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 if stock is None:
                                     raise invalid_name
                             stock_reply = individual_report(fetch_history(stock))
-                elif request.command == "주식" and is_group_quote_request(request.argument):
+                elif request.command == "주식" and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
-                        stocks = load_group(read_db, request.room, request.sender, request.argument.strip())
-                    stock_reply = group_report(request.argument.strip(), stocks)
+                        stocks = load_group(read_db, request.room, request.sender, resolved_argument.strip())
+                    stock_reply = group_report(resolved_argument.strip(), stocks)
             except StockQuoteError as error:
                 stock_error = error
         with lock:
@@ -180,7 +200,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         if stock_reply is not None:
                             reply = stock_reply
                         elif request.command == "주식":
-                            reply = execute_group_command(db, request.room, request.sender, request.argument)
+                            reply = execute_group_command(db, request.room, request.sender, resolved_argument)
                         else:
                             # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
                             reply = execute_stock_command(request.command, request.argument)
@@ -232,7 +252,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 db.execute("INSERT INTO events(event_time,level,stage,detail) VALUES (?,?,?,?)",
                            (now, "INFO" if ok else "WARN", "COMMAND_DONE" if ok else "COMMAND_REJECTED",
                             f"request_id={request.request_id} command={request.command} ok={ok}"))
-        return {"ok": ok, "reply": reply, "request_id": request.request_id, "duplicate": False}
+        return {"ok": ok, "reply": reply, "request_id": request.request_id, "duplicate": False,
+                "menu_active": stock_menu_active if ok else False}
 
     return api
 

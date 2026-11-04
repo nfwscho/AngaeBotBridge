@@ -1,15 +1,15 @@
-// 앙개봇 Android Bridge v0.4.0 전체 빌드 기능 상세 설명
-// 1. 기존 applicationId, 패키지, targetSdk/compileSdk/minSdk, JDK17/Kotlin 빌드 옵션을 보존한다.
-// 2. 기존 KakaoTalk NotificationListenerService, RemoteInput, SQLite/UI 기능을 포함한다.
-// 3. 기존 Termux Python FastAPI loopback 연결과 추가 AI 명령을 지원한다.
-// 4. AndroidKeyStore 기반 Python 인증키 암호화 및 자연어 모드 선택 설정을 지원한다.
-// 5. 기존 unit test 설정과 release buildType, Gradle 플러그인을 유지한다.
-// 6. versionCode 5, versionName 0.4.1로 기존 앱 삭제 없는 APK 업그레이드를 가능하게 한다.
-// 7. 무료 주식 시세 메모리7을 지원하며 기존 Gradle/Android SDK/로그/UI 옵션은 유지한다.
-// 7. v0.4.0에서 새 운영 관리 명령을 지원하며 Android UI·로그·기존 권한은 유지한다.
-// 8. Android Bridge v0.4.2는 '주'/'주 분' 명령을 추가하되 기존 모든 UI/로그/권한/인증·주식·AI 기능을 보존한다.
-// 9. 기존 동일 applicationId로 APK 덮어쓰기 업데이트가 가능하도록 versionCode를 5에서 6으로 늘린다.
-// 10. 주식 자동매매, 가격 알림, 추가 권한·유료 API는 넣지 않는다.
+// 앙개봇 Android Bridge v0.4.2 — 전체 Android 빌드 기능 상세 설명
+// 1. 기존 applicationId, namespace, Android SDK 버전, min/target SDK, JDK17/Kotlin 옵션을 유지한다.
+// 2. 기존 KakaoTalk NotificationListenerService, 채팅방·발신자 허용목록과 RemoteInput 자동응답을 포함한다.
+// 3. SHA-256 중복 방지·SQLite 영구 로그·로그 내보내기·Android 관리 UI·긴급 OFF를 유지한다.
+// 4. Termux Python FastAPI 127.0.0.1:8765 연동, 기존 명령/AI OFF·AndroidKeyStore 인증키를 유지한다.
+// 5. 현재가/그룹/과거 5일·1개월·3개월 주식 분석 등 기존 Python 기능을 변경하지 않는다.
+// 6. '주' 및 '주 분 삼성전자' 단축 명령을 인식하는 Android 순수 Kotlin 파서를 포함한다.
+// 7. 기존 장문 '앙개야' 호출어, 테스트/상태/도움말, 운영 및 계산 명령을 그대로 사용할 수 있다.
+// 8. 기존 Gradle 플러그인, junit 테스트, release 옵션, 앱 식별자 및 앱 저장 데이터 호환을 보존한다.
+// 9. versionCode를 5 -> 6으로, Android Bridge versionName을 0.4.1 -> 0.4.2로 올려 삭제 없는 업그레이드를 지원한다.
+// 10. 주식 주문, 예약, 자동 알림, 앱 권한 확대, 추가 서버·유료 API는 새로 넣지 않는다.
+// 11. v0.4.3 숫자 선택/5분 제한을 추가하며 같은 패키지명과 기존 설정/로그/서명 호환을 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -23,8 +23,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.2"
+        versionCode = 7
+        versionName = "0.4.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

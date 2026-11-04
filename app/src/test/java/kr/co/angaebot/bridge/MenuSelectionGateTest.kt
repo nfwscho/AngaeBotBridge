@@ -1,0 +1,46 @@
+/*
+ * 앙개봇 v0.4.3 메뉴 세션 회귀 테스트 — 전체 검증 기능
+ * 1. 정상 활성화 이전 숫자 명령 차단, 활성화 이후 '1', '1번', '2.' 등 인식 검증.
+ * 2. 메뉴 닫기 및 5분 세션 만료, 동일 방의 다른 발신자·다른 방 접근 차단 검증.
+ * 3. 무관한 일반 대화·10개 이상 번호·한글 숫자 등을 선택으로 오인하지 않음.
+ * 4. 기존 Kotlin 파서의 '앙개야' 장문 명령, 주 분 분석, 주 목록, 상태/테스트를 그대로 유지.
+ * 5. Android SQLite/앱 설정/운영 로그/외부 Python 서버/실기기 사용 없이 순수 단위 테스트.
+ */
+package kr.co.angaebot.bridge
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class MenuSelectionGateTest {
+    @Test fun onlyWhenMenuOpened() {
+        var now = 100L
+        val gate = MenuSelectionGate(clockMs = { now })
+        assertNull(gate.parseSelection("1", "방", "나"))
+        gate.setActive("방", "나", true)
+        for (number in listOf("1", "1번", "1.", "1)", "1 선택")) {
+            assertEquals(ParseResult.Command("주식", "선택 1"), gate.parseSelection(number, "방", "나"))
+        }
+        assertNull(gate.parseSelection("1", "다른방", "나"))
+        assertNull(gate.parseSelection("1", "방", "다른사람"))
+    }
+    @Test fun closeAndExpire() {
+        var now = 100L
+        val gate = MenuSelectionGate(clockMs = { now })
+        gate.setActive("방", "나", true)
+        now += 299_999L
+        assertEquals(ParseResult.Command("주식", "선택 2"), gate.parseSelection("2", "방", "나"))
+        now += 1L
+        assertNull(gate.parseSelection("2", "방", "나"))
+        gate.setActive("방", "나", true)
+        gate.setActive("방", "나", false)
+        assertNull(gate.parseSelection("1", "방", "나"))
+    }
+    @Test fun doNotConfuseEverydayMessages() {
+        val gate = MenuSelectionGate(clockMs = { 0L })
+        gate.setActive("방", "나", true)
+        for (text in listOf("123", "10", "1만원", "1만원이야", "주", "1만원 줘", "1번가", "1/2", "ㅈㅅ")) {
+            assertNull(gate.parseSelection(text, "방", "나"))
+        }
+    }
+}
