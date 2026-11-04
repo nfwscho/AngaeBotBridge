@@ -1,3 +1,7 @@
+> **v0.1.3 (2026-11-04):** `MainActivity.kt`의 `fillViewport` 컴파일 오류를 `setFillViewport(true)`로 수정. 기존 기능/UI/로그 흐름 보존. `CHANGELOG_v0.1.3.md` 참고.
+
+> **2026-11-04 v0.1.2:** `scripts/prepare-wrapper.ps1`의 Gradle 8.14.3 Wrapper 다운로드 실패에 대한 대체 공식 URL과 SHA-256 검증 로직 추가. 자세한 내용은 `GRADLE_WRAPPER_FIX.md` 참고. Kotlin 앱 소스는 v0.1과 동일합니다.
+
 # 앙개봇(AngaeBot) Android Bridge v0.1
 
 > 2026-11-04 Git 관리 문서 보강 패키지 v0.1.1. Kotlin 앱 코드는 기존 v0.1과 동일합니다.
@@ -19,7 +23,7 @@
 
 - 프로젝트 코드 생성: 완료.
 - 현재 작업 환경에서 **Android SDK / Gradle / 실제 S20+가 없어 Android APK 빌드 및 실기기 테스트를 수행하지 못했습니다**. 빌드 성공·카카오톡 자동응답을 보증할 수 없습니다.
-- 공식 Gradle wrapper JAR는 배포 바이너리이며 네트워크 접근 제약으로 ZIP에 동봉하지 못했습니다. Windows에서 `scripts/prepare-wrapper.ps1`을 실행하면 **공식 배포 파일을 SHA-256으로 검증 후 내려받습니다**. 그 후 Android Studio에서 프로젝트를 여세요.
+- 공식 Gradle wrapper JAR는 배포 바이너리이며 네트워크 접근 제약으로 ZIP에 동봉하지 못했습니다. Windows에서 `scripts/prepare-wrapper.ps1`을 실행하면 **공식 Gradle 배포 서버, 실패 시 Gradle 공식 GitHub 태그**에서 수신하여 SHA-256을 검증합니다. 그 후 Android Studio에서 프로젝트를 여세요.
 - 1단계는 카카오톡 알림 기반 비공식 자동화입니다. 카카오톡 알림에서 메시지나 답장 액션이 제공되지 않으면 동작하지 않습니다.
 - **발신자 표시 이름/채팅방 제목은 신원 인증이 아닙니다.** 1:1 개인 시험만 우선 실시하고 위험한 명령은 이 버전에 넣지 마세요.
 - 누적 MessagingStyle 알림에서 가장 최신 메시지 하나만 처리합니다. 너무 빠르게 연속으로 보낸 명령은 누락될 수 있습니다.
@@ -71,3 +75,26 @@ S20+에서 알림 파싱·자동응답 성공 후 Android Bridge → S20+ Termux
 - `.gitignore` — Android 빌드 산출물, 로컬 설정, API 키, 실행 로그, SQLite DB, 서명 키 등 비공개 파일 제외 규칙.
 - `.gitattributes` — 소스와 배치/스크립트 파일의 줄바꿈을 OS별로 관리합니다.
 - 이 패키지는 **GitHub 업로드를 수행하지 않았습니다.** 사용자 PC에서 `GIT_GUIDE.md`의 절차에 따라 직접 업로드해야 합니다.
+
+---
+
+## v0.2.0 — Termux Python Core 통합 (2026-11-04)
+
+**v0.1.3의 실제 카카오톡 송수신 성공을 기준으로 추가한 단계입니다.** 기존 Android 앱의 ①~④ UI, 수신·답장, 허용 방/발신자, SQLite 로그/중복 차단/내보내기/긴급 OFF 기능을 유지합니다.
+
+- ②-A Python 연결 섹션은 기본 OFF이며, 토큰은 AndroidKeyStore AES-GCM으로 암호화합니다.
+- 기존 `테스트/상태/도움말`은 항상 Android에서 처리합니다.
+- 새로운 `계산/시간/서버상태`만 S20+ 내부 `127.0.0.1:8765` Python FastAPI로 전송합니다.
+- Python 서버는 별도 64자리 랜덤 인증키, SQLite 중복 방지 및 로그를 사용합니다.
+- 단체방/발신자 표시 이름은 강한 인증이 아니므로 위험한 명령은 구현하지 않았습니다.
+
+**설치:** [`docs/UPGRADE_v0.2.0.md`](docs/UPGRADE_v0.2.0.md)  
+**검증:** [`docs/TEST_PLAN_v0.2.0.md`](docs/TEST_PLAN_v0.2.0.md)  
+**변경 내역:** [`CHANGELOG_v0.2.0.md`](CHANGELOG_v0.2.0.md)
+
+Android v0.2.0 APK는 현행 작업 환경에서 빌드하지 못했습니다. Windows의 JDK17/SDK36에서 `gradlew.bat :app:assembleDebug` 실행 후 S20+에서 실제 검증해야 합니다.
+
+
+## v0.2.1 ??S20+ ?먮룞 ?쒖옉쨌?먮룞 蹂듦뎄
+
+termux-services(runit) 湲곕컲 FastAPI ?먮룞 ?ъ떆??諛?30珥?媛꾧꺽 health watchdog, Google Play Termux ?댁옣 boot 吏?? 湲곗〈 湲곕뒫/?몄쬆??SQLite 濡쒓렇 蹂댁〈. docs/SERVICE_SETUP_v0.2.1.md 李멸퀬.
