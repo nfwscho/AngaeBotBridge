@@ -5,7 +5,7 @@
 - 국토교통부 **아파트 매매·전월세 실거래가 공개 API**를 최신 3개 계약 월로 조회하고 취소 계약을 제외, 거래일 순 최대 5건·전용면적·층·거래금액(만원 단위), 출처와 신고 지연 경고를 표시. 현재 매물 호가/감정가가 아님.
 - 지역 지원: **서울 25개 자치구** 지명 또는 전국 시군구 법정동 **앞 5자리 숫자 코드**. 다른 지역의 지명 자동 변환은 지원하지 않으며 추측하지 않음.
 - 공공데이터포털에서 무료로 발급/승인받은 서비스키를 S20+ 기존 `core/.env`에 `MOLIT_API_KEY=`로 설정해야 실제 호출 가능. 암호키를 GitHub에 올리거나 로그/응답에 노출하지 않음.
-- 신규 `core/app/real_estate.py`, 독립 `real_estate_regions` 테이블 및 `core/tests/test_real_estate.py`. 인증·중복 요청·jobs/events 로그·module_source·기존 메모/주식/AI/날씨/Android 배터리·UI 보존. Core v0.7.3.
+- 신규 `core/app/real_estate.py`, 독립 `real_estate_regions` 테이블 및 `core/tests/test_real_estate.py`. 인증·중복 요청·jobs/events 로그·module_source·기존 메모/주식/AI/날씨/Android 배터리·UI 보존. Python Core v0.7.3 / Android Bridge v0.4.14(versionCode 18).
 - 개발 브랜치에서 GitHub Actions 회귀 테스트 수행. S20+ 배포/실거래 API 응답 검증 전 `main` 병합하지 않음.
 
 ## 2026-11-06 — 날씨 예보 및 사용자별 지역 설정 (feature/weather-forecast-20261106)
