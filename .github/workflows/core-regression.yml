@@ -9,6 +9,7 @@ on:
     branches:
       - feature/compact-all-replies-20261105
       - feature/group-number-selection-20261105
+      - feature/menu-back-zero-20261105
       - main
   workflow_dispatch:
 jobs:
