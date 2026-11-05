@@ -19,6 +19,8 @@
  * 21. v0.4.5는 배터리 표시를 별도 모듈에서 추가하므로 파싱 동작을 보존하고 로컬 상태·도움말의 버전만 갱신한다.
  * 22. v0.4.5는 최대 10종목 선택/배터리 상태를 지원하고 로컬 상태·도움말 버전만 갱신한다.
  * 23. 기존 긴 호출어/주·주 분·숫자 선택·AI OFF/명령 파싱·로그/권한·UI 동작은 모두 보존한다.
+ * 24. 도움말을 1~10번 선택 가능한 상위 메뉴로 구성하고 하위 목록에서 0으로 복귀한다.
+ * 25. 기존 모든 명령어·안내·AI OFF 고지·무료 시세 고지·배터리 추가 흐름을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -60,7 +62,67 @@ object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
         "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.5 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
         "상태" -> "✅ 앙개봇 Bridge v0.4.5 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
-        "도움말", "help" -> "🤖 앙개봇 v0.4.5 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 주식 명령: 주(메뉴) / 주 분 삼성전자 / 주 분 마이크론 / 주 목록\n※ 메뉴가 열린 뒤 5분 동안 숫자 1~10을 입력해 선택할 수 있습니다."
+        "도움말", "help" -> HelpNumericMenu.rootText()
+
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
+    }
+}
+
+/**
+ * 도움말의 표시 번호와 실제 기존 명령을 한 곳에서 관리한다.
+ * 기존 로컬 명령/인증된 Python 명령만 재사용하며 별도 실행 권한은 없다.
+ */
+object HelpNumericMenu {
+    data class Entry(val label: String, val command: String = "", val argument: String = "", val section: String = "")
+    private val root = listOf(
+        Entry("테스트", "테스트"),
+        Entry("상태", "상태"),
+        Entry("시간", "시간"),
+        Entry("서버상태", "서버상태"),
+        Entry("상세상태", "상세상태"),
+        Entry("통계", "통계"),
+        Entry("최근오류", "최근오류"),
+        Entry("가동시간", "가동시간"),
+        Entry("주식·메모리7", section = "stock"),
+        Entry("계산·AI·기타 명령", section = "other"),
+    )
+    private val stock = listOf(
+        Entry("주식 메모리7", "주식", "메모리7"),
+        Entry("메모리7", "메모리7"),
+        Entry("주식 메뉴", "주식", "메뉴"),
+        Entry("관심종목 목록", "주식", "목록"),
+        Entry("삼성전자 분석", "주식", "분석 삼성전자"),
+        Entry("마이크론 분석", "주식", "분석 마이크론"),
+    )
+    private val other = listOf(
+        Entry("계산 123*456", "계산", "123*456"),
+        Entry("AI상태", "AI상태"),
+        Entry("질문 안녕하세요", "질문", "안녕하세요"),
+        Entry("요약 본문", "요약", "본문"),
+        Entry("대화초기화", "대화초기화"),
+    )
+    fun entries(section: String): List<Entry> = when (section) {
+        "stock" -> stock
+        "other" -> other
+        else -> root
+    }
+    fun rootText(): String = render("")
+    fun render(section: String): String {
+        val heading = when (section) {
+            "stock" -> "📊 주식·메모리7 메뉴"
+            "other" -> "🛠 계산·AI·기타 명령"
+            else -> "🤖 앙개봇 v0.4.5 명령 메뉴"
+        }
+        return buildString {
+            appendLine(heading)
+            entries(section).forEachIndexed { i, entry -> appendLine("${i + 1}. ${entry.label}") }
+            appendLine("0. 이전 메뉴 / 닫기")
+            appendLine("※ 5분 내 숫자로 선택 · 직접 명령도 사용 가능")
+            appendLine("※ 앙개야 계산 123*456 / 앙개야 질문 안녕하세요 / 앙개야 요약 본문")
+            appendLine("※ 단축 주식 명령: 주(메뉴) / 주 분 삼성전자 / 주 분 마이크론 / 주 목록")
+            appendLine("※ AI 기능은 Termux에서 별도 설정해야 합니다.")
+            appendLine("※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.")
+            append("※ Windows PC 명령은 향후 단계에서 추가됩니다.")
+        }
     }
 }
