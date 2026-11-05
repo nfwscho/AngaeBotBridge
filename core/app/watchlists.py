@@ -42,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
-from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line, market_source_summary
+from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line, market_source_summary, compact_quote_line, compact_source_summary
 
 MAX_GROUPS = 10
 MAX_ITEMS = 10
@@ -211,17 +211,17 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
             lines.append(f"{index}. {stock.name} : 조회 불가")
             failed += 1
         else:
-            lines.append(f"{index}. {quote_line(quote, source_details=False)}")
+            lines.append(f"{index}. {compact_quote_line(quote)}")
             dates[stock.market] = quote.market_time.strftime("%m/%d")
     if failed == len(stocks):
         raise StockQuoteError(f"'{name}' 그룹의 모든 시세를 조회하지 못했습니다.")
     if dates:
-        lines.append("현지 거래일: " + " · ".join(f"{market} {dates[market]}" for market in ("한국", "미국", "일본") if market in dates))
-    lines.extend(market_source_summary(quotes))
+        pass  # 거래일/기준시각은 압축 출처에서 표시
+    lines.append('')\n    lines.extend(compact_source_summary(quotes))
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
-    lines.append("※ 무료 비공식·지연 시세 가능 / 투자 주문 기능 없음")
-    lines.append(f"※ 5분 내 번호 1~{len(stocks)}만 보내면 해당 종목의 5일·1개월·3개월 분석")
+    lines.append("※ 무료 시세 · 지연 가능 · 실시간 호가 아님")
+    lines.append(f"※ 5분 내 번호 1~{len(stocks)}: 종목 분석")
     return "\n".join(lines)
 
 
