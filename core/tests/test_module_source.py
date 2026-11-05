@@ -7,6 +7,7 @@
 5. 테스트용 임시 SQLite/metadata만 사용하며 GitHub, S20+, 외부 네트워크·파일을 변경하지 않는다.
 6. 기존 기능과 로그·사용자 데이터·권한·API 토큰/메시지는 그대로 유지한다.
 7. 개인 기록 명령과 목록 응답은 core.records로 표시되며 기존 모듈명은 변경하지 않는다.
+8. 날씨 예보·지역 설정은 core.weather, 날씨 메뉴 진입은 core.menu로 정확히 식별한다.
 """
 from __future__ import annotations
 
@@ -38,7 +39,11 @@ class ModuleSourceTests(unittest.TestCase):
             ('메모','목록', '', 'core.records'),
             ('일정','추가 2035-01-01 건강검진', '', 'core.records'),
             ('투자','검색 반도체', '', 'core.records'),
-            ('메뉴','', '🗂 최근 기록', 'core.records')
+            ('메뉴','', '🗂 최근 기록', 'core.records'),
+            ('날씨','오늘', '🌤 서울 오늘 날씨', 'core.weather'),
+            ('메뉴','날씨조회 오늘', '🌤 서울 오늘 날씨', 'core.weather'),
+            ('메뉴','선택 1', '🌤 서울 오늘 날씨 · 11/06', 'core.weather'),
+            ('날씨','메뉴', '📂 날씨 메뉴', 'core.menu')
         ]
         for cmd,arg,reply,want in cases:
             with self.subTest(cmd=cmd, arg=arg):
