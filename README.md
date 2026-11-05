@@ -27,7 +27,7 @@
 
 ```powershell
 cd D:\\stockproj\\AngaeBotBridge
-.\\deploy-angaebot.ps1 -Branch "feature/weather-forecast-20261106"
+.\\deploy-angaebot.ps1 -Branch "feature/weather-forecast-20261106" -InstallAndroid
 ```
 
 날씨 단축 명령과 담당 모듈 푸터를 사용하려면 Python Core와 Android Bridge를 함께 배포하세요. 운영 DB, .env, 기존 로그와 앱 데이터는 초기화하지 않습니다.
