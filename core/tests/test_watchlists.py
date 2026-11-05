@@ -53,16 +53,16 @@ class WatchlistUnitTests(unittest.TestCase):
 
     def test_create_list_add_read_delete(self):
         self.assertIn('메모리7', self.run_cmd('목록'))
-        self.assertIn('만들었습니다', self.run_cmd('그룹생성 반도체'))
-        self.assertIn('추가 완료', self.run_cmd('추가 반도체 MU 마이크론'))
-        self.assertIn('추가 완료', self.run_cmd('추가 반도체 005930 삼성전자'))
+        self.assertIn('그룹 생성', self.run_cmd('그룹생성 반도체'))
+        self.assertIn('+', self.run_cmd('추가 반도체 MU 마이크론'))
+        self.assertIn('+', self.run_cmd('추가 반도체 005930 삼성전자'))
         rows = load_group(self.db, self.room, self.sender, '반도체')
         self.assertEqual([(s.ticker, s.name) for s in rows],
                          [('MU', '마이크론'), ('005930.KS', '삼성전자')])
-        self.assertIn('반도체 : 2종목', self.run_cmd('목록'))
-        self.assertIn('삭제했습니다', self.run_cmd('삭제 반도체 MU'))
+        self.assertIn('반도체 2종목', self.run_cmd('목록'))
+        self.assertIn('삭제', self.run_cmd('삭제 반도체 MU'))
         self.assertEqual(len(load_group(self.db, self.room, self.sender, '반도체')), 1)
-        self.assertIn('삭제했습니다', self.run_cmd('그룹삭제 반도체 확인'))
+        self.assertIn('삭제', self.run_cmd('그룹삭제 반도체 확인'))
         with self.assertRaises(StockQuoteError):
             load_group(self.db, self.room, self.sender, '반도체')
 
@@ -129,7 +129,7 @@ class WatchlistUnitTests(unittest.TestCase):
         own = resolve_saved_alias(self.db, self.room, self.sender, '내GPU')
         self.assertEqual(own.ticker, 'NVDA')
         self.assertIsNone(resolve_saved_alias(self.db, '다른방', self.sender, '내GPU'))
-        self.assertIn('삭제했습니다', self.run_cmd('삭제 반도체 내GPU'))
+        self.assertIn('삭제', self.run_cmd('삭제 반도체 내GPU'))
         self.run_cmd('추가 반도체 MU 같은별칭')
         self.run_cmd('그룹생성 미국')
         self.run_cmd('추가 미국 AAPL 같은별칭')
@@ -164,14 +164,14 @@ class WatchlistUnitTests(unittest.TestCase):
             price, previous = (221500, 219500) if s.currency=='KRW' else (800, 830)
             return Quote(s, price, previous, (price/previous-1)*100, timestamp, timestamp)
         report = group_report('지수', load_group(self.db,self.room,self.sender,'지수'),fetcher=fake)
-        self.assertIn('삼성전자 : 221,500원 (▲', report)
-        self.assertIn('마이크론 : $800.00 (▽', report)
+        self.assertIn('삼성전자 22.1만 🔺', report)
+        self.assertIn('마이크론 $800 🔻', report)
         self.assertIn('키오시아 : 조회 불가', report)
-        self.assertIn('1. 삼성전자 :',report)
-        self.assertIn('2. 마이크론 :',report)
+        self.assertIn('1. 삼성전자 ',report)
+        self.assertIn('2. 마이크론 ',report)
         self.assertIn('3. 키오시아 : 조회 불가',report)
-        self.assertIn('번호 1~3',report)
-        self.assertIn('현지 거래일:', report)
+        self.assertIn('5분 내 1~3',report)
+        self.assertIn('📡 한국', report)
         self.assertTrue(report.index('삼성전자') < report.index('마이크론') < report.index('키오시아'))
         with self.assertRaisesRegex(StockQuoteError, '모든 시세'):
             group_report('지수', load_group(self.db,self.room,self.sender,'지수'),
@@ -188,9 +188,9 @@ class WatchlistUnitTests(unittest.TestCase):
         def fake(stock):
             return Quote(stock, 100.0, 95.0, 5.263, moment, moment)
         report=group_report('십종목',stocks,fetcher=fake)
-        self.assertIn('1. 엔비디아 :',report)
-        self.assertIn('10. 일라이릴리 :',report)
-        self.assertIn('번호 1~10',report)
+        self.assertIn('1. 엔비디아 ',report)
+        self.assertIn('10. 일라이릴리 ',report)
+        self.assertIn('5분 내 1~10',report)
 
     def test_reads_and_writes_do_not_call_network(self):
         with patch('app.watchlists.fetch_quote') as network:
