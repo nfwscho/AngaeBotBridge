@@ -67,7 +67,7 @@ class StockSelectionMenus:
     @staticmethod
     def _render(title: str, choices: tuple[MenuChoice, ...]) -> str:
         return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
-                          '번호만 입력하세요. (5분간 유효)'])
+                          '※ 번호 입력 · 5분 유효'])
 
     def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...]) -> None:
         now = self._clock()
@@ -89,7 +89,7 @@ class StockSelectionMenus:
             MenuChoice('종목별 분석', page='analysis'),
         )
         self._save(key, choices)
-        return MenuAnswer(self._render('📊 앙개봇 주식 메뉴', choices), menu_active=True)
+        return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
     def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...]) -> None:
         """현재 시세표 번호와 정확히 같은 순서로 종목분석 선택 목록을 5분간 보관한다."""
