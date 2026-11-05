@@ -17,6 +17,7 @@
 15. 기존 jobs/events/AI/주식/메모·날씨 DB와 로그, Android UI/배터리, 인증·중복 요청/5분 메뉴를 보존한다.
 16. 외부로 채팅방·발신자/개인정보·토큰을 보내지 않고 법정동코드·거래년월만 요청한다.
 17. 표준 라이브러리만 사용하며 모의 API 응답으로 오프라인 회귀 테스트할 수 있다.
+18. 포털에서 발급하는 인코딩/디코딩 서비스 키 모두를 URL 인코딩 1회로 정규화한다.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 from urllib.request import Request, urlopen
 
 SALE_ENDPOINT = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
@@ -281,6 +282,8 @@ def transaction_report(kind: str, region: District, apartment: str = "") -> str:
         raise RealEstateError("공공데이터 API 키가 없습니다. S20+의 .env에 MOLIT_API_KEY를 설정하세요.")
     if len(key) > 500 or not re.fullmatch(r"[A-Za-z0-9%+/=_-]+", key):
         raise RealEstateError("MOLIT_API_KEY 값이 유효하지 않습니다. 공공데이터포털 발급 키를 확인하세요.")
+    # 공공데이터포털의 Decoding 키와 Encoding 키를 모두 받아 URL 인코딩을 정확히 1회만 적용.
+    key = unquote(key)
     months = _month_codes()
     deals: list[Deal] = []
     for month in months:
