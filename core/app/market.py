@@ -1105,7 +1105,7 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
                 providers.append(source)
         latest = max(q.market_time for q in items)
         zone = 'ET' if region == '미국' else ('JST' if region == '일본' else 'KST')
-        line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M}'
+        line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M} {zone}'
         if len({q.market_time for q in items}) > 1:
             line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
