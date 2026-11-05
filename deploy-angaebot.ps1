@@ -1,16 +1,16 @@
-# 앙개봇 Windows PowerShell 원클릭 배포 스크립트 - 전체 기능 안내
-# 1. GitHub 기능 브랜치의 최신 코드를 Windows 로컬 저장소로 fast-forward 동기화합니다.
-# 2. GitHub Actions의 해당 커밋 Python Core 전체 회귀 테스트 성공 여부를 확인합니다.
-# 3. 테스트가 진행 중이면 제한 시간 내 대기하고, 실패/취소/시간 초과 시 배포를 차단합니다.
-# 4. 기존 SSH config의 angaebot 별칭과 SCP 공개키 인증을 재사용하며 Termux 수동 접속은 필요 없습니다.
-# 5. Python Core app/*.py 파일만 S20+의 임시 폴더로 전송하며 .env/SQLite/로그/Android 앱은 건드리지 않습니다.
-# 6. S20+의 기존 Python 가상환경에서 전송 파일의 문법을 검사한 뒤 적용합니다.
-# 7. 기존 실행 파일은 배포 중에만 임시 보관하며 적용/재시작 실패 시 복원합니다.
-# 8. runit의 실제 서비스 절대 경로로 angaebot-core만 재시작하며 watchdog/sshd는 유지합니다.
-# 9. 재시작 후 runit 실행 상태와 로컬 API의 TCP 연결을 확인하고 성공/실패를 명확히 표시합니다.
-# 10. 모든 단계의 명령 오류를 검사하고 검증되지 않은 소스는 S20+에 적용하지 않습니다.
-# 실행: .\deploy-angaebot.ps1
-# 선택: .\deploy-angaebot.ps1 -WaitMinutes 10
+# AngaeBot one-command deployment for Windows PowerShell 5.1 and PowerShell 7.
+# 1. Fetch and fast-forward the selected GitHub feature branch without discarding local edits.
+# 2. Verify the exact commit has a successful GitHub Actions Python Core regression run.
+# 3. Wait for CI to finish; abort on failure, timeout, cancellation, or missing checks.
+# 4. Reuse the existing 'angaebot' SSH alias and public-key authentication.
+# 5. Stage Python Core modules via SCP without modifying SQLite, logs, .env or Android code.
+# 6. Validate staged Python modules using the S20+ Python virtual environment.
+# 7. Retain temporary rollback copies during deployment and restore them on apply failure.
+# 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
+# 9. Check service status and local TCP port after restart, then remove staging files.
+# 10. Abort safely on errors; do not deploy a commit without a passing CI result.
+# Run: .\deploy-angaebot.ps1
+# Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
     [string]$Branch = 'feature/compact-all-replies-20261105',
     [string]$Repo = 'nfwscho/AngaeBotBridge',
@@ -34,29 +34,29 @@ function Invoke-Remote([string]$Command, [string]$Description) {
     Assert-Exit $Description
 }
 function Undo-Remote {
-    Write-Warning '배포 실패: 기존 Python 소스를 복원하고 서비스를 재시작합니다.'
+    Write-Warning 'Deployment failed. Restoring previous Python modules and restarting Core.'
     & ssh -o BatchMode=yes $SshHost "cp -p $backup/*.py $remoteCore/app/ && sv restart $service"
-    if ($LASTEXITCODE -ne 0) { Write-Warning '자동 복원 실패: 원격 상태를 직접 확인해야 합니다.' }
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Automatic rollback failed. Check remote service state.' }
 }
 
 try {
     Set-Location $root
-    if (-not (Test-Path 'core/app/main.py')) { throw '저장소 루트에서 스크립트를 실행해야 합니다.' }
-    Write-Host '[1/6] GitHub 최신 소스 확인' -ForegroundColor Cyan
+    if (-not (Test-Path 'core/app/main.py')) { throw 'Run this script from the repository root.' }
+    Write-Host '[1/6] Fetch GitHub source' -ForegroundColor Cyan
     $dirty = & git status --porcelain
-    Assert-Exit 'git 상태 확인 실패'
-    if ($dirty) { throw '로컬 수정 파일이 있습니다. 기존 변경을 보호하기 위해 중단합니다. git status를 확인하세요.' }
+    Assert-Exit 'Git status failed'
+    if ($dirty) { throw 'Uncommitted changes found. Run git status; deployment stopped to protect local edits.' }
     & git fetch origin $Branch
-    Assert-Exit 'GitHub fetch 실패'
+    Assert-Exit 'Git fetch failed'
     & git switch $Branch
-    Assert-Exit '브랜치 전환 실패'
+    Assert-Exit 'Git branch switch failed'
     & git merge --ff-only "origin/$Branch"
-    Assert-Exit 'fast-forward 업데이트 실패'
+    Assert-Exit 'Fast-forward update failed'
     $sha = (& git rev-parse HEAD).Trim()
-    Assert-Exit '커밋 조회 실패'
-    Write-Host "대상 커밋: $sha"
+    Assert-Exit 'Git commit lookup failed'
+    Write-Host "Target commit: $sha"
 
-    Write-Host '[2/6] GitHub Actions 전체 테스트 확인' -ForegroundColor Cyan
+    Write-Host '[2/6] Verify GitHub Actions regression tests' -ForegroundColor Cyan
     $deadline = (Get-Date).AddMinutes($WaitMinutes)
     $passed = $false
     $headers = @{ 'Accept' = 'application/vnd.github+json'; 'User-Agent' = 'AngaeBot-Deploy' }
@@ -71,42 +71,42 @@ try {
             $job = $run[0]
             Write-Host "  $($job.status) / $($job.conclusion) - $($job.html_url)"
             if ($job.status -eq 'completed') {
-                if ($job.conclusion -ne 'success') { throw "GitHub 테스트 실패: $($job.html_url)" }
+                if ($job.conclusion -ne 'success') { throw "GitHub tests failed: $($job.html_url)" }
                 $passed = $true
                 break
             }
         } else {
-            Write-Host '  해당 커밋의 테스트 실행을 기다리는 중...'
+            Write-Host '  Waiting for tests for this commit...'
         }
         if ((Get-Date) -ge $deadline) { break }
         Start-Sleep -Seconds 10
     } while ($true)
-    if (-not $passed) { throw "테스트 성공을 확인하지 못했습니다 ($WaitMinutes 분 제한). 배포하지 않습니다." }
+    if (-not $passed) { throw "CI success not confirmed within $WaitMinutes minutes. Deployment stopped." }
 
-    Write-Host '[3/6] SSH 연결 및 원격 임시 폴더 준비' -ForegroundColor Cyan
-    Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ 환경 확인 실패'
+    Write-Host '[3/6] Prepare remote staging directories' -ForegroundColor Cyan
+    Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ environment check failed'
 
-    Write-Host '[4/6] Python 파일 SCP 전송 및 문법 검증' -ForegroundColor Cyan
+    Write-Host '[4/6] Upload and compile-check Python modules' -ForegroundColor Cyan
     $files = @(Get-ChildItem -LiteralPath (Join-Path $root 'core/app') -Filter '*.py' -File)
-    if ($files.Count -lt 1) { throw '전송할 Python 파일이 없습니다.' }
+    if ($files.Count -lt 1) { throw 'No Python modules found for upload.' }
     $paths = @($files | ForEach-Object { $_.FullName })
     & scp -o BatchMode=yes @paths "${SshHost}:$stage/"
-    Assert-Exit 'SCP 전송 실패'
-    Invoke-Remote "$remoteCore/.venv/bin/python -m compileall -q $stage" 'S20+ Python 문법 검사 실패'
+    Assert-Exit 'SCP upload failed'
+    Invoke-Remote "$remoteCore/.venv/bin/python -m compileall -q $stage" 'S20+ Python compile check failed'
 
-    Write-Host '[5/6] 적용 및 서비스 재시작' -ForegroundColor Cyan
-    Invoke-Remote "cp -p $remoteCore/app/*.py $backup/" '기존 실행 파일 임시 보관 실패'
+    Write-Host '[5/6] Apply modules and restart Core service' -ForegroundColor Cyan
+    Invoke-Remote "cp -p $remoteCore/app/*.py $backup/" 'Temporary rollback copy failed'
     $deploymentStarted = $true
-    Invoke-Remote "cp -p $stage/*.py $remoteCore/app/ && sv restart $service" '배포 또는 서비스 재시작 실패'
+    Invoke-Remote "cp -p $stage/*.py $remoteCore/app/ && sv restart $service" 'Apply or Core service restart failed'
 
-    Write-Host '[6/6] 서비스와 API 확인' -ForegroundColor Cyan
+    Write-Host '[6/6] Verify Core service and TCP port' -ForegroundColor Cyan
     Start-Sleep -Seconds 3
-    Invoke-Remote "sv status $service && $remoteCore/.venv/bin/python -c 'import socket; s=socket.create_connection((\"127.0.0.1\",8765),5); s.close()'" '서비스 검증 실패'
+    Invoke-Remote "sv status $service && $remoteCore/.venv/bin/python -c 'import socket; socket.create_connection((socket.inet_ntoa(bytes([127,0,0,1])),8765),5).close()'" 'Core service verification failed'
     $deploymentStarted = $false
-    Invoke-Remote "rm -rf $stage $backup" '임시 폴더 정리 실패'
-    Write-Host "배포 성공: $sha" -ForegroundColor Green
+    Invoke-Remote "rm -rf $stage $backup" 'Staging cleanup failed'
+    Write-Host "Deployment successful: $sha" -ForegroundColor Green
 } catch {
-    Write-Warning "배포 중단: $($_.Exception.Message)"
+    Write-Warning "Deployment stopped: $($_.Exception.Message)"
     if ($deploymentStarted) { Undo-Remote }
     exit 1
 } finally {
