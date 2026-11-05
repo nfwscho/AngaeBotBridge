@@ -9,13 +9,17 @@
 # 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
 # 9. Check service status and local TCP port after restart, then remove staging files.
 # 10. Abort safely on errors; do not deploy a commit without a passing CI result.
+# 11. -LocalTests mode runs the complete Python unittest suite locally instead of requiring GitHub Actions.
+# 12. Local mode validates Python syntax and uses the selected feature branch exact commit; no DB/.env/log changes.
+# 13. Local tests must pass before any SSH/SCP or S20+ service restart.
 # Run: .\deploy-angaebot.ps1
 # Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
     [string]$Branch = 'feature/compact-all-replies-20261105',
     [string]$Repo = 'nfwscho/AngaeBotBridge',
     [string]$SshHost = 'angaebot',
-    [int]$WaitMinutes = 8
+    [int]$WaitMinutes = 8,
+    [switch]$LocalTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +60,36 @@ try {
     Assert-Exit 'Git commit lookup failed'
     Write-Host "Target commit: $sha"
 
+    if ($LocalTests) {
+        Write-Host '[2/6] Run local Python Core regression tests (GitHub Actions not used)' -ForegroundColor Cyan
+        $python = $null
+        $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+        if ($pyLauncher) {
+            & py -3.12 --version 2>$null
+            if ($LASTEXITCODE -eq 0) { $python = @('py', '-3.12') }
+        }
+        if (-not $python) {
+            $pythonExe = Get-Command python -ErrorAction SilentlyContinue
+            if (-not $pythonExe) { throw 'Python 3.12 is required for local regression tests.' }
+            $version = (& python -c 'import sys; print("%d.%d" % sys.version_info[:2])').Trim()
+            Assert-Exit 'Python version check failed'
+            if ($version -ne '3.12') { throw "Python 3.12 required; found $version" }
+            $python = @('python')
+        }
+        $pythonCommand = $python[0]
+        $pythonArgs = @()
+        if ($python.Count -gt 1) { $pythonArgs = @($python[1..($python.Count-1)]) }
+        & $pythonCommand @pythonArgs -m compileall -q core/app
+        Assert-Exit 'Local Python compile check failed'
+        Push-Location (Join-Path $root 'core')
+        try {
+            & $pythonCommand @pythonArgs -m unittest discover -s tests -v
+            Assert-Exit 'Local Python Core regression tests failed; deployment refused'
+        } finally {
+            Pop-Location
+        }
+        Write-Host 'Local Python Core regression tests PASSED' -ForegroundColor Green
+    } else {
     Write-Host '[2/6] Verify GitHub Actions regression tests' -ForegroundColor Cyan
     $deadline = (Get-Date).AddMinutes($WaitMinutes)
     $passed = $false
@@ -82,6 +116,8 @@ try {
         Start-Sleep -Seconds 10
     } while ($true)
     if (-not $passed) { throw "CI success not confirmed within $WaitMinutes minutes. Deployment stopped." }
+
+    }
 
     Write-Host '[3/6] Prepare remote staging directories' -ForegroundColor Cyan
     Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ environment check failed'
