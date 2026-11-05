@@ -8,6 +8,7 @@
 6. 인증 FastAPI의 중복 요청 감지·jobs/events SQLite 로깅·원래 명령 보존을 검사한다.
 7. S20+/Android/실데이터 없이 순수 메모리와 모의 응답만 사용한다.
 8. 홈은 정확히 10개(1 주식/2 부동산/3 금융/4 여행/5 배드민턴/6 요리/7 종친/8 날씨/9 개인/10 설정)이며 11번은 거부한다.
+9. 날씨는 기존 미개발 콘텐츠에서 제외하여 실제 조회 명령으로 연결되는지 확인한다.
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ class GlobalMenuUnitTests(unittest.TestCase):
         self.assertIn("앙개봇 메인 메뉴", self.menus.choose(self.db, "방", "나", "00").reply)
 
     def test_all_shortcut_categories_and_pending_leaf(self):
-        for category in ("배드민턴", "요리", "여행", "종친", "날씨"):
+        for category in ("배드민턴", "요리", "여행", "종친"):
             menu = self.menus.open_category("방", "나", category)
             self.assertTrue(menu.menu_active)
             self.assertIn(category + " 메뉴", menu.reply)

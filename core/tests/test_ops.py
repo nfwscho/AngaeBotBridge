@@ -12,6 +12,7 @@
 10. 5거래일·21/63거래일 변동성 분석을 추가해도 기존 운영 상태/로그 검사는 변경하지 않는다.
 11. v0.5.6 상태 문자열을 확인하면서 기존 계산/로그/AI OFF 회귀 검사 조건을 유지한다.
 12. v0.5.6 sqlite3.Connection 문맥 관리자는 연결 종료를 보장하지 않으므로 closing(...)으로 명시적으로 닫아 ResourceWarning을 방지한다.
+13. 현재 Core 버전은 단일 VERSION 상수를 검증하되 기존 계산·서버상태의 레거시 응답은 유지한다.
 """
 from __future__ import annotations
 from contextlib import closing
@@ -25,7 +26,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("ANGAE_TOKEN", "T" * 64)
 from fastapi.testclient import TestClient
-from app.main import create_app
+from app.main import VERSION, create_app
 from app.ops import details, format_uptime
 
 
@@ -50,7 +51,7 @@ class OpsTests(unittest.TestCase):
 
     def test_health_and_legacy_math(self):
         response = self.client.get("/v1/health", headers=self.headers)
-        self.assertEqual(response.json()["version"], "0.7.1")
+        self.assertEqual(response.json()["version"], VERSION)
         self.assertIn("156,176", self.call("계산", "344*454").json()["reply"])
         self.assertIn("v0.6.2", self.call("서버상태").json()["reply"])
         self.assertIn("KST", self.call("시간").json()["reply"])

@@ -36,6 +36,8 @@
  * 38. 메뉴 경로는 기존 정확한 번호 검증을 거치고 일반 문장 오인식·삭제된 테스트 명령·로그/권한 흐름을 보존한다.
  * 39. v0.4.12 홈 순서 변경에 맞춰 부·금·개 단축 메뉴와 번호 경로를 지원하되 기존 부·투·메 별칭도 유지한다.
  * 40. Android 로컬 '도' 도움말을 Core 설정 8과 동일하게 8줄로 정리하고 상태 버전을 갱신한다.
+ * 41. 날 오늘/내일/주간 및 날 지역 <지명>을 Python 날씨 모듈로 전달하고 날 1~4 번호 점프는 보존한다.
+ * 42. 기존 호출어/카톡 일반 대화 차단/권한·로그·메뉴·배터리 동작을 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -78,6 +80,13 @@ object CommandParser {
                 if (segments.size == 1) return ParseResult.Command("메뉴", root)
                 if (numericPath) {
                     return ParseResult.Command("메뉴", "경로 $root ${segments.drop(1).joinToString(" ")}")
+                }
+                if (index == "날") {
+                    val action = segments.drop(1).joinToString(" ")
+                    if (action in setOf("오늘", "내일", "주간", "지역") ||
+                        (action.startsWith("지역 ") && action.length > 3)) {
+                        return ParseResult.Command("날씨", action)
+                    }
                 }
                 return ParseResult.NoTrigger
             }
@@ -124,7 +133,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.12 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.13 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
@@ -132,7 +141,7 @@ object LocalCommandExecutor {
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
             "주 2 메모리7 시세 · 주 분 삼성전자 분석",
-            "앙 2/3/9 메모·일정 관리 · 분야별 등록/검색",
+            "앙 2/3/9 메모·일정 관리 · 날 1~3 예보 · 날 지역 서울",
             "1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능"
         ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"

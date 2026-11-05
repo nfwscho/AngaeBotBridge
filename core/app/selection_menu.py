@@ -44,6 +44,8 @@
 42. v0.7.1 홈 1~10 순서는 주식/부동산/금융·투자/여행/배드민턴/요리/종친/날씨/개인/설정으로 구성한다.
 43. 전체 메뉴 트리·설정 8 도움말·연속 번호 경로는 같은 홈 정의를 사용하므로 순서가 항상 일치한다.
 44. 기존 부/투/메 단축어를 유지하면서 금(투자)·개(개인)를 추가하고 로그/인증·5분 선택 세션을 유지한다.
+45. 날씨 메뉴 1~3은 실제 Open-Meteo 예보 조회로 연결하고 4번은 방/발신자별 지역 설정 안내로 연결한다.
+46. 미개발 다른 콘텐츠와 홈/주식/설정/메모 메뉴 및 0/00/5분 보호·로그 경로를 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -184,6 +186,13 @@ class StockSelectionMenus:
     @staticmethod
     def _category_choices(category: str) -> tuple[MenuChoice, ...]:
         """현재 콘텐츠 정의를 재사용해 트리와 실사용 메뉴의 번호 일치를 보장한다."""
+        if category == '날씨':
+            return (
+                MenuChoice('오늘 날씨', command_argument='날씨조회 오늘'),
+                MenuChoice('내일 날씨', command_argument='날씨조회 내일'),
+                MenuChoice('주간 예보', command_argument='날씨조회 주간'),
+                MenuChoice('지역 설정', command_argument='날씨설정 안내'),
+            )
         return tuple(MenuChoice(name, page='pending:' + category + ':' + name)
                      for name in CONTENT_ITEMS[category])
 
@@ -203,7 +212,7 @@ class StockSelectionMenus:
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 시세 · 주 분 삼성전자 분석',
-            '앙 2/3/9 메모·일정 관리 · 분야별 등록/검색',
+            '앙 2/3/9 메모·일정 관리 · 날 1~3 예보 · 날 지역 서울',
             '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
 
@@ -264,8 +273,9 @@ class StockSelectionMenus:
             raise StockQuoteError('등록되지 않은 콘텐츠 메뉴입니다.')
         choices = self._category_choices(category)
         self._save(key, choices, back='home', origin='category:' + category)
+        footer = '\n※ 지역 변경: 날 지역 서울' if category == '날씨' else '\n※ 하위 기능은 순차적으로 개발됩니다.'
         return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
-                          + '\n※ 하위 기능은 순차적으로 개발됩니다.', menu_active=True)
+                          + footer, menu_active=True)
 
     def open_record_sector(self, room: str, sender: str, sector: str) -> MenuAnswer:
         """홈 개인 기록 분야. 제목 목록은 선택 때만 DB에서 읽고 내용은 저장하지 않는다."""

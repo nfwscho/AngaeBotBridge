@@ -78,6 +78,10 @@
 75. v0.7.1 요청한 홈 1~10 재배치·금/개 단축과 도움말/트리 번호를 반영하며 기존 기능·로그·DB 스키마를 유지한다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
+76. 날씨 오늘·내일·주간 실시간 조회는 기존 인증/중복검사 이후 DB 쓰기 잠금 밖에서 실행한다.
+77. 날씨 지역 설정만 별도 weather_locations 테이블에 저장하고 기존 jobs/events 로그를 그대로 남긴다.
+78. 날씨 단축/하위 메뉴 응답의 5분 번호 세션과 전용 기능 모듈 정보를 기존 Android Bridge에 전달한다.
+79. 공급자 장애 및 잘못된 지역은 기존 COMMAND_REJECTED와 경고 응답으로 기록하며 가짜 예보를 출력하지 않는다.
 """
 from __future__ import annotations
 
@@ -105,9 +109,11 @@ from .history import is_analysis_request, individual_report, group_report as his
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
                                RecordError, init_records_schema, execute_record_command)
+from .weather import (WeatherError, init_weather_schema, get_location, resolve_location,
+                      save_location, forecast_text, location_help)
 
-VERSION = "0.7.1"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"} | PERSONAL_COMMANDS
+VERSION = "0.7.2"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨"} | PERSONAL_COMMANDS
 
 
 class CommandRequest(BaseModel):
@@ -156,6 +162,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         init_schema(db)
         # 독립 메모/일정 테이블만 새로 생성. 기존 주식/AI/이벤트 테이블에는 변경 없음.
         init_records_schema(db)
+        init_weather_schema(db)
 
     api = FastAPI(title="AngaeBot Core", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -180,7 +187,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         stock_menu_active = False
         resolved_argument = request.argument
         selection_back = 'menu'
-        if request.command in {"주식", "메모리7", "메뉴"}:
+        weather_update = None
+        if request.command in {"주식", "메모리7", "메뉴", "날씨"}:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
             if old is not None:
@@ -191,6 +199,19 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         "module_source": module_for(request.command, request.argument, old[2])}
             try:
                 # 메뉴도 주식과 동일한 인증·중복 요청·jobs/events 로그 경로를 통과한다.
+                if request.command == "날씨":
+                    action = request.argument.strip()
+                    if action in ("", "메뉴"):
+                        menu = selection_menus.open_category(request.room, request.sender, "날씨")
+                        stock_reply, stock_menu_active = menu.reply, menu.menu_active
+                    elif action.startswith("지역 "):
+                        weather_update = resolve_location(action[3:].strip())
+                    elif action in {"오늘", "내일", "주간"}:
+                        resolved_argument = "날씨조회 " + action
+                    elif action == "지역":
+                        resolved_argument = "날씨설정 안내"
+                    else:
+                        raise WeatherError("사용법: 날 / 날 1~4 / 날 지역 서울 / 앙개야 날씨 오늘")
                 if request.command == "메뉴":
                     action = request.argument.strip()
                     if action in ("", "홈"):
@@ -230,8 +251,21 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
-                if stock_reply is not None:
+                if stock_reply is not None or weather_update is not None:
                     pass
+                elif request.command in {"메뉴", "날씨"} and resolved_argument.startswith("날씨조회 "):
+                    with closing(connect()) as read_db:
+                        location = get_location(read_db, request.room, request.sender)
+                    stock_reply = forecast_text(location, resolved_argument.split(" ", 1)[1])
+                    # 일회성 조회 이후에도 기존 5분 메뉴/0/00 사용을 유지한다.
+                    selection_menus.open_category(request.room, request.sender, "날씨")
+                    stock_reply += "\n※ 날 1~4 다른 조회 · 0 이전 · 00 홈"
+                    stock_menu_active = True
+                elif request.command in {"메뉴", "날씨"} and resolved_argument == "날씨설정 안내":
+                    with closing(connect()) as read_db:
+                        stock_reply = location_help(read_db, request.room, request.sender)
+                    selection_menus.open_category(request.room, request.sender, "날씨")
+                    stock_menu_active = True
                 elif request.command == "메뉴" and resolved_argument.startswith("설정보기 "):
                     view = resolved_argument.split(" ", 1)[1]
                     if view == "status":
@@ -302,7 +336,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         selection_menus.open_quotes(request.room, request.sender, stocks,
                             back=selection_back)
                         stock_menu_active = True
-            except (StockQuoteError, RecordError) as error:
+            except (StockQuoteError, RecordError, WeatherError) as error:
                 stock_error = error
         with lock:
             with closing(connect()) as db, db:
@@ -315,10 +349,16 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             "duplicate": True,
                             "module_source": module_for(request.command, request.argument, row[2])}
                 try:
-                    if request.command in {"주식", "메모리7", "메뉴"}:
+                    if request.command in {"주식", "메모리7", "메뉴", "날씨"}:
                         if stock_error is not None:
                             raise stock_error
-                        if stock_reply is not None:
+                        if weather_update is not None:
+                            save_location(db, request.room, request.sender, weather_update)
+                            selection_menus.open_category(request.room, request.sender, "날씨")
+                            stock_menu_active = True
+                            reply = (f"✅ 날씨 지역 설정 완료: {weather_update.name}"
+                                     "\n※ 날 1~4 조회 · 0 이전 · 00 홈")
+                        elif stock_reply is not None:
                             reply = stock_reply
                         elif request.command in {"주식", "메뉴"}:
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
@@ -377,7 +417,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except (CommandError, AIError, StockQuoteError, RecordError) as error:
+                except (CommandError, AIError, StockQuoteError, RecordError, WeatherError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())

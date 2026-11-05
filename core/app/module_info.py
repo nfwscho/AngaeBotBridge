@@ -11,6 +11,7 @@
 9. '설정보기 tree' 응답은 읽기 전용 트리를 실제로 생성하는 core.menu로 표시하고 나머지 설정 조회는 core.ops를 유지한다.
 10. 설정 8번 도움말은 실제 생성 모듈 core.menu, 통합 상태는 core.ops로 구별하고 나머지 응답 모듈도 보존한다.
 11. v0.7.0 개인 기록 CRUD·일정·검색·상세보기는 core.personal_records로 식별하고 기존 메뉴·주식·AI 표시를 보존한다.
+12. 날씨 조회/지역 설정 결과는 core.weather, 메뉴 진입은 core.menu로 구분하며 중복 API 응답에도 같은 모듈을 표시한다.
 """
 from __future__ import annotations
 
@@ -28,7 +29,16 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         return 'core.records'
     if command == '메모리7':
         return 'core.market'
+    if command == '날씨':
+        return 'core.menu' if '날씨 메뉴' in reply else 'core.weather'
     if command in {'메뉴', '주식'}:
+        if arg.startswith(('날씨조회 ', '날씨설정 ')) or reply.startswith(
+            ('🌤 서울 ', '🌦 서울 ', '🌤 부산 ', '🌦 부산 ', '🗓 ', '📍 날씨 지역 설정')
+        ):
+            return 'core.weather'
+        # 다른 설정 지역의 조회 결과도 선택 인수에 의존하지 않고 정확히 분류한다.
+        if reply.startswith(('🌤 ', '🌦 ')) and '날씨 · ' in reply.split('\n', 1)[0]:
+            return 'core.weather'
         # 전체 메뉴 트리의 실제 생성 모듈을 표시한다. 기존 운영 조회는 ops 그대로 유지한다.
         if arg in {'설정보기 tree', '설정보기 help'}:
             return 'core.menu'

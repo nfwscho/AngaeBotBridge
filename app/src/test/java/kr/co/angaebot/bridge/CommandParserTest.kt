@@ -16,6 +16,7 @@
  * 기존 주 분/주 목록/상/도/사용자 호출어 및 일반 문장 오인식 방지 회귀 테스트를 보존한다.
  * v0.4.10은 테스트/ping·계산·질문 명령이 카톡에서 무시됨을 검사하고, 간결 도움말과 상태 번호를 확인한다.
  * v0.4.12은 신규 부·금·개 및 홈 10/9 경로와 구형 투·메 호환을 회귀 검증한다.
+ * 신규 날씨 단축 조회/지역 설정은 정확한 명령으로만 인식하고 기존 숫자 게이트·일상문장 차단을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -55,7 +56,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 2 메모리7 시세"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.12"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.13"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
@@ -128,6 +129,18 @@ class CommandParserTest {
             assertEquals(ParseResult.NoTrigger, CommandParser.parse(text, "앙개야"))
         }
         assertEquals(ParseResult.Command("주식", "분석 삼성전자"), CommandParser.parse("주 분 삼성전자", "앙개야"))
+    }
+    @Test fun weatherCommands() {
+        assertEquals(ParseResult.Command("메뉴", "날씨"), CommandParser.parse("날", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 날씨 2"), CommandParser.parse("날 2", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "오늘"), CommandParser.parse("날 오늘", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "내일"), CommandParser.parse("날 내일", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "주간"), CommandParser.parse("날 주간", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "지역"), CommandParser.parse("날 지역", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "지역 강남구"), CommandParser.parse("날 지역 강남구", "앙개야"))
+        assertEquals(ParseResult.Command("날씨", "지역 부산"), CommandParser.parse("앙개야 날씨 지역 부산", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("날 미세먼지", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("날씨 좋아", "앙개야"))
     }
     @Test fun shortStockWakeWord() {
         assertEquals(ParseResult.Command("주식", "메뉴"), CommandParser.parse("주", "앙개야"))

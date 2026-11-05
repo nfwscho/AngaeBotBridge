@@ -1,6 +1,6 @@
 # 현재 앙개봇 운영 문서 안내
 
-> 현재 작업 브랜치의 Android Bridge v0.4.9, Termux Python Core v0.6.1 개발 기준입니다.
+> 날씨 기능 개발 브랜치는 Android Bridge v0.4.13, Termux Python Core v0.7.2 기준입니다. main은 병합 전까지 영향이 없습니다.
 > `main` 병합은 '앙개봇 메인' 채팅에서 별도 사용자 승인 후 처리합니다.
 > 아래 초기 v0.1 설명은 역사 기록이며 현재 구현은 최신 문서를 기준으로 확인하세요.
 
@@ -9,6 +9,29 @@
 - [서버·GitHub·소스 운영](docs/OPERATIONS.md)
 - [설치·업그레이드](docs/UPGRADE.md)
 - [전체 테스트](docs/TEST_PLAN.md)
+
+## 🌤 날씨 기능 (feature/weather-forecast-20261106)
+
+기존 메인 메뉴 8번 날씨의 오늘/내일/주간/지역 설정을 실제 기상 예보에 연결합니다. 별도 API 키·OpenAI 호출·GPS 위치 권한이 필요하지 않습니다.
+
+- `날` 또는 `앙 8`: 날씨 메뉴
+- `날 1` / `날 오늘`: 오늘 날씨 (현재·체감 기온, 습도, 바람, 최저·최고 기온, 강수확률)
+- `날 2` / `날 내일`: 내일 날씨
+- `날 3` / `날 주간`: 향후 7일 예보
+- `날 4`: 현재 저장된 지역과 설정 방법
+- `날 지역 부산` / `앙개야 날씨 지역 강남구`: 지역 저장
+
+미설정 시 GPS 위치가 아닌 **서울(기본)** 예보를 표시하며, 지역은 방·발신자별 SQLite에 보존합니다. 출처: Open-Meteo 모델 예보(https://open-meteo.com/). 관측 자료가 아니므로 지연·변동이 가능하며 API 장애 시 임의 수치를 표시하지 않습니다. 비상업 무료 사용 조건은 제공자 약관을 확인하세요.
+
+### 기능 브랜치 S20+ 테스트 배포
+
+```powershell
+cd D:\\stockproj\\AngaeBotBridge
+.\\deploy-angaebot.ps1 -Branch "feature/weather-forecast-20261106" -InstallAndroid
+```
+
+날씨 단축 명령과 담당 모듈 푸터를 사용하려면 Python Core와 Android Bridge를 함께 배포하세요. 운영 DB, .env, 기존 로그와 앱 데이터는 초기화하지 않습니다.
+
 
 ---
 
