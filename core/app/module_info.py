@@ -44,10 +44,11 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
             return 'core.watchlists'
         if arg in {'반도체', '미국시총10'}:
             return 'core.market' if command == '주식' else 'core.watchlists'
-        if not arg or arg == '메뉴':
-            return 'core.menu'
+        # 메뉴 선택은 명령 인수가 비어 있어도 기록 결과 본문이 오면 실제 모듈로 구분한다.
         if reply.startswith(('🗂 ', '📒 메모 #', '📅 일정 #', '📭 저장된 기록')):
             return 'core.records'
+        if not arg or arg == '메뉴':
+            return 'core.menu'
         if '메뉴' in reply or '개발 예정' in reply:
             return 'core.menu'
         if reply.startswith('💾') or reply.startswith('📊'):
