@@ -9,6 +9,7 @@
 8. 설정 도움말은 기존 7번 전체 트리 다음의 8번으로 추가되어 함께 표시된다.
 7. 카카오톡/Termux/외부 시세 접근 없이 TestClient와 임시 SQLite만 사용한다.
 9. v0.7.1 홈 2 부동산/3 금융·투자/9 개인·일정/10 설정을 트리의 정확한 경로와 대조한다.
+10. 날씨 8-1~4는 실제 기능으로 제공되므로 개발 예정 표시를 제외하고 다른 미개발 항목은 유지한다.
 """
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ class MenuTreeUnitTests(unittest.TestCase):
             root = next(i for i, item in enumerate(StockSelectionMenus._home_choices(), 1)
                         if item.page == 'category:' + category)
             for i, label in enumerate(CONTENT_ITEMS[category], 1):
-                self.assertIn(f"{root}-{i}. {label} [개발 예정]", tree)
+                self.assertIn(f"{root}-{i}. {label}" + ("" if category == "날씨" else " [개발 예정]"), tree)
 
     def test_tree_describes_dynamic_branches_without_exposing_records(self):
         tree = StockSelectionMenus.menu_tree()
