@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.4.3 — 메모리7 무료 주식 시세 모듈 전체 기능 설명
+앙개봇 Python Core v0.5.8 — 메모리7·국내·해외 무료 주식 시세 전체 기능 설명
 1. '앙개야 주식 메모리7' 및 '앙개야 메모리7'의 지정된 8개 종목 시세를 조회한다.
 2. 삼성전자 005930.KS, SK하이닉스 000660.KS, 마이크론 MU, SK하이닉스 ADR SKHY,
    샌디스크 SNDK, 키오시아 285A.T, 씨게이트 STX, 웨스턴디지털 WDC를 고정 순서로 표시한다.
@@ -35,10 +35,19 @@
 32. 시간외 거래소가 메타데이터에서 확인되지 않으면 NXT로 단정하지 않고 별도 시간외 시세로 표시한다.
 33. 제공자 URL/개별 사용자 그룹·티커/로그/DB·가격 분석·메모리7 번호 메뉴·캐시·Android 배터리 기능은 모두 보존한다.
 34. 추가 권한·인증키·AI API·주기적 폴링·자동 주문·가격 알림/예약 발신은 도입하지 않는다.
+35. v0.5.8 미국 Yahoo 차트 요청은 표준 HTTP User-Agent로 전송하고 HTTP 403/429는 반복 호출하지 않는다.
+36. Yahoo 미국 종목 조회 실패 시 공개 Nasdaq 종목 조회를 1회 보조 시도하며 요청 호스트/티커·응답 크기를 제한한다.
+37. 나스닥 보조 응답의 종목코드·미국달러 가격·순증감·등락률·현지 거래시각을 모두 검증하여 원치 않는 다른 종목/통화/시장 혼동을 방지한다.
+38. 보조 시세의 전일가와 등락률을 독립 재계산하고 오래된·미래·구조 불명 데이터는 거부한다.
+39. 나스닥 웹 시세는 지연 여부 미확인으로 표기하며 실시간·정규장 체결 실시간으로 주장하지 않는다.
+40. 모든 미국 종목 보조 조회 실패는 기존 조회 불가로 격리하고 기존 메모리7/관심그룹/번호/캐시·DB·로그·배터리·해외/국내 시세를 그대로 유지한다.
+41. 원격 응답 내용/토큰/주소를 SQLite 또는 운영 로그에 신규 저장하지 않으며 공개 시세 제공자 실패 원인 코드는 진단 가능하게 유지한다.
+42. 주식 주문·지속적 모니터링·새 앱 권한·유료 API/키는 추가하지 않는다.
 """
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import threading
@@ -78,6 +87,10 @@ FETCH_TIMEOUT = 3.2
 MAX_RESPONSE_BYTES = 180_000
 _URLS = ('https://query1.finance.yahoo.com/v8/finance/chart/',
          'https://query2.finance.yahoo.com/v8/finance/chart/')
+_YAHOO_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+_NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stocks'
+_US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
+_MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _CACHE: tuple[float, str] | None = None
 
@@ -116,6 +129,7 @@ class Quote:
     market_time: datetime
     fetched_at: datetime
     domestic: DomesticQuoteMetadata | None = None
+    source: str = ''
 
 
 def _timezone(name: str):
@@ -178,11 +192,11 @@ def parse_chart(stock: Stock, payload: dict, *, now: datetime | None = None) -> 
 
 
 def fetch_yahoo_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
-    """고정된 HTTPS 시세 엔드포인트만 사용; 일시적 오류는 대체 Yahoo 호스트에서 재시도."""
+    """기존 Yahoo 2호스트 + 명확한 403/429 요청 제한 존중, 엄격한 가격 검증."""
     failure = None
     for base in _URLS:
         url = base + encode_component(stock.ticker, safe='.') + '?range=5d&interval=1d&includePrePost=false'
-        request = Request(url, headers={'User-Agent': 'Mozilla/5.0 (compatible; AngaeBotPersonal/0.4.2)',
+        request = Request(url, headers={'User-Agent': _YAHOO_USER_AGENT,
                                         'Accept': 'application/json'}, method='GET')
         try:
             with opener(request, timeout=FETCH_TIMEOUT) as response:
@@ -191,10 +205,126 @@ def fetch_yahoo_quote(stock: Stock, *, opener=urlopen, now: datetime | None = No
                 raise StockQuoteError('응답 용량 제한 초과')
             result = json.loads(raw)
             return parse_chart(stock, result, now=now)
-        except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+        except HTTPError as exc:
             failure = exc
-            continue
+            # 액세스 거부/요청 제한을 단순 네트워크 장애로 보고 두 번 연속 요청하지 않는다.
+            if exc.code in (403, 429):
+                break
+        except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+            failure = exc
+    if isinstance(failure, HTTPError):
+        raise StockQuoteError(f'Yahoo HTTP {failure.code}') from failure
     raise StockQuoteError('시세 제공처 연결 불가') from failure
+
+
+def _nasdaq_number(value: object, *, signed: bool = False) -> float | None:
+    """나스닥 표시 숫자만 처리; 통화·HTML·무한대·음수 현재가는 차단."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (float, int)):
+        result = float(value)
+    elif isinstance(value, str):
+        clean = value.strip().replace(',', '').replace('$', '').replace('%', '').replace('−', '-')
+        if not re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)', clean):
+            return None
+        result = float(clean)
+    else:
+        return None
+    if not math.isfinite(result) or abs(result) > 1e10:
+        return None
+    return result if signed or result > 0 else None
+
+
+def _nasdaq_local_time(value: object, stock: Stock, now: datetime) -> datetime:
+    """나스닥 공개 웹의 거래시각을 미국 동부 거래소 기준으로 해석; 날짜만 있으면 거부."""
+    if not isinstance(value, str) or not value.strip():
+        raise StockQuoteError('나스닥 거래시각 누락')
+    raw = value.strip()
+    parsed = None
+    try:
+        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+    except ValueError:
+        pass
+    if parsed is None:
+        raw = re.sub(r'\s*\(?\b(?:ET|EST|EDT)\)?\s*$', '', raw, flags=re.IGNORECASE).strip()
+        for fmt in ('%b %d, %Y %I:%M %p', '%b %d, %Y %I:%M:%S %p',
+                    '%b %d, %Y %H:%M:%S', '%b %d, %Y %H:%M',
+                    '%b %d %Y %I:%M %p'):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                pass
+    if parsed is None:
+        raise StockQuoteError('나스닥 거래시각 형식 불명')
+    local = parsed.replace(tzinfo=_timezone(stock.timezone_name)) if parsed.tzinfo is None else parsed.astimezone(_timezone(stock.timezone_name))
+    delta = (now - local.astimezone(timezone.utc)).total_seconds()
+    if delta < -900 or delta > 10 * 86400:
+        raise StockQuoteError('나스닥 거래시각이 오래되었거나 미래입니다.')
+    return local
+
+
+def parse_nasdaq_quote(stock: Stock, payload: dict, *, now: datetime | None = None) -> Quote:
+    """공개 나스닥 웹 JSON에서 동일 티커·정확한 정규 시세만 안전하게 파싱한다."""
+    if stock.market != '미국' or stock.currency != 'USD' or not _US_TICKER_RE.fullmatch(stock.ticker):
+        raise StockQuoteError('나스닥 미국 종목만 지원합니다.')
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise StockQuoteError('기준시각 시간대 정보 누락')
+    try:
+        if not isinstance(payload, dict):
+            raise StockQuoteError('나스닥 JSON 형식 오류')
+        data = payload['data']
+        if not isinstance(data, dict) or str(data.get('symbol', '')).upper() != stock.ticker:
+            raise StockQuoteError('나스닥 티커 불일치')
+        if data.get('assetClass') not in (None, '', 'STOCKS'):
+            raise StockQuoteError('나스닥 자산유형 불일치')
+        info = data['primaryData']
+        if not isinstance(info, dict):
+            raise StockQuoteError('나스닥 현재가 정보 누락')
+        price = _nasdaq_number(info.get('lastSalePrice'))
+        change = _nasdaq_number(info.get('netChange'), signed=True)
+        pct_published = _nasdaq_number(info.get('percentageChange'), signed=True)
+        if price is None or change is None or pct_published is None:
+            raise StockQuoteError('나스닥 가격/전일비 누락')
+        previous = price - change
+        if previous <= 0 or not math.isfinite(previous):
+            raise StockQuoteError('나스닥 전일가 오류')
+        pct_computed = (price / previous - 1.0) * 100.0
+        if abs(pct_computed - pct_published) > 0.20 or abs(pct_computed) > 1000:
+            raise StockQuoteError('나스닥 가격/등락률 정합성 오류')
+        local = _nasdaq_local_time(info.get('lastTradeTimestamp'), stock, now)
+        return Quote(stock, price, previous, pct_computed, local,
+                     now.astimezone(timezone(timedelta(hours=9))), source='나스닥 웹')
+    except (KeyError, TypeError, IndexError, ValueError, OverflowError) as exc:
+        if isinstance(exc, StockQuoteError):
+            raise
+        raise StockQuoteError('나스닥 시세 데이터 오류') from exc
+
+
+def fetch_nasdaq_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
+    """Yahoo 장애 시에만 호출하는 미인증 공개 웹 JSON 보조 경로(공식 보장 API 아님)."""
+    if stock.market != '미국' or stock.currency != 'USD' or not _US_TICKER_RE.fullmatch(stock.ticker):
+        raise StockQuoteError('나스닥 미국 종목만 지원합니다.')
+    uri = _NASDAQ_QUOTE.format(ticker=stock.ticker)
+    req = Request(uri, headers={'User-Agent': _YAHOO_USER_AGENT,
+                                'Accept': 'application/json, text/plain, */*',
+                                'Accept-Language': 'en-US,en;q=0.9',
+                                'Origin': 'https://www.nasdaq.com',
+                                'Referer': 'https://www.nasdaq.com/'}, method='GET')
+    try:
+        with opener(req, timeout=FETCH_TIMEOUT) as response:
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise StockQuoteError('나스닥 응답 용량 초과')
+        data = json.loads(raw)
+        return parse_nasdaq_quote(stock, data, now=now)
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
+        if isinstance(error, StockQuoteError):
+            raise
+        if isinstance(error, HTTPError):
+            raise StockQuoteError(f'나스닥 HTTP {error.code}') from error
+        raise StockQuoteError('나스닥 공개 시세 조회 불가') from error
 
 
 
@@ -653,6 +783,17 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                 return fetch_yahoo_japan_quote(stock, opener=opener, now=now)
             except StockQuoteError:
                 return fetch_rakuten_quote(stock, opener=opener, now=now)
+    if stock.market == '미국':
+        try:
+            return fetch_yahoo_quote(stock, opener=opener, now=now)
+        except StockQuoteError as first:
+            try:
+                return fetch_nasdaq_quote(stock, opener=opener, now=now)
+            except StockQuoteError as second:
+                # 사용자 자격증명/요청 원문은 남기지 않고 실패 공급자/티커만 기록한다.
+                _MARKET_LOG.warning('US_QUOTE_FAILED ticker=%s yahoo=%s nasdaq=%s',
+                                    stock.ticker, str(first), str(second))
+                raise StockQuoteError('미국 무료 시세 제공처 조회 실패') from second
     return fetch_yahoo_quote(stock, opener=opener, now=now)
 
 
@@ -713,6 +854,9 @@ def _domestic_after_text(item: Quote) -> str:
 def quote_line(item: Quote) -> str:
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
     body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    if item.stock.market == '미국' and item.source == '나스닥 웹':
+        # 공개 웹 응답은 별도 실시간 거래소 라이선스/세션을 보증하지 않는다.
+        return body + f"\n   └ 미국 {item.market_time.strftime('%m/%d %H:%M')} ET · 나스닥 공개 시세(지연 여부 미확인)"
     if item.stock.market != '한국' or item.domestic is None:
         # 종전 Quote 생성자/테스트 호출에 대해서는 출력 형식을 변경하지 않는다.
         return body

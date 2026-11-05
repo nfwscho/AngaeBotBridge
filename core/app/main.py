@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.5.2 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.5.8 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -45,6 +45,10 @@
 43. v0.5.7 한국 두 종목은 네이버 폴링 우선·지연/시장상태/체결시각 검증 결과를 기존 응답에 함께 표시한다.
 44. 네이버 시간외 가격은 KRX 본장과 분리하며 사용자 그룹·숫자 선택·이벤트/작업 로그·인증·AI OFF는 유지한다.
 45. Android Bridge 앱/배터리 정보·DB 스키마/세션·과거 종가/변동성 계산은 변경하지 않는다.
+46. v0.5.8 미국 종목의 Yahoo Chart 오류 발생 시 나스닥 공개 웹 시세 보조 조회는 market.py에서만 수행한다.
+47. 해당 보조 조회는 원래 DB 락 외부/인증/요청 중복·로깅 흐름으로 실행하고 인증키/사용자 데이터/스키마는 변경하지 않는다.
+48. 나스닥 시세는 지연 여부를 임의로 실시간이라고 표시하지 않고, 실패하면 종목별 조회 불가로 격리한다.
+49. 국내 네이버·일본 키오시아·기존 과거 데이터 분석·숫자 메뉴·Android 배터리·AI OFF·전체 로그를 그대로 유지한다.
 """
 from __future__ import annotations
 
@@ -68,7 +72,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus
 
-VERSION = "0.5.7"
+VERSION = "0.5.8"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
