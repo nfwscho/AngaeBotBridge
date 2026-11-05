@@ -4,7 +4,7 @@
 2. 시장별 시세 기준정보는 하단에 모으며 확정 종가를 실시간으로 표시하지 않는다.
 3. 원본 Quote 데이터와 기존 상세 quote_line 출력은 변경하지 않는다.
 4. 메모리7 및 사용자 그룹의 기존 시세 조회·로그·중복처리·메뉴·배터리 동작은 별도 모듈에서 유지한다.
-5. 상승 🔺 +, 하락 🔵▼ -, 보합 ➖ 표시를 검증한다.
+5. 상승 🔺 +, 하락 ▽ -, 보합 ➖ 표시를 검증한다.
 """
 import unittest
 from datetime import datetime
@@ -23,9 +23,9 @@ class CompactStockReplyTests(unittest.TestCase):
         kr = self.make_quote('삼성전자', '005930.KS', 'KRW', '한국', 'Asia/Seoul', 205250, -5.85)
         us = self.make_quote('웨스턴디지털', 'WDC', 'USD', '미국', 'America/New_York', 323.83, -6.77)
         jp = self.make_quote('키오시아', '285A.T', 'JPY', '일본', 'Asia/Tokyo', 10085, -6.05)
-        self.assertEqual(compact_quote_line(kr), '삼성전자 20.5만 🔵▼ -5.85%')
-        self.assertEqual(compact_quote_line(us), 'WDC $323.83 🔵▼ -6.77%')
-        self.assertEqual(compact_quote_line(jp), '키오시아 ¥10,085 🔵▼ -6.05%')
+        self.assertEqual(compact_quote_line(kr), '삼성전자 20.5만 ▽ -5.85%')
+        self.assertEqual(compact_quote_line(us), 'WDC $323.83 ▽ -6.77%')
+        self.assertEqual(compact_quote_line(jp), '키오시아 ¥10,085 ▽ -6.05%')
         self.assertTrue(all('\n' not in compact_quote_line(q) for q in (kr, us, jp)))
         self.assertEqual(kr.price, 205250)
         self.assertIn('205,250원', quote_line(kr))
