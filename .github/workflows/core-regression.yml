@@ -12,6 +12,9 @@ on:
       - feature/group-number-selection-20261105
       - feature/menu-back-zero-20261105
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 jobs:
   unittest:
