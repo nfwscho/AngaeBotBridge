@@ -53,7 +53,7 @@
 46. 실패 공급자별 HTTP/데이터 오류와 사용된 보조 공급자를 기존 서버 로그에 기록하되 토큰/원문/개인정보는 기록하지 않는다.
 47. 한국 네이버 KRX/NXT·일본 키오시아·기존 메모리7/관심그룹·숫자 메뉴·배터리·전체 SQLite·AI/운영 로그는 보존한다.
 48. 조회 실패가 전부인 경우에는 금액을 만들거나 직전 시세를 실시간인 양 표시하지 않고 종전 조회 불가를 유지한다.
-26. 카카오톡 간결 시세 목록은 상승 🔺 +, 하락 🔽 -, 보합 ➖로 구분하며 기존 가격·등락률·출처·로그는 유지한다.
+26. 카카오톡 간결 시세 목록은 상승 🔺 +, 하락 🔵▼ -, 보합 ➖로 구분하며 기존 가격·등락률·출처·로그는 유지한다.
 """
 from __future__ import annotations
 
@@ -1080,7 +1080,7 @@ def compact_quote_line(item: Quote) -> str:
         price = f'¥{item.price:,.0f}'
     else:
         price = f'${item.price:,.0f}' if item.price >= 500 else f'${item.price:,.2f}'
-    arrow = '🔺' if item.percent > 0.00001 else ('🔽' if item.percent < -0.00001 else '➖')
+    arrow = '🔺' if item.percent > 0.00001 else ('🔵▼' if item.percent < -0.00001 else '➖')
     sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
     return f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
 
