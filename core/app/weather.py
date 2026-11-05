@@ -194,7 +194,7 @@ def forecast_text(location: WeatherLocation, period: str) -> str:
                 f"{_day(dates, i)} {_weather_label(_at(daily, 'weather_code', i))} "
                 f"{_value(_at(daily, 'temperature_2m_min', i), '℃')}~"
                 f"{_value(_at(daily, 'temperature_2m_max', i), '℃')} "
-                f"· 비 {_value(_at(daily, 'precipitation_probability_max', i), '%')}"
+                f"· 강수 {_value(_at(daily, 'precipitation_probability_max', i), '%')}"
             )
         return "\n".join(lines + [source])
     index = 0 if period == "오늘" else 1
