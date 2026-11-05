@@ -6,7 +6,7 @@
 - **지역**: 별도 `weather_locations` SQLite 테이블에 방·발신자별 좌표를 저장. 미설정 기본 지역은 서울. 국내 지오코딩/입력 검증, GPS 접근 없음.
 - **안정성**: 인증·중복 요청·jobs/events 로그·5분 번호 선택·0/00 이동을 유지하며 API 장애/잘못된 지명은 예보 추측 없이 오류 응답. 기존 주식/AI/개인 메모/설정/배터리·Android UI와 기존 DB 테이블을 보존.
 - **모듈/버전**: `core/app/weather.py`(응답 하단 담당 경로), Python Core v0.7.2, Android Bridge v0.4.13(versionCode 17). Python/Kotlin 회귀 테스트 추가.
-- **배포**: S20+ 테스트는 `deploy-angaebot.ps1 -Branch "feature/weather-forecast-20261106"`로 수행하고, 실기기 검증 후 main 병합을 요청. 무료 비상업적 이용 조건은 Open-Meteo 공식 약관 확인.
+- **배포**: S20+ 테스트는 `deploy-angaebot.ps1 -Branch "feature/weather-forecast-20261106" -InstallAndroid`로 수행하고, 실기기 검증 후 main 병합을 요청. 무료 비상업적 이용 조건은 Open-Meteo 공식 약관 확인.
 
 ## 2026-11-06 — 홈 순서 변경 및 부·금·개 단축 명령 (feature/personal-notes-sectors-20261106)
 
