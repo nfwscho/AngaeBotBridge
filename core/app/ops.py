@@ -22,6 +22,8 @@ v0.5.3은 기존 운영 상태·로그 흐름을 유지한 채 종목 이름 조
 19. 기존 SQLite 테이블·로그·DB 스키마·원격 작업·Android UI·기존 운영 명령의 출력은 변경하지 않는다.
 20. 인증된 상태 API에 로컬 배포기록에서 읽은 브랜치와 SHA만 노출하며 기록이 없으면 미확인 반환한다.
 21. 실제 배포된 코어와 GitHub의 main 최신 커밋을 혼동하지 않고 기존 배포정보 화면은 유지한다.
+22. 설정 1번 통합 상태에 기존 서비스·SSH·가동시간, 실제 Core 버전·배포 브랜치·커밋을 표시한다.
+23. 기존 상세상태/서버상태/가동시간 API 및 주식/AI/사용자 DB·로그는 유지한다.
 """
 from __future__ import annotations
 
@@ -80,6 +82,29 @@ def details(uptime_seconds: int, *, services=service_status, ssh=ssh_status) -> 
             f"Core {services('angaebot-core')} · 감시 {services('angaebot-watchdog')}\n"
             f"SSH {services('sshd')} · 8022 {ssh()}\n"
             f"⏱ {format_uptime(uptime_seconds)}")
+
+
+def unified_status(uptime_seconds: int, core_version: str, *,
+                   services=service_status, ssh=ssh_status,
+                   info_path: Path | None = None) -> str:
+    """설정 1번: Core·감시·SSH·가동시간·배포 기록을 한 화면에서 읽기 전용 통합한다.
+
+    기존 상세상태/서버상태 명령 출력은 변경하지 않으며 사용자의 개인 DB/로그도
+    조회·수정하지 않는다. 실제 Android APK 버전은 Python에서 추측하지 않는다.
+    """
+    service_lines = details(uptime_seconds, services=services, ssh=ssh).splitlines()
+    identity = deployment_identity(info_path=info_path)
+    if identity['branch'] and identity['sha']:
+        source = '배포: ' + identity['branch'] + ' · ' + identity['sha'][:12]
+    else:
+        source = '배포: 브랜치·커밋 미확인'
+    return '\n'.join((
+        '🛠 앙개봇 통합 상태',
+        f'Python Core v{core_version} · 가동 {format_uptime(uptime_seconds)}',
+        *service_lines[1:3],
+        source,
+        '※ Android 앱 버전은 상(로컬 상태) · 배터리는 답장 하단',
+    ))
 
 
 def command_stats(db: sqlite3.Connection, room: str, sender: str) -> str:

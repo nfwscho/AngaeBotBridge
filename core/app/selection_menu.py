@@ -32,6 +32,12 @@
 30. 메뉴 점프는 정확한 숫자 경로를 실제 메뉴 선택으로 순회해 중간 시세 조회 없이 최종 명령만 실행한다.
 31. 그룹·종목·최근조회 메뉴의 동적 선택은 소유 채팅방/발신자 범위만 읽으며 CRUD·AI·임의 명령을 허용하지 않는다.
 32. 기존 주식 메뉴 및 0/00/5분 세션·단축어·기능·로그·DB 스키마는 모두 유지한다.
+33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
+34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
+35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
+36. 전체 트리 조회는 DB/시세/외부 API를 읽거나 수정하지 않으며 기존 세션·인증·로그 경로를 따른다.
+37. 설정 1번 통합 상태와 8번 간결 도움말을 추가하고 기존 1~7 번호/기능을 보존한다.
+38. 도움말은 설정의 인증·번호 점프·5분 세션을 재사용하며 기존 주식/AI/로그·DB는 유지한다.
 """
 from __future__ import annotations
 
@@ -106,9 +112,11 @@ class StockSelectionMenus:
                 self._states.pop(oldest, None)
             self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
 
-    def open_home(self, room: str, sender: str) -> MenuAnswer:
-        key = self._key(room, sender)
-        choices = (
+
+    @staticmethod
+    def _home_choices() -> tuple[MenuChoice, ...]:
+        """홈 항목의 단일 정의: 실제 응답과 전체 메뉴 트리에서 함께 사용한다."""
+        return (
             MenuChoice('📈 주식', page='stock-root'),
             MenuChoice('🏸 배드민턴', page='category:배드민턴'),
             MenuChoice('🍳 요리', page='category:요리'),
@@ -117,6 +125,103 @@ class StockSelectionMenus:
             MenuChoice('🌤 날씨', page='category:날씨'),
             MenuChoice('⚙️ 설정·운영', page='settings-root'),
         )
+
+    @staticmethod
+    def _stock_choices() -> tuple[MenuChoice, ...]:
+        """주식 메뉴의 단일 정의."""
+        return (
+            MenuChoice('최근 사용한 주식 조회', page='recent'),
+            MenuChoice('메모리7 현재 시세', command_argument='메모리7'),
+            MenuChoice('반도체 그룹 시세', command_argument='반도체'),
+            MenuChoice('미국시총10 시세', command_argument='미국시총10'),
+            MenuChoice('관심종목 목록', command_argument='목록'),
+            MenuChoice('종목별 분석', page='analysis'),
+        )
+
+    @staticmethod
+    def _settings_choices() -> tuple[MenuChoice, ...]:
+        """운영 설정의 읽기 전용 항목. 1~6 기존 번호를 절대 변경하지 않는다."""
+        return (
+            MenuChoice('서버·서비스 상태 (통합)', page='ops:status'),
+            MenuChoice('배포 버전·커밋', page='ops:deployment'),
+            MenuChoice('최근 실행 로그', page='ops:logs'),
+            MenuChoice('설정 현황 (읽기 전용)', page='ops:configuration'),
+            MenuChoice('명령 통계', page='ops:stats'),
+            MenuChoice('최근 오류', page='ops:errors'),
+            MenuChoice('전체 메뉴 트리', page='ops:tree'),
+            MenuChoice('도움말', page='ops:help'),
+        )
+
+    @staticmethod
+    def _category_choices(category: str) -> tuple[MenuChoice, ...]:
+        """현재 콘텐츠 정의를 재사용해 트리와 실사용 메뉴의 번호 일치를 보장한다."""
+        return tuple(MenuChoice(name, page='pending:' + category + ':' + name)
+                     for name in CONTENT_ITEMS[category])
+
+    @staticmethod
+    def _analysis_choices() -> tuple[MenuChoice, ...]:
+        """기존 종목 분석 하위 선택지를 단일 정의로 유지한다."""
+        return tuple(MenuChoice(label, '분석 ' + label) for label in
+                     ('삼성전자', '하이닉스', '마이크론', '엔비디아', '애플', '샌디스크', '메모리7'))
+
+    @staticmethod
+    def help_report() -> str:
+        """설정 8번 간결 안내. 폐지한 카카오톡 사용자 명령은 표시하지 않는다."""
+        return '\n'.join((
+            '📖 앙개봇 도움말',
+            '앙(홈) · 주(주식) · 설(설정)',
+            '민(배드민턴) · 요(요리) · 여(여행) · 종(종친) · 날(날씨)',
+            '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
+            '주 2 메모리7 시세 · 주 분 삼성전자 분석',
+            '1~10 선택 · 0 이전 · 00 홈 · 메뉴 5분 유효',
+            '※ 시세는 무료·지연 가능 · 도: 간편 도움말 · 상: Android 상태',
+        ))
+
+    @classmethod
+    def menu_tree(cls) -> str:
+        """실제 메뉴 선택지에서 번호 경로를 재귀 구성하는 부작용 없는 전체 트리 조회.
+
+        사용자별 최근 명령·관심그룹·시세 종목은 값과 수가 변하므로 표시 유형만
+        안내한다. DB·API·네트워크를 조회하지 않으며 비밀키/사용자 정보는 포함하지 않는다.
+        """
+        lines = ['🗺 앙개봇 전체 메뉴 트리', '※ 번호는 홈에서 시작한 경로입니다.']
+
+        def walk(choices: tuple[MenuChoice, ...], prefix: tuple[int, ...] = ()) -> None:
+            for index, choice in enumerate(choices, 1):
+                path = prefix + (index,)
+                number = '-'.join(map(str, path))
+                detail = ''
+                if choice.page.startswith('pending:'):
+                    detail = ' [개발 예정]'
+                elif choice.page == 'recent':
+                    detail = ' [본인 최근 조회 목록]'
+                elif choice.command_argument == '목록':
+                    detail = ' [본인 관심그룹 목록]'
+                elif choice.command_argument in {'메모리7', '반도체', '미국시총10'}:
+                    detail = ' [조회 후 종목 선택]'
+                lines.append('  ' * len(prefix) + f'{number}. {choice.label}{detail}')
+                if choice.page == 'stock-root':
+                    walk(cls._stock_choices(), path)
+                elif choice.page == 'settings-root':
+                    walk(cls._settings_choices(), path)
+                elif choice.page.startswith('category:'):
+                    walk(cls._category_choices(choice.page.split(':', 1)[1]), path)
+                elif choice.page == 'analysis':
+                    walk(cls._analysis_choices(), path)
+
+        walk(cls._home_choices())
+        lines.extend([
+            '',
+            '※ 빠른 이동: 앙 1 6 1 / 앙 7 7 / 설 7 / 설 8 / 주 6 1',
+            '※ 단축: 앙 홈 · 주 주식 · 민 배드민턴 · 요 요리 · 여 여행 · 종 종친 · 날 날씨 · 설 설정',
+            '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
+            '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',
+        ])
+        return '\n'.join(lines)
+
+    def open_home(self, room: str, sender: str) -> MenuAnswer:
+        key = self._key(room, sender)
+        choices = self._home_choices()
         self._save(key, choices, back='home', origin='home')
         return MenuAnswer(self._render('🤖 앙개봇 메인 메뉴', choices), menu_active=True)
 
@@ -125,7 +230,7 @@ class StockSelectionMenus:
         items = CONTENT_ITEMS.get(category)
         if items is None:
             raise StockQuoteError('등록되지 않은 콘텐츠 메뉴입니다.')
-        choices = tuple(MenuChoice(name, page='pending:' + category + ':' + name) for name in items)
+        choices = self._category_choices(category)
         self._save(key, choices, back='home', origin='category:' + category)
         return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
                           + '\n※ 하위 기능은 순차적으로 개발됩니다.', menu_active=True)
@@ -133,14 +238,7 @@ class StockSelectionMenus:
     def open_settings(self, room: str, sender: str) -> MenuAnswer:
         """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
         key = self._key(room, sender)
-        choices = (
-            MenuChoice('서버·서비스 상태', page='ops:status'),
-            MenuChoice('배포 버전·커밋', page='ops:deployment'),
-            MenuChoice('최근 실행 로그', page='ops:logs'),
-            MenuChoice('설정 현황 (읽기 전용)', page='ops:configuration'),
-            MenuChoice('명령 통계', page='ops:stats'),
-            MenuChoice('최근 오류', page='ops:errors'),
-        )
+        choices = self._settings_choices()
         self._save(key, choices, back='home', origin='settings')
         return MenuAnswer(self._render('⚙️ 설정·운영 메뉴', choices)
                           + '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만', menu_active=True)
@@ -197,14 +295,7 @@ class StockSelectionMenus:
 
     def open(self, room: str, sender: str, *, back: str = 'menu') -> MenuAnswer:
         key = self._key(room, sender)
-        choices = (
-            MenuChoice('최근 사용한 주식 조회', page='recent'),
-            MenuChoice('메모리7 현재 시세', command_argument='메모리7'),
-            MenuChoice('반도체 그룹 시세', command_argument='반도체'),
-            MenuChoice('미국시총10 시세', command_argument='미국시총10'),
-            MenuChoice('관심종목 목록', command_argument='목록'),
-            MenuChoice('종목별 분석', page='analysis'),
-        )
+        choices = self._stock_choices()
         self._save(key, choices, back=back)
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
@@ -305,8 +396,7 @@ class StockSelectionMenus:
             self._save(key, choices, back='menu')
             return MenuAnswer(self._render('📋 내 최근 주식 조회 명령', choices), menu_active=True)
         if choice.page == 'analysis':
-            choices = tuple(MenuChoice(label, '분석 ' + label) for label in
-                            ('삼성전자', '하이닉스', '마이크론', '엔비디아', '애플', '샌디스크', '메모리7'))
+            choices = self._analysis_choices()
             self._save(key, choices, back='menu')
             return MenuAnswer(self._render('📈 분석할 종목 선택', choices), menu_active=True)
         return MenuAnswer(execute_argument=choice.command_argument,

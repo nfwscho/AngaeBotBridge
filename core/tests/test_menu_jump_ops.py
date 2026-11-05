@@ -8,6 +8,7 @@
 6. 최근 실행 로그는 같은 채팅방과 발신자의 명령·시간·결과 상태만 표시하며 인수·타인 정보는 절대 출력하지 않는다.
 7. 기존 주식·AI/로그·SQLite·설정·Android UI/배터리 기능은 그대로 보존한다.
 8. 네트워크 연결·장치·서버 재시작·외부 파일 변경 없이 임시 SQLite DB와 mock만 사용한다.
+9. 설정 메뉴의 8번 도움말을 기존 1~7 항목과 함께 읽기 전용 회귀 검증한다.
 """
 from __future__ import annotations
 
@@ -98,7 +99,7 @@ class MenuJumpCoreTests(unittest.TestCase):
 
     def test_settings_subsections_readonly(self):
         for number, expected in (("2", "배포 정보"), ("4", "설정 현황"),
-                                 ("5", "명령 통계"), ("6", "최근 오류")):
+                                 ("5", "명령 통계"), ("6", "최근 오류"), ("8", "도움말")):
             with self.subTest(number=number):
                 answer = self.post("경로 설정 " + number).json()
                 self.assertTrue(answer["ok"], answer)
