@@ -231,7 +231,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
         lines = ["📂 관심그룹", "1. 메모리7 8종목 · 기본"]
         lines.extend(f"{index}. {name} {count}종목" for index, (name, count) in enumerate(rows, start=2))
         lines.append("※ 추가: 주식 그룹생성 그룹명")
-        lines.append(f"※ 5분 내 1~{len(rows)+1}: 그룹 시세")
+        lines.append(f"※ 5분 내 1~{len(rows)+1}: 그룹 시세 · 0: 이전 메뉴")
         return "\n".join(lines)
     if action == "프리셋":
         if len(parts) != 2 or parts[1] != US_MARKET_CAP_PRESET_NAME:
