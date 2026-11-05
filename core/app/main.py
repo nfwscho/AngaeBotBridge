@@ -53,6 +53,10 @@
 
 51. v0.5.10 미국 시세 백업 조회(나스닥 확정 일봉·네이버 해외 일봉)는 market.py만 확장하며 기존 기능/명령/SQLite/로그/UI/배터리를 보존한다.
 52. 주식 목록 응답은 그룹 번호 선택 세션을 활성화하고 기존 선택/시세/인증/로그 흐름을 그대로 재사용한다.
+53. 통합 메뉴 명령은 기존 인증 FastAPI/SQLite 요청 중복 방지/작업·이벤트 로그를 그대로 사용한다.
+54. 홈/주식/배드민턴/요리/여행/종친/영어 메뉴와 0 이전·00 홈을 주식 기존 선택 상태에서 통합 관리한다.
+55. 홈에서 기존 주식 시세·분석을 선택하면 기존 stock/history/watchlists 모듈로 전달하며 DB·AI/Android 로그는 보존한다.
+56. 미개발 콘텐츠 기능은 안내만 제공하며 외부 AI 호출/파일 변경/개인정보 조회를 실행하지 않는다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -76,10 +80,10 @@ from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
-from .selection_menu import StockSelectionMenus
+from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 
 VERSION = "0.5.10"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
 
 
 class CommandRequest(BaseModel):
@@ -148,7 +152,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         stock_menu_active = False
         resolved_argument = request.argument
         selection_back = 'menu'
-        if request.command in {"주식", "메모리7"}:
+        if request.command in {"주식", "메모리7", "메뉴"}:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
             if old is not None:
@@ -156,9 +160,26 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                 return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
             try:
-                # 짧은 메뉴/번호 선택은 동일한 인증·dedup·jobs/events 흐름에서 먼저 해석한다.
-                if request.command == "주식" and request.argument.strip() == "메뉴":
-                    menu = selection_menus.open(request.room, request.sender)
+                # 메뉴도 주식과 동일한 인증·중복 요청·jobs/events 로그 경로를 통과한다.
+                if request.command == "메뉴":
+                    action = request.argument.strip()
+                    if action in ("", "홈"):
+                        menu = selection_menus.open_home(request.room, request.sender)
+                    elif action == "주식":
+                        menu = selection_menus.open(request.room, request.sender, back='home')
+                    elif action in CONTENT_ITEMS:
+                        menu = selection_menus.open_category(request.room, request.sender, action)
+                    elif action.startswith("선택 "):
+                        with closing(connect()) as read_db:
+                            menu = selection_menus.choose(read_db, request.room, request.sender,
+                                                          action[3:].strip())
+                    else:
+                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/영 또는 번호 선택")
+                    stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
+                    resolved_argument = menu.execute_argument
+                    selection_back = menu.back
+                elif request.command == "주식" and request.argument.strip() == "메뉴":
+                    menu = selection_menus.open(request.room, request.sender, back='home')
                     stock_reply, stock_menu_active = menu.reply, menu.menu_active
                 elif request.command == "주식" and request.argument.startswith("선택 "):
                     with closing(connect()) as read_db:
@@ -171,13 +192,13 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 if stock_reply is not None:
                     pass
                 elif request.command == "메모리7" or (request.command == "주식" and resolved_argument.strip() == "메모리7"):
-                    stock_reply = execute_stock_command(request.command, resolved_argument)
+                    stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
                         selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
                                                     back=selection_back)
                         stock_menu_active = True
-                elif request.command == "주식" and is_analysis_request(resolved_argument):
+                elif request.command in {"주식", "메뉴"} and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
                     if len(parts) < 2:
                         raise StockQuoteError("사용법: 앙개야 주식 분석 마이크론 (또는 삼성전자/하이닉스/그룹명)")
@@ -202,7 +223,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 if stock is None:
                                     raise invalid_name
                             stock_reply = individual_report(fetch_history(stock))
-                elif request.command == "주식" and is_group_quote_request(resolved_argument):
+                elif request.command in {"주식", "메뉴"} and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, resolved_argument.strip())
                     stock_reply = group_report(resolved_argument.strip(), stocks)
@@ -222,12 +243,12 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
                     return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
                 try:
-                    if request.command in {"주식", "메모리7"}:
+                    if request.command in {"주식", "메모리7", "메뉴"}:
                         if stock_error is not None:
                             raise stock_error
                         if stock_reply is not None:
                             reply = stock_reply
-                        elif request.command == "주식":
+                        elif request.command in {"주식", "메뉴"}:
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
                             if resolved_argument.strip() == '목록':
                                 selection_menus.open_groups(db, request.room, request.sender)
