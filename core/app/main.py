@@ -75,6 +75,7 @@
 72. 메모·일정의 등록/수정/삭제는 기존 jobs/events 단일 트랜잭션·request_id 중복방지를 재사용한다.
 73. 목록·검색·상세보기 번호는 5분 메뉴의 기존 인증·0/00 경로를 재사용하며 카톡 수동 입력만 지원한다.
 74. Samsung Notes 자동 연동·민감정보 암호화·알림 예약은 구현하지 않고 사용자가 중요 메모만 입력하도록 한다.
+75. v0.7.1 요청한 홈 1~10 재배치·금/개 단축과 도움말/트리 번호를 반영하며 기존 기능·로그·DB 스키마를 유지한다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -105,7 +106,7 @@ from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
                                RecordError, init_records_schema, execute_record_command)
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"} | PERSONAL_COMMANDS
 
 
@@ -214,7 +215,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             menu = selection_menus.choose(read_db, request.room, request.sender,
                                                           action[3:].strip())
                     else:
-                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/날/설/부/투/메 또는 번호 선택")
+                        raise StockQuoteError("메뉴 사용법: 앙/주/부/금/개/여/민/요/종/날/설 또는 번호 선택")
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back

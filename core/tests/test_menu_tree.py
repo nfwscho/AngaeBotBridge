@@ -8,7 +8,7 @@
 6. DB 스키마·원래 jobs/events 기록·Android 로그/UI/AI/주식시세 경로는 변경하지 않는다.
 8. 설정 도움말은 기존 7번 전체 트리 다음의 8번으로 추가되어 함께 표시된다.
 7. 카카오톡/Termux/외부 시세 접근 없이 TestClient와 임시 SQLite만 사용한다.
-9. 홈 8~10 부동산·금융투자·개인메모/일정 트리를 기존 단축어/번호와 함께 표시한다.
+9. v0.7.1 홈 2 부동산/3 금융·투자/9 개인·일정/10 설정을 트리의 정확한 경로와 대조한다.
 """
 from __future__ import annotations
 
@@ -32,20 +32,22 @@ class MenuTreeUnitTests(unittest.TestCase):
         for i, choice in enumerate(StockSelectionMenus._stock_choices(), 1):
             self.assertIn(f"1-{i}. {choice.label}", tree)
         for i, choice in enumerate(StockSelectionMenus._settings_choices(), 1):
-            self.assertIn(f"7-{i}. {choice.label}", tree)
+            self.assertIn(f"10-{i}. {choice.label}", tree)
         for i, choice in enumerate(StockSelectionMenus._analysis_choices(), 1):
             self.assertIn(f"1-6-{i}. {choice.label}", tree)
-        for root, category in enumerate(CONTENT_ITEMS, 2):
+        for category in CONTENT_ITEMS:
+            root = next(i for i, item in enumerate(StockSelectionMenus._home_choices(), 1)
+                        if item.page == 'category:' + category)
             for i, label in enumerate(CONTENT_ITEMS[category], 1):
                 self.assertIn(f"{root}-{i}. {label} [개발 예정]", tree)
 
     def test_tree_describes_dynamic_branches_without_exposing_records(self):
         tree = StockSelectionMenus.menu_tree()
-        self.assertIn("7-7. 전체 메뉴 트리", tree)
-        self.assertIn("7-8. 도움말", tree)
-        self.assertIn("8-1. 최근 메모 목록", tree)
-        self.assertIn("9-1. 최근 메모 목록", tree)
-        self.assertIn("10-2. 다가오는 일정", tree)
+        self.assertIn("10-7. 전체 메뉴 트리", tree)
+        self.assertIn("10-8. 도움말", tree)
+        self.assertIn("2-1. 최근 메모 목록", tree)
+        self.assertIn("3-1. 최근 메모 목록", tree)
+        self.assertIn("9-2. 다가오는 일정", tree)
         self.assertIn("1-1. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
         self.assertIn("1-5. 관심종목 목록 [본인 관심그룹 목록]", tree)
         self.assertIn("1-2. 메모리7 현재 시세 [조회 후 종목 선택]", tree)
@@ -96,12 +98,12 @@ class MenuTreeAPITests(unittest.TestCase):
         self.assertTrue(first["ok"], first)
         self.assertTrue(first["menu_active"])
         self.assertIn("앙개봇 전체 메뉴 트리", first["reply"])
-        self.assertIn("7-7. 전체 메뉴 트리", first["reply"])
+        self.assertIn("10-7. 전체 메뉴 트리", first["reply"])
         self.assertIn("⚙️ 설정·운영 메뉴", first["reply"])
         self.assertEqual(first["module_source"], "core.menu")
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 0").json()["reply"])
 
-        via_home = self.post("경로 홈 7 7").json()
+        via_home = self.post("경로 홈 10 7").json()
         self.assertTrue(via_home["ok"], via_home)
         self.assertIn("전체 메뉴 트리", via_home["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 00").json()["reply"])

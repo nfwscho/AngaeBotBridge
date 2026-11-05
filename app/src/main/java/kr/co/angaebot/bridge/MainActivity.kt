@@ -13,6 +13,7 @@
  * v0.4.10 카톡 사용자 명령 정리에 맞춰 관리화면의 도움말·통합 상태 안내만 갱신한다.
  * 기존 ON/OFF, 자연어 선택 스위치, 연결 진단, 인증/로그/DB/알림 관리 UI와 동작은 그대로 보존한다.
  * v0.4.11 부/투/메 및 개인 기록 기능 안내만 갱신하고 기존 UI 조작·명령 파서·로그·연결 시험은 유지한다.
+ * v0.4.12 사용자 요청 홈 메뉴 순서 및 부·금·개 단축 안내를 갱신하되 기존 UI/동작/로그를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -87,7 +88,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.4.11 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.12 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -134,7 +135,7 @@ class MainActivity : Activity() {
 
         root.addView(space(12))
         root.addView(section("②-A Python 명령 엔진 (Termux)"))
-        root.addView(label("카톡 메뉴: 앙(홈) / 설(설정) / 부(부동산) / 투(금융·투자) / 메(개인기록). 메모·일정의 등록·목록·검색·수정·삭제는 Python ON에서 사용합니다. 테스트·계산·질문 명령은 비활성화되었습니다.", 12f))
+        root.addView(label("카톡 메뉴: 앙(홈) / 부(부동산) / 금(금융·투자) / 개(개인 메모·일정) / 설(설정). 기존 투·메 단축어도 지원합니다. 기록 등록·목록·검색·수정·삭제는 Python ON에서 사용합니다. 테스트·계산·질문 명령은 비활성화되었습니다.", 12f))
         pythonSwitch = Switch(this).apply {
             text = "Python 연결 활성화 (기본 OFF)"
             textSize = 16f

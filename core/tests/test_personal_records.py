@@ -8,6 +8,7 @@
 6. 기존 jobs/events·stock_groups·ai_turns 테이블과 주식/AI 명령 처리 경로의 호환성 검증.
 7. 미확인 방/발신자 거부, 길이 제한, 최대 항목 수/메뉴 TTL 보존 확인.
 8. S20+/카카오톡/외부 네트워크 없이 임시 DB만 사용; 운영 DB·env·서버·로그를 건드리지 않는다.
+9. v0.7.1 요청한 홈 1~10 정확한 순서와 개인 기록 새 위치(2/3/9)·설정 10번 경로를 검증한다.
 """
 from __future__ import annotations
 
@@ -125,25 +126,30 @@ class RecordApiTests(unittest.TestCase):
         self.assertNotIn('할인가 10%_', self.call('메모', '검색 존재하지않는키워드').json()['reply'])
 
     def test_home_menu_new_sectors_and_numbers(self):
+        # 메뉴 순서를 명시적으로 검증하여 번호 점프/카톡 선택/전체 트리의 불일치를 방지한다.
+        self.assertEqual([item.label for item in StockSelectionMenus._home_choices()], [
+            '📈 주식', '🏠 부동산', '💰 금융·투자', '🧭 여행', '🏸 배드민턴',
+            '🍳 요리', '🌳 종친', '🌤 날씨', '🗂 개인 메모·일정', '⚙️ 설정·운영',
+        ])
         home = self.call('메뉴', '홈').json()
         self.assertTrue(home['ok'], home)
-        self.assertIn('8. 🏠 부동산', home['reply'])
-        self.assertIn('9. 💰 금융·투자', home['reply'])
-        self.assertIn('10. 🗂 개인 메모·일정', home['reply'])
-        self.assertIn('7. ⚙️ 설정·운영', home['reply'])
+        self.assertIn('2. 🏠 부동산', home['reply'])
+        self.assertIn('3. 💰 금융·투자', home['reply'])
+        self.assertIn('9. 🗂 개인 메모·일정', home['reply'])
+        self.assertIn('10. ⚙️ 설정·운영', home['reply'])
         tree = self.call('메뉴', '경로 설정 7').json()
-        self.assertIn('10-2. 다가오는 일정', tree['reply'])
-        self.assertIn('8-1. 최근 메모 목록', tree['reply'])
-        self.assertIn('9-1. 최근 메모 목록', tree['reply'])
+        self.assertIn('9-2. 다가오는 일정', tree['reply'])
+        self.assertIn('2-1. 최근 메모 목록', tree['reply'])
+        self.assertIn('3-1. 최근 메모 목록', tree['reply'])
         self.assertIn('앙개봇 메인 메뉴', self.call('메뉴', '선택 00').json()['reply'])
-        self.assertIn('부동산 메뉴', self.call('메뉴', '경로 홈 8').json()['reply'])
+        self.assertIn('부동산 메뉴', self.call('메뉴', '경로 홈 2').json()['reply'])
         self.assertIn('메인 메뉴', self.call('메뉴', '선택 0').json()['reply'])
         self.assertIn('금융·투자 메뉴', self.call('메뉴', '금융·투자').json()['reply'])
         self.assertIn('개인 메뉴', self.call('메뉴', '개인').json()['reply'])
 
     def test_menu_selected_record_detail_and_back(self):
         self.call('부동산', '추가 건물 | 중요한 정보')
-        listing = self.call('메뉴', '경로 홈 8 1').json()
+        listing = self.call('메뉴', '경로 홈 2 1').json()
         self.assertTrue(listing['ok'], listing)
         self.assertTrue(listing['menu_active'])
         self.assertIn('건물', listing['reply'])

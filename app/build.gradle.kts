@@ -23,6 +23,8 @@
 // 22. 기존 패키지명·서명·관리화면·토큰/SQLite·알림 RemoteInput·배터리 및 앱 업그레이드 보존.
 // 23. v0.4.11(versionCode 15)은 홈 8~10번과 메모/일정/부동산/금융투자 명령을 추가한다.
 // 24. 기존 앱 ID·서명·허용 목록·AI 설정·알림/RemoteInput·SQLite 로그/배터리·기존 명령은 보존한다.
+// 25. v0.4.12(versionCode 16)는 홈 메뉴 순서 조정, 단축 금·개 추가, 도움말 동기화만 수행한다.
+// 26. 기존 단축 투·메/기존 UI·권한·설정·DB·로그·5분 세션 및 카카오톡 응답 흐름을 보존한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -36,8 +38,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.4.11"
+        versionCode = 16
+        versionName = "0.4.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

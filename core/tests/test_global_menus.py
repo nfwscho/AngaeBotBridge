@@ -7,7 +7,7 @@
 5. 기존 주식 시세·분석 명령은 통합 메뉴에서도 동일한 실행 함수로 처리된다.
 6. 인증 FastAPI의 중복 요청 감지·jobs/events SQLite 로깅·원래 명령 보존을 검사한다.
 7. S20+/Android/실데이터 없이 순수 메모리와 모의 응답만 사용한다.
-8. 홈 8~10 신규 카테고리로 인해 8번은 유효하며 11번만 잘못된 번호로 검증한다.
+8. 홈은 정확히 10개(1 주식/2 부동산/3 금융/4 여행/5 배드민턴/6 요리/7 종친/8 날씨/9 개인/10 설정)이며 11번은 거부한다.
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ class GlobalMenuAPITests(unittest.TestCase):
         self.assertTrue(first["ok"])
         self.assertTrue(first["menu_active"])
         self.assertIn("앙개봇 메인 메뉴", first["reply"])
-        self.assertIn("배드민턴 메뉴", self.post("선택 2").json()["reply"])
+        self.assertIn("배드민턴 메뉴", self.post("선택 5").json()["reply"])
         pending = self.post("선택 1").json()
         self.assertTrue(pending["ok"])
         self.assertTrue(pending["menu_active"])
@@ -134,10 +134,10 @@ class GlobalMenuAPITests(unittest.TestCase):
         self.post("홈")
         self.assertFalse(self.post("선택 1", room="다른방").json()["ok"])
         request_id = "global_menu_repeat_001"
-        first = self.post("선택 6", request_id=request_id).json()
+        first = self.post("선택 8", request_id=request_id).json()
         self.assertTrue(first["ok"])
         self.assertIn("날씨 메뉴", first["reply"])
-        again = self.post("선택 6", request_id=request_id).json()
+        again = self.post("선택 8", request_id=request_id).json()
         self.assertTrue(again["duplicate"])
         self.assertEqual(again["reply"], first["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 0").json()["reply"])

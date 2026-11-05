@@ -15,6 +15,7 @@
  * v0.4.9: 영 호출 제거, 날씨·설정 한 글자 단축 메뉴와 주/앙/날/설 1~5단계 숫자 메뉴 점프를 검증한다.
  * 기존 주 분/주 목록/상/도/사용자 호출어 및 일반 문장 오인식 방지 회귀 테스트를 보존한다.
  * v0.4.10은 테스트/ping·계산·질문 명령이 카톡에서 무시됨을 검사하고, 간결 도움말과 상태 번호를 확인한다.
+ * v0.4.12은 신규 부·금·개 및 홈 10/9 경로와 구형 투·메 호환을 회귀 검증한다.
  */
 package kr.co.angaebot.bridge
 
@@ -54,7 +55,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 2 메모리7 시세"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.11"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.12"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
@@ -72,9 +73,14 @@ class CommandParserTest {
     }
     @Test fun personalRecordSectorsAndCommands() {
         assertEquals(ParseResult.Command("메뉴", "부동산"), CommandParser.parse("부", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "금융·투자"), CommandParser.parse("금", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "개인"), CommandParser.parse("개", "앙개야"))
+        // 구형 단축어도 지우지 않는다.
         assertEquals(ParseResult.Command("메뉴", "금융·투자"), CommandParser.parse("투", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "개인"), CommandParser.parse("메", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 부동산 1"), CommandParser.parse("부 1", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 금융·투자 1"), CommandParser.parse("금 1", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 개인 2"), CommandParser.parse("개 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 금융·투자 1"), CommandParser.parse("투 1", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 개인 2"), CommandParser.parse("메 2", "앙개야"))
         for (name in listOf("메모", "일정", "부동산", "투자", "금융", "기록")) {
@@ -86,7 +92,7 @@ class CommandParserTest {
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("부동산", "앙개야"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("투자가", "앙개야"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("메모장", "앙개야"))
-        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("부/투/메"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("부(부동산) · 금(금융·투자) · 개(개인 메모·일정)"))
     }
 
     @Test fun exactShortcutMenus() {
@@ -114,6 +120,8 @@ class CommandParserTest {
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2 2"), CommandParser.parse("앙 1 2 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2"), CommandParser.parse("앙개야 메뉴 1 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 설정 3"), CommandParser.parse("설 3", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 홈 10 7"), CommandParser.parse("앙 10 7", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 홈 9 2"), CommandParser.parse("앙 9 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 날씨 1"), CommandParser.parse("날 1", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 요리 2"), CommandParser.parse("요 2", "앙개야"))
         for (text in listOf("주변 2", "설정 2", "날씨 2", "민트 1", "요 레시피", "앙상블 1")) {

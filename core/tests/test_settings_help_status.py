@@ -7,6 +7,7 @@
 5. 인증·발신자 범위 격리·요청 ID 중복 처리·0/00 복귀와 기존 번호(설 1~7)를 보존한다.
 6. 기존 상세상태/서버상태 내부 API와 SQLite jobs/events·AI·주식·배터리/Android UI 기능은 보존한다.
 7. 외부 장치/SSH 접속·시세 HTTP·서비스 재시작 없이 임시 SQLite와 mock만 사용한다.
+8. 홈 설정 10-8 경로로 이동해도 직접 설 8과 동일한 간결 도움말을 반환하는지 검증한다.
 """
 from __future__ import annotations
 
@@ -87,7 +88,7 @@ class HelpAndStatusAPITests(unittest.TestCase):
         self.assertEqual(a['module_source'], 'core.menu')
         self.assertTrue(a['menu_active'])
         self.assertIn('앙개봇 메인 메뉴', self.post('선택 0').json()['reply'])
-        b = self.post('경로 홈 7 8').json()
+        b = self.post('경로 홈 10 8').json()
         self.assertIn('설 8 도움말', b['reply'])
         self.assertIn('앙개봇 메인 메뉴', self.post('선택 00').json()['reply'])
 

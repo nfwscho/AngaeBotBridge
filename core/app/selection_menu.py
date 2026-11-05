@@ -41,6 +41,9 @@
 39. 홈 8 부동산, 9 금융·투자, 10 개인 메모·일정으로 확장하며 기존 홈 1~7 번호를 유지한다.
 40. 분야별 최신 메모·다가오는 일정을 목록에서 번호로 상세 조회하고 0/00·5분 스코프·로그를 보존한다.
 41. 개인 기록의 제목/본문은 SQLite 개인 기록 모듈에서만 다루며 메뉴 세션에는 번호/제목만 임시 저장한다.
+42. v0.7.1 홈 1~10 순서는 주식/부동산/금융·투자/여행/배드민턴/요리/종친/날씨/개인/설정으로 구성한다.
+43. 전체 메뉴 트리·설정 8 도움말·연속 번호 경로는 같은 홈 정의를 사용하므로 순서가 항상 일치한다.
+44. 기존 부/투/메 단축어를 유지하면서 금(투자)·개(개인)를 추가하고 로그/인증·5분 선택 세션을 유지한다.
 """
 from __future__ import annotations
 
@@ -123,15 +126,15 @@ class StockSelectionMenus:
         """홈 항목의 단일 정의: 실제 응답과 전체 메뉴 트리에서 함께 사용한다."""
         return (
             MenuChoice('📈 주식', page='stock-root'),
-            MenuChoice('🏸 배드민턴', page='category:배드민턴'),
-            MenuChoice('🍳 요리', page='category:요리'),
-            MenuChoice('🧭 여행', page='category:여행'),
-            MenuChoice('🌳 종친', page='category:종친'),
-            MenuChoice('🌤 날씨', page='category:날씨'),
-            MenuChoice('⚙️ 설정·운영', page='settings-root'),
             MenuChoice('🏠 부동산', page='records:root:부동산'),
             MenuChoice('💰 금융·투자', page='records:root:금융·투자'),
+            MenuChoice('🧭 여행', page='category:여행'),
+            MenuChoice('🏸 배드민턴', page='category:배드민턴'),
+            MenuChoice('🍳 요리', page='category:요리'),
+            MenuChoice('🌳 종친', page='category:종친'),
+            MenuChoice('🌤 날씨', page='category:날씨'),
             MenuChoice('🗂 개인 메모·일정', page='records:root:개인'),
+            MenuChoice('⚙️ 설정·운영', page='settings-root'),
         )
 
     @staticmethod
@@ -196,12 +199,12 @@ class StockSelectionMenus:
         return '\n'.join((
             '📖 앙개봇 도움말',
             '앙(홈) · 주(주식) · 설(설정)',
-            '민(배드민턴) · 요(요리) · 여(여행) · 종(종친) · 날(날씨)',
+            '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
+            '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 시세 · 주 분 삼성전자 분석',
-            '앙 8/9/10 부동산·투자·개인 메모/일정 · 등록/검색',
-            '1~10 선택 · 0 이전 · 00 홈 · 메뉴 5분 유효',
-            '※ 시세는 무료·지연 가능 · 도: 간편 도움말 · 상: Android 상태',
+            '앙 2/3/9 메모·일정 관리 · 분야별 등록/검색',
+            '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
 
     @classmethod
@@ -241,8 +244,8 @@ class StockSelectionMenus:
         walk(cls._home_choices())
         lines.extend([
             '',
-            '※ 빠른 이동: 설 7 / 설 8 / 앙 8 1 / 앙 9 1 / 앙 10 2',
-            '※ 단축: 앙 홈 · 주 주식 · 민 배드민턴 · 요 요리 · 여 여행 · 종 종친 · 날 날씨 · 설 설정 · 부/투/메 기록',
+            '※ 빠른 이동: 앙 2 1 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
+            '※ 단축: 앙 홈 · 주 주식 · 부 부동산 · 금 금융·투자 · 개 개인 · 여 여행 · 민 배드민턴 · 요 요리 · 종 종친 · 날 날씨 · 설 설정',
             '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
             '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',
         ])
