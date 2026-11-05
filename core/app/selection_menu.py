@@ -22,6 +22,7 @@
 20. 선택 세션은 기존 5분·방/발신자 격리·한 번 선택 후 종료를 재사용하고 DB를 변경하지 않는다.
 21. 숫자 0은 현재 선택 화면에서 이전 메뉴(그룹 목록 또는 주식 메인 메뉴)로 돌아간다.
 22. 뒤로가기는 기존 인증·5분 만료·방/발신자 격리를 따르며 DB와 기존 로그를 변경하지 않는다.
+23. 그룹 시세 선택의 진입 화면을 기억해 주식 메인 메뉴와 관심그룹 목록으로 정확히 복귀한다.
 """
 from __future__ import annotations
 
@@ -49,6 +50,7 @@ class MenuAnswer:
     reply: str = ''
     execute_argument: str = ''
     menu_active: bool = False
+    back: str = 'menu'
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,7 @@ class MenuState:
     expire_at: float
     choices: tuple[MenuChoice, ...]
     back: str = 'menu'
+    origin: str = 'menu'
 
 
 class StockSelectionMenus:
@@ -74,14 +77,14 @@ class StockSelectionMenus:
         return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
                           '※ 번호 입력 · 5분 유효'])
 
-    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu') -> None:
+    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu', origin: str = 'menu') -> None:
         now = self._clock()
         with self._lock:
             self._states = {k: v for k, v in self._states.items() if v.expire_at > now}
             if len(self._states) >= MAX_MENU_SESSIONS and key not in self._states:
                 oldest = min(self._states, key=lambda k: self._states[k].expire_at)
                 self._states.pop(oldest, None)
-            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back)
+            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
 
     def open(self, room: str, sender: str) -> MenuAnswer:
         key = self._key(room, sender)
@@ -114,7 +117,7 @@ class StockSelectionMenus:
             WHERE room=? AND sender=? ORDER BY created_at,rowid""", (room, sender)).fetchall()
         choices = (MenuChoice('메모리7', command_argument='메모리7'),) + tuple(
             MenuChoice(name, command_argument=name) for (name,) in rows)
-        self._save(key, choices, back='menu')
+        self._save(key, choices, back='menu', origin='groups')
 
     @staticmethod
     def _recent(db: sqlite3.Connection, room: str, sender: str) -> tuple[MenuChoice, ...]:
@@ -175,4 +178,5 @@ class StockSelectionMenus:
                             ('삼성전자', '하이닉스', '마이크론', '엔비디아', '애플', '샌디스크', '메모리7'))
             self._save(key, choices, back='menu')
             return MenuAnswer(self._render('📈 분석할 종목 선택', choices), menu_active=True)
-        return MenuAnswer(execute_argument=choice.command_argument)
+        return MenuAnswer(execute_argument=choice.command_argument,
+                          back='groups' if state.origin == 'groups' else 'menu')
