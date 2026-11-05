@@ -47,7 +47,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙개야 주식 메모리7"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.5"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.7"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
