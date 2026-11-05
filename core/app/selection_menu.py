@@ -36,6 +36,8 @@
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
 36. 전체 트리 조회는 DB/시세/외부 API를 읽거나 수정하지 않으며 기존 세션·인증·로그 경로를 따른다.
+37. 설정 1번 통합 상태와 8번 간결 도움말을 추가하고 기존 1~7 번호/기능을 보존한다.
+38. 도움말은 설정의 인증·번호 점프·5분 세션을 재사용하며 기존 주식/AI/로그·DB는 유지한다.
 """
 from __future__ import annotations
 
@@ -140,13 +142,14 @@ class StockSelectionMenus:
     def _settings_choices() -> tuple[MenuChoice, ...]:
         """운영 설정의 읽기 전용 항목. 1~6 기존 번호를 절대 변경하지 않는다."""
         return (
-            MenuChoice('서버·서비스 상태', page='ops:status'),
+            MenuChoice('서버·서비스 상태 (통합)', page='ops:status'),
             MenuChoice('배포 버전·커밋', page='ops:deployment'),
             MenuChoice('최근 실행 로그', page='ops:logs'),
             MenuChoice('설정 현황 (읽기 전용)', page='ops:configuration'),
             MenuChoice('명령 통계', page='ops:stats'),
             MenuChoice('최근 오류', page='ops:errors'),
             MenuChoice('전체 메뉴 트리', page='ops:tree'),
+            MenuChoice('도움말', page='ops:help'),
         )
 
     @staticmethod
@@ -160,6 +163,19 @@ class StockSelectionMenus:
         """기존 종목 분석 하위 선택지를 단일 정의로 유지한다."""
         return tuple(MenuChoice(label, '분석 ' + label) for label in
                      ('삼성전자', '하이닉스', '마이크론', '엔비디아', '애플', '샌디스크', '메모리7'))
+
+    @staticmethod
+    def help_report() -> str:
+        """설정 8번 간결 안내. 폐지한 카카오톡 사용자 명령은 표시하지 않는다."""
+        return '\n'.join((
+            '📖 앙개봇 도움말',
+            '앙(홈) · 주(주식) · 설(설정)',
+            '민(배드민턴) · 요(요리) · 여(여행) · 종(종친) · 날(날씨)',
+            '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
+            '주 2 메모리7 시세 · 주 분 삼성전자 분석',
+            '1~10 선택 · 0 이전 · 00 홈 · 메뉴 5분 유효',
+            '※ 시세는 무료·지연 가능 · 도: 간편 도움말 · 상: Android 상태',
+        ))
 
     @classmethod
     def menu_tree(cls) -> str:
@@ -196,7 +212,7 @@ class StockSelectionMenus:
         walk(cls._home_choices())
         lines.extend([
             '',
-            '※ 빠른 이동: 앙 1 6 1 / 앙 7 7 / 설 7 / 주 6 1',
+            '※ 빠른 이동: 앙 1 6 1 / 앙 7 7 / 설 7 / 설 8 / 주 6 1',
             '※ 단축: 앙 홈 · 주 주식 · 민 배드민턴 · 요 요리 · 여 여행 · 종 종친 · 날 날씨 · 설 설정',
             '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
             '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',

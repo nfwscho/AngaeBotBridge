@@ -68,6 +68,9 @@
 65. 배포기록이 없으면 빈 값을 반환하며 main이라고 추측하거나 GitHub에 외부 요청하지 않는다.
 66. 설정 7번 전체 메뉴 트리 조회를 기존 인증/중복방지/메뉴 활성화/작업·이벤트 로그 경로에 연결한다.
 67. 메뉴 트리 렌더링은 selection_menu.py의 공통 선택지 정의를 사용하며 DB 스키마/UI/명령을 변경하지 않는다.
+68. v0.6.2 설정 8번 간결 도움말 및 설정 1번 통합 상태를 제공하고 기존 설정 번호/로그를 유지한다.
+69. 운영 상태는 Core·감시·SSH·가동시간·배포정보를 읽기 전용으로 표시하며 기존 상세상태 명령도 보존한다.
+70. 카카오톡 사용자 명령만 비활성화하므로 계산/AI 레거시 내부 API·DB/사용자 로그는 호환성을 유지한다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -87,7 +90,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import (details, command_stats, recent_errors, uptime_report,
-                  deployment_report, recent_command_log, configuration_report, deployment_identity)
+                  deployment_report, recent_command_log, configuration_report, deployment_identity,
+                  unified_status)
 from .module_info import module_for
 from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
@@ -95,7 +99,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
 
 
@@ -220,13 +224,15 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 elif request.command == "메뉴" and resolved_argument.startswith("설정보기 "):
                     view = resolved_argument.split(" ", 1)[1]
                     if view == "status":
-                        report = details(int(time.monotonic() - began))
+                        report = unified_status(int(time.monotonic() - began), VERSION)
                     elif view == "deployment":
                         report = deployment_report(VERSION)
                     elif view == "configuration":
                         report = configuration_report(AISettings.from_env().status_text())
                     elif view == "tree":
                         report = selection_menus.menu_tree()
+                    elif view == "help":
+                        report = selection_menus.help_report()
                     elif view in {"logs", "stats", "errors"}:
                         with closing(connect()) as read_db:
                             if view == "logs":
@@ -238,7 +244,11 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         raise StockQuoteError("등록되지 않은 설정 메뉴 항목입니다.")
                     refreshed = selection_menus.open_settings(request.room, request.sender)
-                    stock_reply = report + "\n\n" + refreshed.reply
+                    # 상태/도움말은 긴 설정 목록을 중복 출력하지 않지만 번호 선택 세션은 유지한다.
+                    if view in {"status", "help"}:
+                        stock_reply = report + "\n※ 설정 1~8 다른 항목 선택 · 0/00 홈"
+                    else:
+                        stock_reply = report + "\n\n" + refreshed.reply
                     stock_menu_active = True
                 elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)

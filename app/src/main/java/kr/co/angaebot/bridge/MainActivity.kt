@@ -10,6 +10,8 @@
  * 8. AI 제공자/실제 API 키는 Termux .env에서 설정하여 Android에 비밀키를 복제하지 않는다.
  * 9. 기존 계정 신원 한계, 카카오톡 알림 빠른답장 방식, 응답 결과의 한계를 계속 고지한다.
  * 10. 모든 로컬 로그 단계와 서비스 수명주기, 기존 사용자 설정과 AndroidKeyStore 별칭을 유지한다.
+ * v0.4.10 카톡 사용자 명령 정리에 맞춰 관리화면의 도움말·통합 상태 안내만 갱신한다.
+ * 기존 ON/OFF, 자연어 선택 스위치, 연결 진단, 인증/로그/DB/알림 관리 UI와 동작은 그대로 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -84,7 +86,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.3.0 · 카카오톡 자동응답 + Python AI 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.10 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -131,7 +133,7 @@ class MainActivity : Activity() {
 
         root.addView(space(12))
         root.addView(section("②-A Python 명령 엔진 (Termux)"))
-        root.addView(label("기존 테스트/상태/도움말은 Android에서 처리합니다. Python ON 시 계산/시간/서버상태/질문/요약/AI상태/대화초기화가 127.0.0.1:8765로 전달됩니다.", 12f))
+        root.addView(label("카톡 메뉴: 앙(홈) / 설(설정) / 설 1(통합상태) / 설 8(도움말). 테스트·계산·질문 명령은 비활성화되었습니다. Python ON 시 시간·요약·AI상태·대화초기화·주식 명령을 사용할 수 있습니다.", 12f))
         pythonSwitch = Switch(this).apply {
             text = "Python 연결 활성화 (기본 OFF)"
             textSize = 16f
@@ -144,7 +146,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), 0, dp(4))
         }
         root.addView(aiFreeformSwitch)
-        root.addView(label("앙개야 질문 안녕? / 앙개야 요약 ... / 앙개야 AI상태 / 앙개야 대화초기화\n자연어 모드를 켜면 '앙개야 오늘 날씨 알려줘'도 질문으로 전달합니다. 실시간 검색은 별도 연동이 필요합니다.", 12f))
+        root.addView(label("앙개야 요약 ... / 앙개야 AI상태 / 앙개야 대화초기화\n기존 선택형 자연어 모드는 별도 설정이며, 직접 '질문' 명령은 비활성화되었습니다. 실시간 검색은 별도 연동이 필요합니다.", 12f))
         root.addView(label("Termux .env의 ANGAE_TOKEN (기기에 암호화 저장)", 14f, true))
         pythonTokenInput = input(singleLine = true, hint = "64자 인증 토큰을 복사해서 붙여넣으세요")
         pythonTokenInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD

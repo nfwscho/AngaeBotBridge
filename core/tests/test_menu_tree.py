@@ -6,6 +6,7 @@
 4. '설 7'/'앙 7 7'에 해당하는 인증된 API 경로와 설정 메뉴 복귀를 검증한다.
 5. 0/00 이동, 5분 제한, 방/발신자 격리, request_id 중복 응답을 그대로 유지한다.
 6. DB 스키마·원래 jobs/events 기록·Android 로그/UI/AI/주식시세 경로는 변경하지 않는다.
+8. 설정 도움말은 기존 7번 전체 트리 다음의 8번으로 추가되어 함께 표시된다.
 7. 카카오톡/Termux/외부 시세 접근 없이 TestClient와 임시 SQLite만 사용한다.
 """
 from __future__ import annotations
@@ -40,6 +41,7 @@ class MenuTreeUnitTests(unittest.TestCase):
     def test_tree_describes_dynamic_branches_without_exposing_records(self):
         tree = StockSelectionMenus.menu_tree()
         self.assertIn("7-7. 전체 메뉴 트리", tree)
+        self.assertIn("7-8. 도움말", tree)
         self.assertIn("1-1. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
         self.assertIn("1-5. 관심종목 목록 [본인 관심그룹 목록]", tree)
         self.assertIn("1-2. 메모리7 현재 시세 [조회 후 종목 선택]", tree)
@@ -57,6 +59,7 @@ class MenuTreeUnitTests(unittest.TestCase):
             back = menus.open_settings("방", "나")
             self.assertIn("7. 전체 메뉴 트리", back.reply)
             self.assertIn("6. 최근 오류", back.reply)
+            self.assertIn("8. 도움말", back.reply)
             self.assertIn("1. 서버·서비스 상태", back.reply)
         finally:
             db.close()

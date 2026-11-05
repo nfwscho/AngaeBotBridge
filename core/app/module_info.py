@@ -9,6 +9,7 @@
 7. 기존 응답 내용, SQLite 스키마/로그, 가격 조회, AI, 배터리, 메뉴 기능은 변경하지 않는다.
 8. 중복된 요청의 표시 역시 순수 함수로 처리하며 추가 API/DB 요청이나 부작용은 없다.
 9. '설정보기 tree' 응답은 읽기 전용 트리를 실제로 생성하는 core.menu로 표시하고 나머지 설정 조회는 core.ops를 유지한다.
+10. 설정 8번 도움말은 실제 생성 모듈 core.menu, 통합 상태는 core.ops로 구별하고 나머지 응답 모듈도 보존한다.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         return 'core.market'
     if command in {'메뉴', '주식'}:
         # 전체 메뉴 트리의 실제 생성 모듈을 표시한다. 기존 운영 조회는 ops 그대로 유지한다.
-        if arg == '설정보기 tree':
+        if arg in {'설정보기 tree', '설정보기 help'}:
             return 'core.menu'
         if arg.startswith('설정보기 '):
             return 'core.ops'

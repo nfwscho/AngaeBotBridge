@@ -29,6 +29,9 @@
  * 31. 최종 단계의 정상 API 응답 외에 중간 단계별 카톡 자동발신을 하지 않는다.
  * 32. 새 Android Bridge v0.4.9과 도움말을 표시하고 기타 로컬 명령/UI/설정·로그를 유지한다.
  * 33. v0.4.9는 상태·테스트·도움말 표시 버전만 갱신하고 기존 파서·메뉴·AI/로그·사용자 호출어는 유지한다.
+ * 34. v0.4.10 사용자의 카카오톡 테스트/ping·계산·질문 명령을 무응답으로 비활성화한다.
+ * 35. 도/앙개야 도움말은 설정 8번과 같은 간결한 목록을 제공하며 통합 상태는 설 1에서 조회한다.
+ * 36. 그 외 기존 기능(주식/그룹/AI요약/배터리/로그/설정/RemoteInput/관리 UI)은 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -38,6 +41,9 @@ sealed interface ParseResult {
 }
 
 object CommandParser {
+    // 사용자 요청으로 비활성화한 카카오톡 사용자 명령. Python 내부 API는 레거시 호환성을 위해 유지한다.
+    private val retiredUserCommands = setOf("테스트", "ping", "계산", "질문")
+
     fun parse(text: String, wakeWord: String): ParseResult {
         val message = text.trim()
         val prefix = wakeWord.trim()
@@ -97,6 +103,7 @@ object CommandParser {
                    else ParseResult.Command("도움말", "")
         }
         val command = commandText.substringBefore(' ').trim()
+        if (command in retiredUserCommands) return ParseResult.NoTrigger
         val argument = commandText.substringAfter(' ', "").trim()
         if (command == "메뉴" && argument.isEmpty()) return ParseResult.Command("메뉴", "홈")
         if (command == "메뉴" && argument.split(Regex("\\s+")).let { parts ->
@@ -108,9 +115,16 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.9 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
-        "상태" -> "✅ 앙개봇 Bridge v0.4.9 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
-        "도움말", "help" -> "🤖 앙개봇 v0.4.9 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 메뉴: 앙(홈) / 주(주식) / 민(배드민턴) / 요(요리) / 여(여행) / 종(종친) / 날(날씨) / 설(설정)\n※ 상(상태) / 도(도움말) / 주 분 삼성전자(빠른 분석)\n※ 앙패스(메뉴 점프): 주 2 / 주 2 2 / 앙 1 2 / 설 3\n※ 메뉴 번호 1~10 선택 · 0 이전 · 00 홈 · 5분 유효."
+        "상태" -> "✅ Android Bridge v0.4.10 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "도움말", "help" -> listOf(
+            "📖 앙개봇 도움말",
+            "앙(홈) · 주(주식) · 설(설정)",
+            "민(배드민턴) · 요(요리) · 여(여행) · 종(종친) · 날(날씨)",
+            "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
+            "주 2 메모리7 시세 · 주 분 삼성전자 분석",
+            "1~10 선택 · 0 이전 · 00 홈 · 메뉴 5분 유효",
+            "※ 시세는 무료·지연 가능 · 도: 간편 도움말 · 상: Android 상태"
+        ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
     }
 }

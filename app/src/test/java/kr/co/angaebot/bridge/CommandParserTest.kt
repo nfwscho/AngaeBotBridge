@@ -14,6 +14,7 @@
  * 통합 메뉴: 앙·주·민·요·여·종·영·상·도 정확한 단축어, 사용자 호출어 보호, 장문 명령 호환성을 검사한다.
  * v0.4.9: 영 호출 제거, 날씨·설정 한 글자 단축 메뉴와 주/앙/날/설 1~5단계 숫자 메뉴 점프를 검증한다.
  * 기존 주 분/주 목록/상/도/사용자 호출어 및 일반 문장 오인식 방지 회귀 테스트를 보존한다.
+ * v0.4.10은 테스트/ping·계산·질문 명령이 카톡에서 무시됨을 검사하고, 간결 도움말과 상태 번호를 확인한다.
  */
 package kr.co.angaebot.bridge
 
@@ -22,8 +23,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CommandParserTest {
-    @Test fun testCommand() {
-        assertEquals(ParseResult.Command("테스트", ""), CommandParser.parse("앙개야 테스트", "앙개야"))
+    @Test fun retiredUserCommandsIgnored() {
+        for (name in listOf("테스트", "ping", "계산", "질문")) {
+            assertEquals(ParseResult.NoTrigger, CommandParser.parse("앙개야 $name", "앙개야"))
+            assertEquals(ParseResult.NoTrigger, CommandParser.parse("앙개야 $name 내용", "앙개야"))
+            assertEquals(ParseResult.NoTrigger, CommandParser.parse("봇 $name 내용", "봇"))
+        }
     }
     @Test fun noPrefix() {
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("테스트", "앙개야"))
@@ -35,26 +40,35 @@ class CommandParserTest {
         assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙개야", "앙개야"))
     }
     @Test fun parseArgument() {
-        assertEquals(ParseResult.Command("계산", "12 30"), CommandParser.parse("앙개야 계산 12 30", "앙개야"))
+        assertEquals(ParseResult.Command("시간", "12 30"), CommandParser.parse("앙개야 시간 12 30", "앙개야"))
     }
     @Test fun operatingCommandNames() {
         for (name in listOf("상세상태", "통계", "최근오류", "가동시간")) {
             assertEquals(ParseResult.Command(name, ""), CommandParser.parse("앙개야 $name", "앙개야"))
-            assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙개야 $name"))
+            assertTrue(LocalCommandExecutor.execute("도움말", "").contains("설 1 통합 상태"))
         }
     }
     @Test fun stockMemory7() {
         assertEquals(ParseResult.Command("주식", "메모리7"), CommandParser.parse("앙개야 주식 메모리7", "앙개야"))
         assertEquals(ParseResult.Command("메모리7", ""), CommandParser.parse("앙개야 메모리7", "앙개야"))
-        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙개야 주식 메모리7"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 2 메모리7 시세"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.9"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.10"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
     @Test fun helpText() {
-        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("테스트"))
+        val help = LocalCommandExecutor.execute("도움말", "")
+        assertTrue(help.contains("설 8 도움말"))
+        assertTrue(help.contains("설 7 전체 메뉴"))
+        assertTrue(help.contains("주 분 삼성전자"))
+        assertTrue(!help.contains("앙개야 계산"))
+        assertTrue(!help.contains("앙개야 테스트"))
+        assertTrue(!help.contains("앙개야 질문"))
+        assertTrue(!help.contains("서버상태"))
+        assertTrue(!help.contains("상세상태"))
+        assertTrue(help.lines().size <= 8)
     }
     @Test fun exactShortcutMenus() {
         val menuShortcuts = mapOf(
@@ -113,8 +127,8 @@ class CommandParserTest {
             assertEquals(ParseResult.NoTrigger, CommandParser.parse(text, "앙개야"))
         }
         assertEquals(ParseResult.Command("주식", "메모리7"), CommandParser.parse("주 메모리7", "앙개야"))
-        assertEquals(ParseResult.Command("계산", "2+3"), CommandParser.parse("주 계산 2+3", "주"))
-        assertEquals(ParseResult.Command("테스트", ""), CommandParser.parse("봇 테스트", "봇"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("주 계산 2+3", "주"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("봇 테스트", "봇"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("주", ""))
     }
 }

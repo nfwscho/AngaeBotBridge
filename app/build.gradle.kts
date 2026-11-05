@@ -19,6 +19,8 @@
 // 18. 통합 콘텐츠 단축어/홈 메뉴 업데이트는 v0.4.7(versionCode 11)로 덮어쓰기 설치하며 데이터·권한·서명을 유지한다.
 // 19. 날씨·운영 메뉴, 연속 번호 메뉴 점프 v0.4.8(versionCode 12), 기존 앱 ID·권한·SQLite 로그/설정·동작 보존.
 // 20. 응답별 담당 소스 및 실배포 브랜치 표시 v0.4.9(versionCode 13), 기존 앱 데이터·권한·서명·UI/로그 보존.
+// 21. v0.4.10(versionCode 14)은 사용자 요청 명령 정리, 설정 1 통합상태, 설정 8 간결 도움말을 추가한다.
+// 22. 기존 패키지명·서명·관리화면·토큰/SQLite·알림 RemoteInput·배터리 및 앱 업그레이드 보존.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -32,8 +34,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.4.9"
+        versionCode = 14
+        versionName = "0.4.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
