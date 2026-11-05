@@ -31,3 +31,17 @@ jobs:
       - name: Run all Python Core regression tests
         working-directory: core
         run: python -m unittest discover -s tests -v
+
+  windows-powershell-51:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Windows PowerShell 5.1 deployment syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+          $text = [System.IO.File]::ReadAllText((Resolve-Path './deploy-angaebot.ps1'))
+          if ($text -match '[^\\x00-\\x7F]') { throw 'Deployment script must be ASCII for Windows PowerShell 5.1.' }
