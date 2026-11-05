@@ -11,6 +11,7 @@
  * 9. 가격 알림/주기 감시/AI 강제 활성화/자동 주문/자동 발송은 추가하거나 검사 중 실행하지 않는다.
  * v0.4.3: 단축 주가 메뉴를 열고 기존 긴 호출어의 도움말 및 별칭을 보존하는지 검사한다.
  * v0.4.5: 설치 버전 상태 텍스트만 0.4.4로 갱신하고 기존 단축 명령/숫자 메뉴 전체 회귀 테스트를 유지한다.
+ * 통합 메뉴: 앙·주·민·요·여·종·영·상·도 정확한 단축어, 사용자 호출어 보호, 장문 명령 호환성을 검사한다.
  */
 package kr.co.angaebot.bridge
 
@@ -29,7 +30,7 @@ class CommandParserTest {
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("앙개야야 테스트", "앙개야"))
     }
     @Test fun emptyCommandShowsHelp() {
-        assertEquals(ParseResult.Command("도움말", ""), CommandParser.parse("앙개야", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙개야", "앙개야"))
     }
     @Test fun parseArgument() {
         assertEquals(ParseResult.Command("계산", "12 30"), CommandParser.parse("앙개야 계산 12 30", "앙개야"))
@@ -52,6 +53,24 @@ class CommandParserTest {
 
     @Test fun helpText() {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("테스트"))
+    }
+    @Test fun exactShortcutMenus() {
+        val menuShortcuts = mapOf(
+            "앙" to "홈", "민" to "배드민턴", "요" to "요리",
+            "여" to "여행", "종" to "종친", "영" to "영어"
+        )
+        for ((shortcut, category) in menuShortcuts) {
+            assertEquals(ParseResult.Command("메뉴", category), CommandParser.parse(shortcut, "앙개야"))
+        }
+        assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙개야 메뉴", "앙개야"))
+        assertEquals(ParseResult.Command("상태", ""), CommandParser.parse("상", "앙개야"))
+        assertEquals(ParseResult.Command("도움말", ""), CommandParser.parse("도", "앙개야"))
+        for (text in listOf("앙상블", "민트", "요리", "여행", "종친", "영어", "상황", "도움")) {
+            assertEquals(ParseResult.NoTrigger, CommandParser.parse(text, "앙개야"))
+        }
+        assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙", "앙개야"))
+        // 앱에 별도 호출어를 설정한 경우 기존 호출어 우선 규칙은 유지된다.
+        assertEquals(ParseResult.Command("도움말", ""), CommandParser.parse("앙", "앙"))
     }
     @Test fun shortStockWakeWord() {
         assertEquals(ParseResult.Command("주식", "메뉴"), CommandParser.parse("주", "앙개야"))
