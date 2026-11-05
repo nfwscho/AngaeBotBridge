@@ -10,7 +10,7 @@
 8. 모든 테스트는 임시 SQLite 파일에서만 수행하고 실제 Termux 로그/DB/토큰은 변경하지 않는다.
 9. v0.5.1 그룹당 최대 10종목과 고정 미국시총10 프리셋/기존 그룹 보호를 추가 검사한다.
 10. v0.5.3 유명 종목의 정확한 한글 이름·동의어 해석, 사용자별 저장 별칭·모호성 및 삭제를 검증한다.
-11. 관심종목 시세의 상승 🔺 +, 하락 🔽 - 표시와 실제 변동률을 검증한다.
+11. 관심종목 시세의 상승 🔺 +, 하락 ▽ - 표시와 실제 변동률을 검증한다.
 """
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ class WatchlistUnitTests(unittest.TestCase):
             return Quote(s, price, previous, (price/previous-1)*100, timestamp, timestamp)
         report = group_report('지수', load_group(self.db,self.room,self.sender,'지수'),fetcher=fake)
         self.assertIn('삼성전자 22.1만 🔺 +0.91%', report)
-        self.assertIn('마이크론 $800 🔽 -3.61%', report)
+        self.assertIn('마이크론 $800 ▽ -3.61%', report)
         self.assertIn('키오시아 : 조회 불가', report)
         self.assertIn('1. 삼성전자 ',report)
         self.assertIn('2. 마이크론 ',report)
