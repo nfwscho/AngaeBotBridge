@@ -66,13 +66,13 @@ class OpsTests(unittest.TestCase):
         self.call("계산", "1/0")
         self.call("계산", "7*8", sender="다른사람")
         report = self.call("통계").json()["reply"]
-        self.assertIn("전체: 2건", report)
-        self.assertIn("성공: 1건", report)
-        self.assertIn("실패: 1건", report)
+        self.assertIn("전체 2", report)
+        self.assertIn("성공 1", report)
+        self.assertIn("실패 1", report)
         self.assertIn("계산: 2건", report)
         second = self.call("통계", sender="다른사람").json()["reply"]
-        self.assertIn("전체: 1건", second)
-        self.assertIn("성공: 1건", second)
+        self.assertIn("전체 1", second)
+        self.assertIn("성공 1", second)
 
     def test_errors_scoped_and_no_argument_leak(self):
         self.call("계산", "1/0")
@@ -83,7 +83,7 @@ class OpsTests(unittest.TestCase):
         self.assertNotIn("10/0", result)
         self.assertNotIn("1/0", result)
         empty = self.call("최근오류", room="다른방").json()["reply"]
-        self.assertIn("없습니다", empty)
+        self.assertIn("오류 없음", empty)
 
     def test_idempotent_stats_and_non_destructive_db(self):
         self.call("계산", "5*5", request_id="ops_unique_0001")
@@ -103,24 +103,24 @@ class OpsTests(unittest.TestCase):
             return "실행 중"
         result = details(123, services=status, ssh=lambda: "연결 가능")
         self.assertEqual(called, ["angaebot-core", "angaebot-watchdog", "sshd"])
-        self.assertIn("Watchdog: 실행 중", result)
-        self.assertIn("SSH 8022: 연결 가능", result)
+        self.assertIn("감시 실행 중", result)
+        self.assertIn("8022 연결 가능", result)
         self.assertIn("0일 0시간 2분 3초", result)
 
     def test_api_detail_and_uptime(self):
         result = self.call("상세상태")
         self.assertTrue(result.json()["ok"])
-        self.assertIn("운영 상세상태", result.json()["reply"])
+        self.assertIn("서버 상세상태", result.json()["reply"])
         self.assertIn("SSH", result.json()["reply"])
         result = self.call("가동시간")
         self.assertTrue(result.json()["ok"])
-        self.assertIn("Python 가동시간", result.json()["reply"])
+        self.assertIn("Python 가동", result.json()["reply"])
         self.assertIn("KST", result.json()["reply"])
 
     def test_human_uptime_and_empty_stats(self):
         self.assertEqual(format_uptime(90061), "1일 1시간 1분 1초")
         result = self.call("통계")
-        self.assertIn("전체: 0건", result.json()["reply"])
+        self.assertIn("전체 0", result.json()["reply"])
 
 
 if __name__ == "__main__":
