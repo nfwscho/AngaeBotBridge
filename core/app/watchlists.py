@@ -217,7 +217,8 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
         raise StockQuoteError(f"'{name}' 그룹의 모든 시세를 조회하지 못했습니다.")
     if dates:
         pass  # 거래일/기준시각은 압축 출처에서 표시
-    lines.append('')\n    lines.extend(compact_source_summary(quotes))
+    lines.append('')
+    lines.extend(compact_source_summary(quotes))
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
     lines.append("※ 무료 시세 · 지연 가능 · 실시간 호가 아님")
