@@ -15,6 +15,8 @@
  * 13. 토큰/SQLite/카톡 RemoteInput/AI 설정은 수정하지 않는다.
  * 14. 인증된 통합 메뉴 명령을 Python Core로 전달하며 기존 주식/AI/운영 명령을 유지한다.
  * 15. 번호 선택이 주식 분석을 호출할 수 있으므로 기존 주식의 23초 응답 제한을 통합 메뉴에도 적용한다.
+ * 16. v0.4.9는 인증 Core 응답의 module_source와 health의 실제 배포 브랜치/SHA만 추가로 읽는다.
+ * 17. 기존 HTTP 타임아웃, 응답 본문, 토큰·SQLite/사용자 로그/오류 처리·JSON 필드는 모두 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,7 +25,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 sealed interface PythonOutcome {
-    data class Success(val reply: String, val duplicate: Boolean, val commandOk: Boolean, val menuActive: Boolean = false) : PythonOutcome
+    data class Success(val reply: String, val duplicate: Boolean, val commandOk: Boolean,
+                       val menuActive: Boolean = false, val moduleSource: String = "",
+                       val deploymentBranch: String = "", val deploymentSha: String = "") : PythonOutcome
     data class Failure(val reason: String) : PythonOutcome
 }
 
@@ -79,11 +83,20 @@ object PythonBridgeClient {
             }
             if (path == "/v1/health") {
                 val version = json.optString("version", "unknown")
-                return PythonOutcome.Success("🐍 Python 연결 정상 (v$version)", false, json.optBoolean("ok", false))
+                val branch = json.optString("deployment_branch", "").takeIf {
+                    it.matches(Regex("[A-Za-z0-9_/.-]{1,100}"))
+                }.orEmpty()
+                val sha = json.optString("deployment_sha", "").takeIf {
+                    it.matches(Regex("[0-9a-fA-F]{40}"))
+                }.orEmpty()
+                return PythonOutcome.Success("🐍 Python 연결 정상 (v$version)", false,
+                    json.optBoolean("ok", false), deploymentBranch = branch, deploymentSha = sha)
             }
             val reply = json.optString("reply", "")
             if (reply.isBlank()) return PythonOutcome.Failure("Python 응답에 내용이 없습니다.")
-            return PythonOutcome.Success(reply.take(1800), json.optBoolean("duplicate", false), json.optBoolean("ok", false), json.optBoolean("menu_active", false))
+            return PythonOutcome.Success(reply.take(1800), json.optBoolean("duplicate", false),
+                json.optBoolean("ok", false), json.optBoolean("menu_active", false),
+                moduleSource = json.optString("module_source", ""))
         } catch (e: java.net.ConnectException) {
             return PythonOutcome.Failure("Python 서버에 연결되지 않습니다. Termux 실행 상태를 확인하세요.")
         } catch (e: java.net.SocketTimeoutException) {

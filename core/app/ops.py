@@ -20,6 +20,8 @@ v0.5.3은 기존 운영 상태·로그 흐름을 유지한 채 종목 이름 조
 17. 로그는 같은 방·발신자의 최근 명령/성공 여부·시간만 보여주고 인수·질문·토큰·이벤트 원문은 표시하지 않는다.
 18. 설정 화면은 AI 설정 상태와 세션 제한만 표시하고 환경변수·인증키·비밀 정보를 노출하지 않는다.
 19. 기존 SQLite 테이블·로그·DB 스키마·원격 작업·Android UI·기존 운영 명령의 출력은 변경하지 않는다.
+20. 인증된 상태 API에 로컬 배포기록에서 읽은 브랜치와 SHA만 노출하며 기록이 없으면 미확인 반환한다.
+21. 실제 배포된 코어와 GitHub의 main 최신 커밋을 혼동하지 않고 기존 배포정보 화면은 유지한다.
 """
 from __future__ import annotations
 
@@ -179,3 +181,21 @@ def configuration_report(ai_status: str, *, menu_ttl_seconds: int = 300) -> str:
             f'{ai_status}\n'
             '※ 권한·비밀키·연결 주소는 미표시\n'
             '※ 설정 변경은 승인된 관리자 경로에서 수행')
+
+
+def deployment_identity(*, info_path: Path | None = None) -> dict[str, str]:
+    """Read the existing deployer's local, non-secret recorded revision, never guessing."""
+    path = info_path or Path(__file__).resolve().parent.parent / '.deploy-info.json'
+    try:
+        if path.stat().st_size > 2048:
+            return {'branch': '', 'sha': ''}
+        obj = json.loads(path.read_text(encoding='utf-8'))
+        sha = str(obj.get('sha', ''))
+        branch = str(obj.get('branch', ''))
+        if not re.fullmatch(r'[a-fA-F0-9]{40}', sha):
+            return {'branch': '', 'sha': ''}
+        if not re.fullmatch(r'[A-Za-z0-9_/.-]{1,100}', branch):
+            return {'branch': '', 'sha': ''}
+        return {'branch': branch, 'sha': sha}
+    except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
+        return {'branch': '', 'sha': ''}

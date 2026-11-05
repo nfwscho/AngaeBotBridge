@@ -24,6 +24,10 @@
  * 22. 주식 전용 숫자 게이트를 통합 메뉴 게이트로 활용하며 앙/주/민/요/여/종/영을 같은 인증·로그 경로로 처리한다.
  * 23. 상/도는 기존 로컬 상태·도움말로 처리하고 일반 카톡 문장 및 비허용 방·발신자는 그대로 차단한다.
  * 24. Core menu_active 확인과 RemoteInput 전송 요청 후에만 숫자 메뉴를 열고 기존 세션 제한을 보존한다.
+ * 25. v0.4.9 모든 답장과 기존 S20+ 배터리 사이에 실제 담당 모듈명·파일 경로를 표시한다.
+ * 26. 로컬 상 명령의 기존 본문에 인증 Core health의 실제 배포 브랜치/커밋을 덧붙인다.
+ * 27. Core OFF/장애/기록 누락 시 미확인 표시, GitHub main을 배포 브랜치라고 추정하지 않는다.
+ * 28. 기존 RECEIVE/COMMAND/PYTHON/REPLY 로그·SQLite·RemoteInput·인증·AI OFF·UI·배터리 유지.
  */
 package kr.co.angaebot.bridge
 
@@ -128,39 +132,61 @@ class KakaoNotificationListener : NotificationListenerService() {
                 (parsed.name + " " + parsed.argument).trim()
             } else parsed.argument
             var nextMenuActive = false
+            var sourceModule = ModuleSourceFormatter.localCommandSource(parsed.name)
             val response = if (explicitPython || freeform) {
                 try {
                     val p = pythonConfig.load()
                     if (!p.enabled) {
-                        // 기존 v0.1 로컬 명령은 한 글자도 바꾸지 않는다.
+                        // 기존 Python OFF 로컬 응답과 그 로그·오류 경로를 유지한다.
+                        sourceModule = "bridge.python"
                         LocalCommandExecutor.execute(parsed.name, parsed.argument)
                     } else {
                         logger.log("INFO", "PYTHON_REQUEST", "command=${parsed.name} forwarded=$forwardName requestId=$fingerprint", message.room, message.sender)
                         when (val result = PythonBridgeClient.execute(p.token, fingerprint, forwardName, forwardArgument, message.room, message.sender)) {
                             is PythonOutcome.Success -> {
                                 nextMenuActive = result.commandOk && result.menuActive
+                                sourceModule = result.moduleSource.ifBlank { "core.main" }
                                 logger.log(if (result.commandOk) "INFO" else "WARN", "PYTHON_RESULT",
                                     "command=${parsed.name} ok=${result.commandOk} duplicate=${result.duplicate} reply=${result.reply}", message.room, message.sender)
                                 result.reply
                             }
                             is PythonOutcome.Failure -> {
+                                sourceModule = "bridge.python"
                                 logger.log("ERROR", "PYTHON_FAILED", "command=${parsed.name} ${result.reason}", message.room, message.sender)
                                 "⚠️ 앙개봇 Python 연결 실패\n${result.reason}"
                             }
                         }
                     }
                 } catch (e: Exception) {
+                    sourceModule = "bridge.python"
                     logger.log("ERROR", "PYTHON_FAILED", "command=${parsed.name} ${e.javaClass.simpleName}", message.room, message.sender)
                     "⚠️ Python 설정에 문제가 있습니다. 앙개봇 관리 화면에서 연결을 확인하세요."
                 }
-            } else LocalCommandExecutor.execute(parsed.name, parsed.argument)
+            } else {
+                val original = LocalCommandExecutor.execute(parsed.name, parsed.argument)
+                if (parsed.name == "상태") {
+                    // Only the explicit local status command checks authenticated Core health.
+                    // Other local commands remain fully offline as before.
+                    val extra = try {
+                        val settings = pythonConfig.load()
+                        ModuleSourceFormatter.statusDeployment(
+                            if (settings.enabled) PythonBridgeClient.health(settings.token) else null,
+                            settings.enabled
+                        )
+                    } catch (_: Exception) {
+                        "📦 배포 정보: Core 확인 불가 · 브랜치 미확인"
+                    }
+                    original + "\n\n" + extra
+                } else original
+            }
             // 답장 전에 설정을 다시 읽어서 UI에서 OFF로 전환한 경우 답장하지 않는다.
             if (!settings.load().enabled) {
                 logger.log("WARN", "REJECT_DISABLED", "실행 도중 자동응답 OFF", message.room, message.sender)
                 return
             }
             // 실제로 전송할 답장에만 배터리 정보를 추가해 기존 Python/로컬 명령 결과를 수정하지 않는다.
-            val replyWithBattery = BatteryStatusReporter.append(this, response)
+            val replyWithSource = ModuleSourceFormatter.append(response, sourceModule)
+            val replyWithBattery = BatteryStatusReporter.append(this, replyWithSource)
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
             when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {

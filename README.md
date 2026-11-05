@@ -1,4 +1,18 @@
-> **v0.1.3 (2026-11-04):** `MainActivity.kt`의 `fillViewport` 컴파일 오류를 `setFillViewport(true)`로 수정. 기존 기능/UI/로그 흐름 보존. `CHANGELOG_v0.1.3.md` 참고.
+# 현재 앙개봇 운영 문서 안내
+
+> 현재 작업 브랜치의 Android Bridge v0.4.9, Termux Python Core v0.6.1 개발 기준입니다.
+> `main` 병합은 '앙개봇 메인' 채팅에서 별도 사용자 승인 후 처리합니다.
+> 아래 초기 v0.1 설명은 역사 기록이며 현재 구현은 최신 문서를 기준으로 확인하세요.
+
+- [앙개봇 2.0 통합 플랫폼 설계](docs/ARCHITECTURE.md)
+- [통합 CHANGELOG (최신순)](CHANGELOG.md)
+- [서버·GitHub·소스 운영](docs/OPERATIONS.md)
+- [설치·업그레이드](docs/UPGRADE.md)
+- [전체 테스트](docs/TEST_PLAN.md)
+
+---
+
+> **v0.1.3 (2026-11-04):** `MainActivity.kt`의 `fillViewport` 컴파일 오류를 `setFillViewport(true)`로 수정. 기존 기능/UI/로그 흐름 보존. `CHANGELOG.md` 참고.
 
 > **2026-11-04 v0.1.2:** `scripts/prepare-wrapper.ps1`의 Gradle 8.14.3 Wrapper 다운로드 실패에 대한 대체 공식 URL과 SHA-256 검증 로직 추가. 자세한 내용은 `GRADLE_WRAPPER_FIX.md` 참고. Kotlin 앱 소스는 v0.1과 동일합니다.
 
@@ -88,13 +102,13 @@ S20+에서 알림 파싱·자동응답 성공 후 Android Bridge → S20+ Termux
 - Python 서버는 별도 64자리 랜덤 인증키, SQLite 중복 방지 및 로그를 사용합니다.
 - 단체방/발신자 표시 이름은 강한 인증이 아니므로 위험한 명령은 구현하지 않았습니다.
 
-**설치:** [`docs/UPGRADE_v0.2.0.md`](docs/UPGRADE_v0.2.0.md)  
-**검증:** [`docs/TEST_PLAN_v0.2.0.md`](docs/TEST_PLAN_v0.2.0.md)  
-**변경 내역:** [`CHANGELOG_v0.2.0.md`](CHANGELOG_v0.2.0.md)
+**설치:** [`docs/UPGRADE.md`](docs/UPGRADE.md)  
+**검증:** [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)  
+**변경 내역:** [`CHANGELOG.md`](CHANGELOG.md)
 
 Android v0.2.0 APK는 현행 작업 환경에서 빌드하지 못했습니다. Windows의 JDK17/SDK36에서 `gradlew.bat :app:assembleDebug` 실행 후 S20+에서 실제 검증해야 합니다.
 
 
 ## v0.2.1 ??S20+ ?먮룞 ?쒖옉쨌?먮룞 蹂듦뎄
 
-termux-services(runit) 湲곕컲 FastAPI ?먮룞 ?ъ떆??諛?30珥?媛꾧꺽 health watchdog, Google Play Termux ?댁옣 boot 吏?? 湲곗〈 湲곕뒫/?몄쬆??SQLite 濡쒓렇 蹂댁〈. docs/SERVICE_SETUP_v0.2.1.md 李멸퀬.
+termux-services(runit) 湲곕컲 FastAPI ?먮룞 ?ъ떆??諛?30珥?媛꾧꺽 health watchdog, Google Play Termux ?댁옣 boot 吏?? 湲곗〈 湲곕뒫/?몄쬆??SQLite 濡쒓렇 蹂댁〈. docs/OPERATIONS.md 李멸퀬.

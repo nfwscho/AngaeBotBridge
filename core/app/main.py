@@ -62,6 +62,10 @@
 59. '메뉴 경로 주식 2 2' 등 연속 번호 메뉴 점프는 최종 항목만 실행해 불필요한 외부 시세 호출을 방지한다.
 60. 각 메뉴 점프는 최대 5개 정확한 숫자로 제한하며 기존 인증·중복 요청·jobs/events 로깅·TTL 보호를 재사용한다.
 61. 기존 주식 분석/관심목록/AI/설정/배터리/Android UI/DB 스키마 및 기존 명령은 제거하지 않는다.
+62. v0.6.1 인증 Core health에는 실제 S20+ 배포 기록의 branch/sha를 선택 필드로 제공한다.
+63. 모든 명령 응답에 module_source를 덧붙여 Android가 담당 소스 모듈을 공통 하단에 표기하도록 한다.
+64. 신규 메타 필드는 기존 reply/menu_active/duplicate/request_id·jobs/events·API 호환을 보존한다.
+65. 배포기록이 없으면 빈 값을 반환하며 main이라고 추측하거나 GitHub에 외부 요청하지 않는다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -81,14 +85,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
 from .ops import (details, command_stats, recent_errors, uptime_report,
-                  deployment_report, recent_command_log, configuration_report)
+                  deployment_report, recent_command_log, configuration_report, deployment_identity)
+from .module_info import module_for
 from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
 
 
@@ -145,7 +150,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
 
     @api.get("/v1/health", dependencies=[Depends(authenticated)])
     def health():
-        return {"ok": True, "version": VERSION, "uptime_seconds": int(time.monotonic() - began)}
+        revision = deployment_identity()
+        return {"ok": True, "version": VERSION, "uptime_seconds": int(time.monotonic() - began),
+                "deployment_branch": revision["branch"], "deployment_sha": revision["sha"]}
 
     @api.post("/v1/commands", dependencies=[Depends(authenticated)])
     def command(request: CommandRequest):
@@ -164,7 +171,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
             if old is not None:
                 if old[0] != request.command or old[1] != request.argument:
                     raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
-                return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
+                return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id,
+                        "duplicate": True,
+                        "module_source": module_for(request.command, request.argument, old[2])}
             try:
                 # 메뉴도 주식과 동일한 인증·중복 요청·jobs/events 로그 경로를 통과한다.
                 if request.command == "메뉴":
@@ -277,7 +286,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 if row:
                     if row[0] != request.command or row[1] != request.argument:
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
-                    return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
+                    return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id,
+                            "duplicate": True,
+                            "module_source": module_for(request.command, request.argument, row[2])}
                 try:
                     if request.command in {"주식", "메모리7", "메뉴"}:
                         if stock_error is not None:
@@ -341,7 +352,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                            (now, "INFO" if ok else "WARN", "COMMAND_DONE" if ok else "COMMAND_REJECTED",
                             f"request_id={request.request_id} command={request.command} ok={ok}"))
         return {"ok": ok, "reply": reply, "request_id": request.request_id, "duplicate": False,
-                "menu_active": stock_menu_active if ok else False}
+                "menu_active": stock_menu_active if ok else False,
+                "module_source": module_for(request.command, resolved_argument, reply)}
 
     return api
 
