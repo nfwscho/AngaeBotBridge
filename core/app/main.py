@@ -52,6 +52,7 @@
 50. v0.5.10 조회 응답에서는 마켓별 시세 출처와 최신 거래시각을 목록 하단으로 모아 가독성을 높이며 기존 API/명령/로그·DB/숫자 선택·AI OFF를 유지한다.
 
 51. v0.5.10 미국 시세 백업 조회(나스닥 확정 일봉·네이버 해외 일봉)는 market.py만 확장하며 기존 기능/명령/SQLite/로그/UI/배터리를 보존한다.
+52. 주식 목록 응답은 그룹 번호 선택 세션을 활성화하고 기존 선택/시세/인증/로그 흐름을 그대로 재사용한다.
 """
 from __future__ import annotations
 
@@ -222,6 +223,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             reply = stock_reply
                         elif request.command == "주식":
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
+                            if resolved_argument.strip() == '목록':
+                                selection_menus.open_groups(db, request.room, request.sender)
+                                stock_menu_active = True
                         else:
                             # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
                             reply = execute_stock_command(request.command, request.argument)
