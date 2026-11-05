@@ -75,7 +75,7 @@ class StockSelectionMenus:
     @staticmethod
     def _render(title: str, choices: tuple[MenuChoice, ...]) -> str:
         return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
-                          '※ 번호 입력 · 5분 유효'])
+                          '※ 번호 입력 · 0: 이전 메뉴 · 5분 유효'])
 
     def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu', origin: str = 'menu') -> None:
         now = self._clock()
