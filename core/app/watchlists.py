@@ -226,7 +226,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             raise StockQuoteError("사용법: 앙개야 주식 목록")
         rows = db.execute("""SELECT g.name, COUNT(i.ticker) FROM stock_groups g
             LEFT JOIN stock_items i ON i.room=g.room AND i.sender=g.sender AND i.group_name=g.name
-            WHERE g.room=? AND g.sender=? GROUP BY g.name ORDER BY g.created_at,g.name""",
+            WHERE g.room=? AND g.sender=? GROUP BY g.name ORDER BY g.created_at,g.rowid""",
             (room, sender)).fetchall()
         lines = ["📂 관심그룹", "1. 메모리7 8종목 · 기본"]
         lines.extend(f"{index}. {name} {count}종목" for index, (name, count) in enumerate(rows, start=2))
