@@ -21,6 +21,8 @@
  * 19. v0.4.5는 정상 인증 Core의 메모리7/사용자그룹 시세표에 menu_active가 있을 때도 번호 선택 게이트를 연다.
  * 20. 기존 주/숫자 메뉴/한글 종목 분석, 5분·방/발신자 제한, 배터리·모든 기존 로깅/RemoteInput을 유지한다.
  * 21. 알림 권한·토큰·UI/SQLite/AI OFF·명령의 기존 동작은 변경하지 않으며 가격 알림·매매 기능을 넣지 않는다.
+ * 22. 도움말의 숫자 선택을 별도 세션에서 해석하며 하위 메뉴 0은 상위 도움말로 돌아간다.
+ * 23. 도움말 숫자 선택도 기존 허용 방/발신자·중복검사·명령 로그·RemoteInput·배터리 처리 경로를 재사용한다.
  */
 package kr.co.angaebot.bridge
 
@@ -36,6 +38,7 @@ class KakaoNotificationListener : NotificationListenerService() {
     private lateinit var logger: LogRepository
     private lateinit var pythonConfig: PythonBridgeConfig
     private val menuGate = MenuSelectionGate()
+    private val helpGate = HelpMenuGate()
 
     override fun onCreate() {
         super.onCreate()
@@ -79,6 +82,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             val config = settings.load()
             if (!config.enabled) {
                 menuGate.setActive(message.room, message.sender, false)
+                helpGate.close(message.room, message.sender)
                 logger.log("INFO", "REJECT_DISABLED", "자동응답 OFF", message.room, message.sender)
                 return
             }
@@ -91,8 +95,13 @@ class KakaoNotificationListener : NotificationListenerService() {
                 return
             }
             // 정확한 허용 방/발신자에서만 지난 5분 내 주식 메뉴의 숫자 선택을 허용한다.
-            val numericSelection = menuGate.parseSelection(message.text, message.room, message.sender)
-            val parsed = numericSelection ?: CommandParser.parse(message.text, config.wakeWord)
+            val helpSelection = helpGate.parseSelection(message.text, message.room, message.sender)
+            val numericSelection = if (helpSelection == null) menuGate.parseSelection(message.text, message.room, message.sender) else null
+            val rawParsed = helpSelection ?: numericSelection ?: CommandParser.parse(message.text, config.wakeWord)
+            val helpChoice = if (helpSelection != null) {
+                helpGate.choose(message.room, message.sender, helpSelection.argument.removePrefix("선택 ").trim())
+            } else null
+            val parsed = helpChoice?.first ?: rawParsed
             if (parsed !is ParseResult.Command) {
                 logger.log("INFO", "IGNORE_PREFIX", "호출어 없음", message.room, message.sender)
                 return
@@ -100,6 +109,9 @@ class KakaoNotificationListener : NotificationListenerService() {
             // 메뉴가 열린 상태에서 다른 명령으로 전환하면 기존 번호 선택을 즉시 무효화한다.
             if (numericSelection == null && !(parsed.name == "주식" && parsed.argument == "메뉴")) {
                 menuGate.setActive(message.room, message.sender, false)
+            }
+            if (helpSelection == null && parsed.name !in setOf("도움말", "help")) {
+                helpGate.close(message.room, message.sender)
             }
             val identity = "${sbn.key}|${message.room}|${message.sender}|${message.messageTime}|${message.text}"
             val fingerprint = MessageDigest.getInstance("SHA-256")
@@ -125,7 +137,7 @@ class KakaoNotificationListener : NotificationListenerService() {
                 (parsed.name + " " + parsed.argument).trim()
             } else parsed.argument
             var nextMenuActive = false
-            val response = if (explicitPython || freeform) {
+            val response = if (helpChoice?.second != null) helpChoice.second!! else if (explicitPython || freeform) {
                 try {
                     val p = pythonConfig.load()
                     if (!p.enabled) {
@@ -161,6 +173,9 @@ class KakaoNotificationListener : NotificationListenerService() {
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
             when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {
+                    if (helpSelection == null && parsed.name in setOf("도움말", "help")) {
+                        helpGate.open(message.room, message.sender)
+                    }
                     logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
                     // 새 시세 요약도 다음 숫자 선택 메뉴이므로 인증 Core의 menu_active가 true일 때 열어준다.
                     // 기존 메뉴와 숫자 선택의 종료 규칙은 유지하고 외부 응답/실패는 메뉴를 열지 않는다.

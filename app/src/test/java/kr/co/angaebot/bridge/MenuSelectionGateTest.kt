@@ -8,6 +8,7 @@
  * 6. v0.4.5는 메모리7 및 관심종목 시세표에서 번호 10/10번/10.까지 허용하고 10개/123/1만원은 거부한다.
  * 7. 기존 숫자 메뉴 1~9, 5분 만료, 방·발신자 격리, 명령·배터리/SQLite/로그 흐름을 보존한다.
  * 8. 메뉴가 활성화된 경우에만 0/0번을 이전 메뉴 선택으로 변환하며 일반 대화 오인식은 차단한다.
+ * 9. 도움말 숫자 메뉴·하위 메뉴·0 이전 화면·5분 만료·방/발신자 격리·기존 명령 매핑을 검증한다.
  */
 package kr.co.angaebot.bridge
 
@@ -54,5 +55,41 @@ class MenuSelectionGateTest {
         for (text in listOf("123", "10개", "11", "1만원", "1만원이야", "주", "1만원 줘", "1번가", "1/2", "0만원", "0개", "ㅈㅅ")) {
             assertNull(gate.parseSelection(text, "방", "나"))
         }
+    }
+}
+
+class HelpMenuGateTest {
+    @Test fun numericHelpAndBack() {
+        var now = 1_000L
+        val gate = HelpMenuGate(clockMs = { now })
+        assertNull(gate.parseSelection("1", "방", "나"))
+        gate.open("방", "나")
+        assertEquals(ParseResult.Command("도움말", "선택 9"), gate.parseSelection("9", "방", "나"))
+        val submenu = gate.choose("방", "나", "9")
+        assertNull(submenu.first)
+        org.junit.Assert.assertTrue(submenu.second!!.contains("주식·메모리7"))
+        assertEquals(ParseResult.Command("도움말", "선택 0"), gate.parseSelection("0", "방", "나"))
+        val back = gate.choose("방", "나", "0")
+        org.junit.Assert.assertTrue(back.second!!.contains("명령 메뉴"))
+        assertEquals(ParseResult.Command("테스트", ""), gate.choose("방", "나", "1").first)
+        assertNull(gate.parseSelection("1", "방", "나"))
+        gate.open("방", "나")
+        now += 300_000L
+        assertNull(gate.parseSelection("1", "방", "나"))
+    }
+    @Test fun isolationAndSafety() {
+        val gate = HelpMenuGate(clockMs = { 0L })
+        gate.open("방", "나")
+        assertNull(gate.parseSelection("1", "다른방", "나"))
+        assertNull(gate.parseSelection("1", "방", "다른사람"))
+        for (s in listOf("1만원", "10개", "123", "0만원", "1번가")) {
+            assertNull(gate.parseSelection(s, "방", "나"))
+        }
+        assertEquals(ParseResult.Command("도움말", "선택 0"), gate.parseSelection("0번", "방", "나"))
+        assertEquals(ParseResult.Command("도움말", "선택 10"), gate.parseSelection("10", "방", "나"))
+        assertEquals(ParseResult.Command("계산", "123*456").name, "계산")
+        val other = gate.choose("방", "나", "10")
+        org.junit.Assert.assertTrue(other.second!!.contains("계산"))
+        assertEquals(ParseResult.Command("계산", "123*456"), gate.choose("방", "나", "1").first)
     }
 }
