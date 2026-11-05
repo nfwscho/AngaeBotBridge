@@ -1,6 +1,6 @@
 """
 앙개봇 통합 메뉴 회귀 테스트 — 전체 검증 기능
-1. 홈/주식/배드민턴/요리/여행/종친/영어 메뉴의 정확한 번호 이동을 검증한다.
+1. 홈/주식/배드민턴/요리/여행/종친/날씨/설정 메뉴의 정확한 번호 이동을 검증한다.
 2. 0은 현재 페이지의 이전 메뉴, 00은 홈으로 복귀하며 메뉴 세션을 재설정한다.
 3. 미구현 콘텐츠는 '개발 예정' 메시지만 반환하고 파일·AI·외부 명령을 실행하지 않는다.
 4. 5분 만료, 방·발신자 격리, 허가되지 않은 접근, 잘못된 번호를 검증한다.
@@ -44,7 +44,7 @@ class GlobalMenuUnitTests(unittest.TestCase):
         self.assertIn("앙개봇 메인 메뉴", self.menus.choose(self.db, "방", "나", "00").reply)
 
     def test_all_shortcut_categories_and_pending_leaf(self):
-        for category in ("배드민턴", "요리", "여행", "종친", "영어"):
+        for category in ("배드민턴", "요리", "여행", "종친", "날씨"):
             menu = self.menus.open_category("방", "나", category)
             self.assertTrue(menu.menu_active)
             self.assertIn(category + " 메뉴", menu.reply)
@@ -135,7 +135,7 @@ class GlobalMenuAPITests(unittest.TestCase):
         request_id = "global_menu_repeat_001"
         first = self.post("선택 6", request_id=request_id).json()
         self.assertTrue(first["ok"])
-        self.assertIn("영어 메뉴", first["reply"])
+        self.assertIn("날씨 메뉴", first["reply"])
         again = self.post("선택 6", request_id=request_id).json()
         self.assertTrue(again["duplicate"])
         self.assertEqual(again["reply"], first["reply"])
