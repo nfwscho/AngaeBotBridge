@@ -37,7 +37,24 @@ function Resolve-AngaeAdb {
         $candidates.Add($env:ANGAE_ADB_PATH)
     }
 
-    $sdkRoots = @(
+    # Honor Android Studio's project-specific SDK directory before the machine defaults.
+    # local.properties can contain sdk.dir=C\:\\Users\\name\\AppData\\Local\\Android\\Sdk.
+    $sdkRoots = @()
+    if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) {
+        $properties = Join-Path $ProjectRoot 'local.properties'
+        if (Test-Path -LiteralPath $properties -PathType Leaf) {
+            $sdkLine = @(Get-Content -LiteralPath $properties |
+                Where-Object { $_ -match '^\s*sdk\.dir\s*=' } | Select-Object -First 1)
+            if ($sdkLine.Count -gt 0) {
+                $sdkDir = ($sdkLine[0] -split '=', 2)[1].Trim()
+                $sdkDir = $sdkDir.Replace('\:', ':').Replace('\\', '\')
+                if (-not [string]::IsNullOrWhiteSpace($sdkDir)) {
+                    $sdkRoots += $sdkDir
+                }
+            }
+        }
+    }
+    $sdkRoots += @(
         $env:ANDROID_SDK_ROOT,
         $env:ANDROID_HOME,
         (Join-Path $localData 'Android\Sdk'),
