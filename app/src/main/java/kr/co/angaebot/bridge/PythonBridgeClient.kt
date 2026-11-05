@@ -13,6 +13,8 @@
  * 11. 8개 해외 시세의 외부 HTTP 호출은 Android가 아닌 Python Core가 수행한다.
  * 12. v0.4.3에서는 주식 메뉴의 menu_active 필드만 안전하게 추가로 해석하고 기존 응답/에러/타임아웃을 유지한다.
  * 13. 토큰/SQLite/카톡 RemoteInput/AI 설정은 수정하지 않는다.
+ * 14. 인증된 통합 메뉴 명령을 Python Core로 전달하며 기존 주식/AI/운영 명령을 유지한다.
+ * 15. 번호 선택이 주식 분석을 호출할 수 있으므로 기존 주식의 23초 응답 제한을 통합 메뉴에도 적용한다.
  */
 package kr.co.angaebot.bridge
 
@@ -27,9 +29,9 @@ sealed interface PythonOutcome {
 
 object PythonBridgeClient {
     private const val BASE = "http://127.0.0.1:8765"
-    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7")
+    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴")
     private val aiCommands = setOf("질문", "요약")
-    private val stockCommands = setOf("주식", "메모리7")
+    private val stockCommands = setOf("주식", "메모리7", "메뉴")
 
     fun health(token: String): PythonOutcome = request("GET", "/v1/health", token, null)
 
