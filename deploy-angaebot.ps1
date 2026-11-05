@@ -18,6 +18,8 @@
 # 17. Detect ADB in Android Studio SDK, environment paths, or a verified Google user cache.
 # 18. If ADB is missing, the resolver can download a pinned official archive after license consent.
 # 19. Invoke ADB by resolved full path without requiring Windows PATH changes.
+# 21. After verified deployment, write minimal non-secret SHA/branch/time/Android status to Core-local metadata.
+# 22. Metadata is best-effort after successful service/APK verification; never erase existing DB/logs/data.
 # 20. If Java is missing from the shell, reuse Android Studio's bundled JBR
 #     for the Gradle APK build without changing machine settings.
 # Run: .\deploy-angaebot.ps1
@@ -208,6 +210,26 @@ try {
         Assert-Exit 'Android package verification failed; Core is already updated'
         if ($packagePath -notmatch 'package:') { throw 'Android package not installed after update; Core is already updated.' }
         Write-Host "Android APK verified on $androidSerial" -ForegroundColor Green
+    }
+    # Record only the success state after Core verification and optional Android installation.
+    # This metadata contains no tokens, personal data or secrets.
+    $metaTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('angaebot-release-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $metadata = @{
+            sha = $sha
+            branch = $Branch
+            deployed_at = (Get-Date).ToString('o')
+            android_updated = [bool]$InstallAndroid
+        } | ConvertTo-Json -Compress
+        [System.IO.File]::WriteAllText($metaTemp, $metadata, (New-Object System.Text.UTF8Encoding($false)))
+        & scp -o BatchMode=yes $metaTemp "${SshHost}:$remoteCore/.deploy-info.json.tmp"
+        Assert-Exit 'Deployment metadata transfer failed'
+        Invoke-Remote "mv -f $remoteCore/.deploy-info.json.tmp $remoteCore/.deploy-info.json" 'Deployment metadata finalize failed'
+        Write-Host 'Deployment metadata recorded for the settings menu' -ForegroundColor Green
+    } catch {
+        Write-Warning "Deployment succeeded, but read-only deployment record was not updated: $($_.Exception.Message)"
+    } finally {
+        Remove-Item -LiteralPath $metaTemp -Force -ErrorAction SilentlyContinue
     }
     Write-Host "Deployment successful: $sha" -ForegroundColor Green
 } catch {
