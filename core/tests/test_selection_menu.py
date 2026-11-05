@@ -249,12 +249,13 @@ class MenuSelectionAPITests(unittest.TestCase):
     def test_group_list_number_selection_and_scope(self):
         self.assertTrue(self.post('그룹생성 반도체').json()['ok'])
         self.assertTrue(self.post('그룹생성 미국시총10').json()['ok'])
+        self.assertTrue(self.post('추가 미국시총10 MU 마이크론').json()['ok'])
         listed=self.post('목록').json()
         self.assertTrue(listed['ok'])
         self.assertTrue(listed['menu_active'])
         self.assertIn('1. 메모리7 8종목',listed['reply'])
         self.assertIn('2. 반도체 0종목',listed['reply'])
-        self.assertIn('3. 미국시총10 0종목',listed['reply'])
+        self.assertIn('3. 미국시총10 1종목',listed['reply'])
         self.assertFalse(self.post('선택 2',sender='다른사람').json()['ok'])
         with patch('app.main.execute_stock_command',return_value='메모리7 시세') as quote:
             first=self.post('선택 1').json()
