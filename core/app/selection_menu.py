@@ -147,7 +147,7 @@ class StockSelectionMenus:
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
         if re.fullmatch(r'(?:10|[0-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 0~10 중에서 선택하세요.')
+            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
