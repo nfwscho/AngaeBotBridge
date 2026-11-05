@@ -44,4 +44,4 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
           $text = [System.IO.File]::ReadAllText((Resolve-Path './deploy-angaebot.ps1'))
-          if ($text -match '[^\\x00-\\x7F]') { throw 'Deployment script must be ASCII for Windows PowerShell 5.1.' }
+          if (@($text.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) { throw 'Non-ASCII characters found in deployment script.' }
