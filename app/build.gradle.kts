@@ -26,6 +26,7 @@
 // 25. v0.4.12(versionCode 16)는 홈 메뉴 순서 조정, 단축 금·개 추가, 도움말 동기화만 수행한다.
 // 26. 기존 단축 투·메/기존 UI·권한·설정·DB·로그·5분 세션 및 카카오톡 응답 흐름을 보존한다.
 // 27. 날씨 조회/지역 설정 단축어는 Android Bridge v0.4.13(versionCode 17)로 배포하며 앱 ID·서명·설정·로그를 유지한다.
+// 28. 부동산 실거래가 단축 조회 v0.4.14(versionCode 18)는 같은 앱 ID·서명·데이터·UI·로그·배터리를 보존한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -39,8 +40,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.4.13"
+        versionCode = 18
+        versionName = "0.4.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
