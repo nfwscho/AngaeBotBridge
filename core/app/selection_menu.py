@@ -108,7 +108,7 @@ class StockSelectionMenus:
         """관심그룹 목록에 표시된 번호를 동일 순서의 시세 조회 명령으로 연결한다."""
         key = self._key(room, sender)
         rows = db.execute("""SELECT name FROM stock_groups
-            WHERE room=? AND sender=? ORDER BY created_at,name""", (room, sender)).fetchall()
+            WHERE room=? AND sender=? ORDER BY created_at,rowid""", (room, sender)).fetchall()
         choices = (MenuChoice('메모리7', command_argument='메모리7'),) + tuple(
             MenuChoice(name, command_argument=name) for (name,) in rows)
         self._save(key, choices)
