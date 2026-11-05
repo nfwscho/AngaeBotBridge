@@ -1154,7 +1154,8 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
     if dates:
         pass  # 거래일은 compact_source_summary에서 국가별로 표시
-    lines.append('')\n    lines.extend(compact_source_summary(quotes))
+    lines.append('')
+    lines.extend(compact_source_summary(quotes))
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
     lines.append('※ 무료 시세 · 지연 가능 · 실시간 호가 아님')
