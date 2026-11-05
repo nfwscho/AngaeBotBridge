@@ -12,6 +12,7 @@
 10. 메모리7 8종목 고정 순서와 실제 그룹 최대 10종목의 번호 선택을 종목 티커로 안전하게 연결한다.
 11. 기존 5분 만료·타 채팅방 선택 차단·모의 시세 실패·중복 request_id 및 기존 DB/로그 보존을 검증한다.
 12. 관심그룹 목록 번호 1~N이 메모리7 및 실제 그룹으로 연결되는지 API/격리/로그를 검증한다.
+13. 0으로 메인/하위 메뉴 및 그룹 시세에서 이전 화면으로 돌아가고 방·발신자 격리와 만료를 유지하는지 검증한다.
 """
 from __future__ import annotations
 
@@ -114,6 +115,22 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
         with self.assertRaisesRegex(StockQuoteError,'1~10'):
             self.menus.choose(self.db,'방','나','11')
+
+    def test_zero_returns_to_root_and_expiry(self):
+        self.menus.open('방','나')
+        self.assertTrue(self.menus.choose(self.db,'방','나','6').menu_active)
+        back=self.menus.choose(self.db,'방','나','0')
+        self.assertTrue(back.menu_active)
+        self.assertIn('📊 주식 메뉴',back.reply)
+        self.assertEqual(self.menus.choose(self.db,'방','나','2').execute_argument,'메모리7')
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'방','나','0')
+        self.menus.open('방','나')
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'다른방','나','0')
+        self.now+=MENU_TTL_SECONDS
+        with self.assertRaisesRegex(StockQuoteError,'5분'):
+            self.menus.choose(self.db,'방','나','0')
 
     def test_quote_menu_invalid_lengths_and_expiry(self):
         with self.assertRaisesRegex(StockQuoteError,'1~10'):
@@ -276,6 +293,27 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertTrue(third['ok'])
             self.assertEqual(third['reply'],'미국시총10 시세')
             report.assert_called_once()
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
+                             db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
+
+    def test_zero_back_from_groups_and_quote(self):
+        self.assertTrue(self.post('그룹생성 반도체').json()['ok'])
+        listed=self.post('목록').json()
+        self.assertTrue(listed['menu_active'])
+        self.assertFalse(self.post('선택 0',sender='다른사람').json()['ok'])
+        back=self.post('선택 0').json()
+        self.assertTrue(back['menu_active'])
+        self.assertIn('📊 주식 메뉴',back['reply'])
+        self.assertTrue(self.post('선택 5').json()['menu_active'])
+        with patch('app.main.group_report',return_value='반도체 시세'):
+            # 그룹에 종목이 없으면 그룹 선택 후 새 종목 선택 메뉴는 열리지 않는다.
+            group=self.post('선택 2').json()
+            self.assertTrue(group['ok'])
+            self.assertEqual(group['reply'],'반도체 시세')
+        self.assertFalse(self.post('선택 0').json()['ok'])
+        self.assertTrue(self.post('목록').json()['menu_active'])
+        self.assertTrue(self.post('선택 0').json()['menu_active'])
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
                              db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
