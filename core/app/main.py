@@ -57,6 +57,11 @@
 54. 홈/주식/배드민턴/요리/여행/종친/영어 메뉴와 0 이전·00 홈을 주식 기존 선택 상태에서 통합 관리한다.
 55. 홈에서 기존 주식 시세·분석을 선택하면 기존 stock/history/watchlists 모듈로 전달하며 DB·AI/Android 로그는 보존한다.
 56. 미개발 콘텐츠 기능은 안내만 제공하며 외부 AI 호출/파일 변경/개인정보 조회를 실행하지 않는다.
+57. v0.6.0 홈 6번은 날씨로, 7번은 읽기 전용 설정·운영 메뉴로 대체/추가한다.
+58. 현재 Core 상태/배포 정보/설정 요약/현재 방·발신자의 명령 로그만 조회하며 민감 정보는 노출하지 않는다.
+59. '메뉴 경로 주식 2 2' 등 연속 번호 메뉴 점프는 최종 항목만 실행해 불필요한 외부 시세 호출을 방지한다.
+60. 각 메뉴 점프는 최대 5개 정확한 숫자로 제한하며 기존 인증·중복 요청·jobs/events 로깅·TTL 보호를 재사용한다.
+61. 기존 주식 분석/관심목록/AI/설정/배터리/Android UI/DB 스키마 및 기존 명령은 제거하지 않는다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -75,14 +80,15 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
-from .ops import details, command_stats, recent_errors, uptime_report
+from .ops import (details, command_stats, recent_errors, uptime_report,
+                  deployment_report, recent_command_log, configuration_report)
 from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 
-VERSION = "0.5.10"
+VERSION = "0.6.0"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
 
 
@@ -169,12 +175,21 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         menu = selection_menus.open(request.room, request.sender, back='home')
                     elif action in CONTENT_ITEMS:
                         menu = selection_menus.open_category(request.room, request.sender, action)
+                    elif action == "설정":
+                        menu = selection_menus.open_settings(request.room, request.sender)
+                    elif action.startswith("경로 "):
+                        parts = action.split()
+                        if len(parts) < 3:
+                            raise StockQuoteError("메뉴 점프 사용법: 주 2 2 / 앙 1 2 / 설 3")
+                        with closing(connect()) as read_db:
+                            menu = selection_menus.navigate_path(read_db, request.room, request.sender,
+                                                               parts[1], tuple(parts[2:]))
                     elif action.startswith("선택 "):
                         with closing(connect()) as read_db:
                             menu = selection_menus.choose(read_db, request.room, request.sender,
                                                           action[3:].strip())
                     else:
-                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/영 또는 번호 선택")
+                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/날/설 또는 번호 선택")
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
@@ -191,6 +206,27 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if stock_reply is not None:
                     pass
+                elif request.command == "메뉴" and resolved_argument.startswith("설정보기 "):
+                    view = resolved_argument.split(" ", 1)[1]
+                    if view == "status":
+                        report = details(int(time.monotonic() - began))
+                    elif view == "deployment":
+                        report = deployment_report(VERSION)
+                    elif view == "configuration":
+                        report = configuration_report(AISettings.from_env().status_text())
+                    elif view in {"logs", "stats", "errors"}:
+                        with closing(connect()) as read_db:
+                            if view == "logs":
+                                report = recent_command_log(read_db, request.room, request.sender)
+                            elif view == "stats":
+                                report = command_stats(read_db, request.room, request.sender)
+                            else:
+                                report = recent_errors(read_db, request.room, request.sender)
+                    else:
+                        raise StockQuoteError("등록되지 않은 설정 메뉴 항목입니다.")
+                    refreshed = selection_menus.open_settings(request.room, request.sender)
+                    stock_reply = report + "\\n\\n" + refreshed.reply
+                    stock_menu_active = True
                 elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
