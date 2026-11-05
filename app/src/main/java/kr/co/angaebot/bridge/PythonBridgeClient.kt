@@ -53,10 +53,10 @@ object PythonBridgeClient {
             .put("argument", argument)
             .put("room", room.take(100))
             .put("sender", sender.take(100))
-        return request("POST", "/v1/commands", token, payload, name in aiCommands, name in stockCommands)
+        return request("POST", "/v1/commands", token, payload, name in aiCommands, name in stockCommands, name == "메뉴")
     }
 
-    private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false, isStock: Boolean = false): PythonOutcome {
+    private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false, isStock: Boolean = false, isMenu: Boolean = false): PythonOutcome {
         if (token.length < 32) return PythonOutcome.Failure("Python 인증 토큰이 설정되지 않았습니다.")
         var connection: HttpURLConnection? = null
         try {
@@ -100,7 +100,7 @@ object PythonBridgeClient {
             }
             val reply = json.optString("reply", "")
             if (reply.isBlank()) return PythonOutcome.Failure("Python 응답에 내용이 없습니다.")
-            return PythonOutcome.Success(reply.take(if (name == "메뉴") 3500 else 1800), json.optBoolean("duplicate", false),
+            return PythonOutcome.Success(reply.take(if (isMenu) 3500 else 1800), json.optBoolean("duplicate", false),
                 json.optBoolean("ok", false), json.optBoolean("menu_active", false),
                 moduleSource = json.optString("module_source", ""))
         } catch (e: java.net.ConnectException) {
