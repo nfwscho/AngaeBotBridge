@@ -1,5 +1,5 @@
 """
-앙개봇 v0.5.8 Python 명령 엔진 — 전체 기능 상세 안내
+앙개봇 v0.5.9 Python 명령 엔진 — 전체 기능 상세 안내
 1. Galaxy S20+의 Termux에서 FastAPI로 전달된 허용 명령만 실행한다.
 2. '계산': Python eval 없이 제한된 AST로 +,-,*,/,//,%,** 및 괄호를 계산한다.
 3. 과도한 입력, 큰 숫자, 깊은 트리, 지수 폭증, 0으로 나누기를 거부한다.
@@ -19,6 +19,7 @@
 17. v0.5.3 한글 종목 조회는 관심그룹/분석 모듈에서 처리하므로 계산·시간 기능과 원래 로그를 변경하지 않는다.
 18. v0.5.6에서도 기존 계산·시간·서버상태와 모든 SQLite 로그를 보존하며 주식 숫자 선택은 별도 selection_menu.py에서 처리한다.
 19. v0.5.8 서버상태 표기 버전만 갱신하고 기존 계산·시간·운영·AI OFF·로그 기능은 동일하게 유지한다.
+20. v0.5.9 서버상태 버전 갱신만 적용하며 시세 출처 통합은 market/watchlists에서 수행하고 계산·시간·AI·기존 로그는 그대로 유지한다.
 """
 from __future__ import annotations
 
@@ -104,5 +105,5 @@ def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
         now = datetime.now(timezone(timedelta(hours=9)))
         return "🕐 서울 현재 시각: " + now.strftime("%Y-%m-%d %H:%M:%S KST")
     if name == "서버상태":
-        return f"🐍 앙개봇 Python v0.5.8 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
+        return f"🐍 앙개봇 Python v0.5.9 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
     raise CommandError("허용되지 않은 Python 명령입니다.")

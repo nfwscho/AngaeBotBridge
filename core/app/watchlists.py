@@ -29,6 +29,9 @@
 25. 미국시총10 기업명과 기존 메모리7의 한국·미국·일본 별칭, 구글/웨스턴 디지털 등 명확한 동의어를 지원한다.
 26. 사용자가 부여한 별칭은 동일 방·발신자에게만 보이고, 모호한 별칭은 종목을 추정하지 않고 오류를 표시한다.
 27. 이름에서 티커로만 변환하며 조회 공급자·기존 SQLite·메모리7·운영 로그와 AI OFF는 변경하지 않는다.
+28. v0.5.9 관심종목 그룹 시세표는 가격·등락률과 기존 번호 선택을 유지하고 한국·미국·일본 출처/최신 거래시각/지연상태를 목록 하단에만 표시한다.
+29. 그룹 안에서 공급자·체결시각이 다른 종목은 혼합·종목별 시각 차이를 명시하며, 시간외 가격은 각 종목의 별도 행으로 보존한다.
+30. 기존 그룹 CRUD/보안 범위/가격 소스/실패 처리/날짜/SQLite 로그/Android 배터리·권한/AI OFF는 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -39,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
-from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line
+from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line, market_source_summary
 
 MAX_GROUPS = 10
 MAX_ITEMS = 10
@@ -208,12 +211,13 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
             lines.append(f"{index}. {stock.name} : 조회 불가")
             failed += 1
         else:
-            lines.append(f"{index}. {quote_line(quote)}")
+            lines.append(f"{index}. {quote_line(quote, source_details=False)}")
             dates[stock.market] = quote.market_time.strftime("%m/%d")
     if failed == len(stocks):
         raise StockQuoteError(f"'{name}' 그룹의 모든 시세를 조회하지 못했습니다.")
     if dates:
         lines.append("현지 거래일: " + " · ".join(f"{market} {dates[market]}" for market in ("한국", "미국", "일본") if market in dates))
+    lines.extend(market_source_summary(quotes))
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
     lines.append("※ 무료 비공식·지연 시세 가능 / 투자 주문 기능 없음")

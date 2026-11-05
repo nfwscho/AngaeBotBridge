@@ -118,7 +118,7 @@ class WatchlistAPITests(unittest.TestCase):
     def test_existing_mechanics_and_ai_off(self):
         status=self.cmd(command='서버상태').json()
         self.assertTrue(status['ok'])
-        self.assertIn('v0.5.8',status['reply'])
+        self.assertIn('v0.5.9',status['reply'])
         self.assertIn('OFF',self.cmd(command='AI상태').json()['reply'])
         self.assertIn('KST',self.cmd(command='시간').json()['reply'])
 

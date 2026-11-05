@@ -50,9 +50,9 @@ class OpsTests(unittest.TestCase):
 
     def test_health_and_legacy_math(self):
         response = self.client.get("/v1/health", headers=self.headers)
-        self.assertEqual(response.json()["version"], "0.5.8")
+        self.assertEqual(response.json()["version"], "0.5.9")
         self.assertIn("156,176", self.call("계산", "344*454").json()["reply"])
-        self.assertIn("v0.5.8", self.call("서버상태").json()["reply"])
+        self.assertIn("v0.5.9", self.call("서버상태").json()["reply"])
         self.assertIn("KST", self.call("시간").json()["reply"])
 
     def test_authentication_and_unknown_command(self):

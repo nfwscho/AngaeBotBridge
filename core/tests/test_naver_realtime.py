@@ -10,6 +10,7 @@
 8. 메모리7 1~8번 번호 선택, 사용자 그룹 번호 및 기존 Android 배터리·기존 DB/로그/인증은 그대로 유지한다.
 9. 외부 인터넷/AI/실제 운영 SQLite를 읽거나 수정하지 않으며 TestClient/Mock 데이터만 사용한다.
 10. 환율/외국 주식/과거 종가·변동성·알림/주문/백그라운드 처리에는 변경이 없음을 확인한다.
+11. v0.5.9 메모리7과 사용자 그룹에서 KRX 상세 정보가 종목마다 반복되지 않고 출처가 시장별 하단 한 줄로 이동했음을 검사한다.
 """
 from __future__ import annotations
 
@@ -175,13 +176,15 @@ class NaverRealtimeTests(unittest.TestCase):
         report=memory7_report(fetcher=quotes,use_cache=False)
         self.assertIn('1. 삼성전자',report)
         self.assertIn('2. 하이닉스 : 조회 불가',report)
-        self.assertIn('   └ KRX',report)
+        self.assertIn('  국내: 네이버 폴링 · KRX',report)
+        self.assertNotIn('   └ KRX',report)
         self.assertIn('번호 1~8',report)
         def group_quotes(stock): return q if stock.ticker == q.stock.ticker else None
         report=group_report('내종목', (WATCHLIST[0],WATCHLIST[2]),fetcher=group_quotes)
         self.assertIn('1. 삼성전자',report)
         self.assertIn('2. 마이크론 : 조회 불가',report)
-        self.assertIn('   └ KRX',report)
+        self.assertIn('  국내: 네이버 폴링 · KRX',report)
+        self.assertNotIn('   └ KRX',report)
         self.assertIn('번호 1~2',report)
 
 

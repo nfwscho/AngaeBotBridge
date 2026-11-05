@@ -43,6 +43,10 @@
 40. 모든 미국 종목 보조 조회 실패는 기존 조회 불가로 격리하고 기존 메모리7/관심그룹/번호/캐시·DB·로그·배터리·해외/국내 시세를 그대로 유지한다.
 41. 원격 응답 내용/토큰/주소를 SQLite 또는 운영 로그에 신규 저장하지 않으며 공개 시세 제공자 실패 원인 코드는 진단 가능하게 유지한다.
 42. 주식 주문·지속적 모니터링·새 앱 권한·유료 API/키는 추가하지 않는다.
+43. v0.5.9 메모리7/관심그룹 목록에서는 가격·등락률을 한 줄로 표시하고 시장별 데이터 공급자·기준 거래시각·지연 상태를 하단에 통합한다.
+44. 공급자/체결시각이 시장 안에서 서로 다르면 혼합 출처와 최신 거래시각(종목별 시각 상이)을 표시해 잘못된 단일 실시간 시세로 오인하지 않는다.
+45. 기존 quote_line()의 기본 원문 상세 표시 및 KRX/NXT 장전·장후 가격 별도 표시, 30초 캐시, 기록, 번호, 예외 처리는 모두 보존한다.
+46. 한국 네이버/미국 Yahoo·나스닥/일본 Yahoo Japan·라쿠텐 및 5일·1개월·3개월 분석, Android 배터리·UI·권한과 유료 API OFF를 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -741,7 +745,7 @@ def fetch_rakuten_quote(stock: Stock, *, opener=urlopen, now: datetime | None = 
         html = raw.decode('utf-8', errors='replace')
         if 'キオクシア' not in html:
             html = raw.decode('cp932', errors='replace')
-        return parse_rakuten_quote(stock, html, now=now)
+        return replace(parse_rakuten_quote(stock, html, now=now), source='라쿠텐 공개 시세')
     except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as error:
         if isinstance(error, StockQuoteError):
             raise
@@ -757,7 +761,7 @@ def fetch_yahoo_japan_quote(stock: Stock, *, opener=urlopen, now: datetime | Non
             raw = response.read(_PAGE_MAX_BYTES + 1)
         if len(raw) > _PAGE_MAX_BYTES:
             raise StockQuoteError('페이지 용량 초과')
-        return parse_yahoo_japan_quote(stock, raw.decode('utf-8', errors='replace'), now=now)
+        return replace(parse_yahoo_japan_quote(stock, raw.decode('utf-8', errors='replace'), now=now), source='Yahoo Japan')
     except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as error:
         if isinstance(error, StockQuoteError):
             raise
@@ -807,13 +811,11 @@ def _formatted_price(value: float, currency: str) -> str:
     raise StockQuoteError('지원되지 않는 통화')
 
 
-def _domestic_status_text(item: Quote) -> str:
-    """네이버 시세의 지연/마감 상태를 실제 메타데이터와 거래시각으로 표시."""
+def _domestic_status_label(item: Quote) -> str:
+    """KRX 메타데이터의 시세 신선도를 판단하며 기존 상세 출력과 통합 요약이 함께 이용한다."""
     meta = item.domestic
-    when = item.market_time.strftime('%m/%d %H:%M:%S')
     if meta is None:
-        # Yahoo 폴백 등 공급자를 보증하지 못하는 경우 실시간이라고 표시하지 않는다.
-        return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
+        return '지연 여부 미확인(대체 시세)'
     status = meta.market_status
     delta = (item.fetched_at - item.market_time).total_seconds()
     freshness = (0 <= delta <= 180)
@@ -834,7 +836,16 @@ def _domestic_status_text(item: Quote) -> str:
         label = '개장 전 최종가'
     else:
         label = '시장상태 미확인(최종 체결가)'
-    return f'   └ KRX {when} · {label} · 네이버 {meta.provider}'
+    return label
+
+
+def _domestic_status_text(item: Quote) -> str:
+    """이전 단일 종목 상세 출력의 형식을 유지한다."""
+    meta = item.domestic
+    when = item.market_time.strftime('%m/%d %H:%M:%S')
+    if meta is None:
+        return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
+    return f'   └ KRX {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
 
 
 def _domestic_after_text(item: Quote) -> str:
@@ -851,9 +862,14 @@ def _domestic_after_text(item: Quote) -> str:
             f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
 
 
-def quote_line(item: Quote) -> str:
+def quote_line(item: Quote, *, source_details: bool = True) -> str:
+    """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
     body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    if not source_details:
+        # 시간외 가격은 본장과 다른 가격이므로 기존처럼 해당 종목에 별도 표시한다.
+        extra = _domestic_after_text(item) if item.stock.market == '한국' else ''
+        return body + ('\n' + extra if extra else '')
     if item.stock.market == '미국' and item.source == '나스닥 웹':
         # 공개 웹 응답은 별도 실시간 거래소 라이선스/세션을 보증하지 않는다.
         return body + f"\n   └ 미국 {item.market_time.strftime('%m/%d %H:%M')} ET · 나스닥 공개 시세(지연 여부 미확인)"
@@ -862,6 +878,43 @@ def quote_line(item: Quote) -> str:
         return body
     extra = _domestic_after_text(item)
     return body + '\n' + _domestic_status_text(item) + ('\n' + extra if extra else '')
+
+
+def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
+    """실제로 성공한 시세만 국내/미국/일본으로 묶어 출처·최신 거래시각·지연 정보를 한 번씩 표시한다.
+
+    종목마다 다른 시각/제공자가 섞이면 이를 표시한다. 단일 최신 시각을 전체 종목 시각으로
+    주장하지 않으며, 장중 확인 조건이 부족한 가격을 실시간으로 위장하지 않는다.
+    """
+    result = []
+    for region, title in (('한국', '국내'), ('미국', '미국'), ('일본', '일본')):
+        region_quotes = [q for q in quotes if q is not None and q.stock.market == region]
+        if not region_quotes:
+            continue
+        providers = []
+        statuses = []
+        for q in region_quotes:
+            if region == '한국':
+                provider = ('네이버 ' + q.domestic.provider
+                            if q.domestic is not None and q.domestic.provider in ('폴링', '모바일')
+                            else (q.domestic.provider if q.domestic is not None else '공급자 미확인'))
+                status = _domestic_status_label(q)
+            elif region == '미국':
+                provider = '나스닥 공개 시세' if q.source == '나스닥 웹' else 'Yahoo Finance'
+                status = '지연 여부 미확인'
+            else:
+                provider = q.source or 'Yahoo Finance'
+                status = '지연 여부 미확인'
+            if provider not in providers:
+                providers.append(provider)
+            if status not in statuses:
+                statuses.append(status)
+        latest = max(q.market_time for q in region_quotes)
+        when = latest.strftime('%m/%d %H:%M:%S') if region == '한국' else latest.strftime('%m/%d %H:%M')
+        zone = 'KRX ' if region == '한국' else ('ET ' if region == '미국' else 'JST ')
+        time_difference = ' (종목별 거래시각 상이)' if len({q.market_time for q in region_quotes}) > 1 else ''
+        result.append(f'  {title}: {" / ".join(providers)} · {zone}{when} (최신){time_difference} · {" / ".join(statuses)}')
+    return ('시세 출처 · 기준시각:', *result) if result else ()
 
 
 def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cache: bool = True) -> str:
@@ -894,7 +947,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
             lines.append(f'{index}. {stock.name} : 조회 불가')
         else:
             success += 1
-            line = quote_line(item)
+            line = quote_line(item, source_details=False)
             if item.market_time.date() < latest_dates[stock.market]:
                 line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
             lines.append(f'{index}. {line}')
@@ -904,9 +957,10 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
     if dates:
         lines.append('현지 거래일: ' + ' · '.join(f'{m} {dates[m]}' for m in ('한국', '미국', '일본') if m in dates))
+    lines.extend(market_source_summary(quotes))
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
-    lines.append('※ 네이버 금융(한국) / Yahoo Finance·Japan(미국·일본) 공개/지연 시세 가능 · 정규장 기준')
+    lines.append('※ 무료 공개 시세는 지연될 수 있으며 정규장 기준 · 투자 주문용 실시간 호가 아님')
     lines.append('※ 5분 내 번호 1~8만 보내면 해당 종목의 5일·1개월·3개월 분석')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote:

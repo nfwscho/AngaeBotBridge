@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.5.8 FastAPI 서버 — 전체 구현 기능 상세 설명
+앙개봇 Python Core v0.5.9 FastAPI 서버 — 전체 구현 기능 상세 설명
 1. v0.2의 127.0.0.1:8765 바인딩, X-AngaeBot-Token 인증/constant-time 검사 유지.
 2. GET /v1/health, POST /v1/commands의 기존 응답 필드·호환성 유지.
 3. 계산/시간/서버상태 허용 명령, 요청 ID 기반 SQLite 중복 방지, events/jobs 로그 유지.
@@ -49,6 +49,7 @@
 47. 해당 보조 조회는 원래 DB 락 외부/인증/요청 중복·로깅 흐름으로 실행하고 인증키/사용자 데이터/스키마는 변경하지 않는다.
 48. 나스닥 시세는 지연 여부를 임의로 실시간이라고 표시하지 않고, 실패하면 종목별 조회 불가로 격리한다.
 49. 국내 네이버·일본 키오시아·기존 과거 데이터 분석·숫자 메뉴·Android 배터리·AI OFF·전체 로그를 그대로 유지한다.
+50. v0.5.9 조회 응답에서는 마켓별 시세 출처와 최신 거래시각을 목록 하단으로 모아 가독성을 높이며 기존 API/명령/로그·DB/숫자 선택·AI OFF를 유지한다.
 """
 from __future__ import annotations
 
@@ -72,7 +73,7 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus
 
-VERSION = "0.5.8"
+VERSION = "0.5.9"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
 
 
