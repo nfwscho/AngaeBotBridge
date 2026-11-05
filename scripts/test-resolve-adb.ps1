@@ -45,6 +45,17 @@ try {
         throw 'Android SDK environment changed unexpectedly.'
     }
 
+    # Custom SDK path in local.properties takes priority over generic SDK defaults.
+    $env:ANDROID_HOME = ''
+    $projectRoot = Join-Path $tempRoot 'android-project'
+    New-Item -ItemType Directory -Path $projectRoot -Force | Out-Null
+    $escapedSdk = $fakeSdk.Replace('\', '/')
+    [System.IO.File]::WriteAllText((Join-Path $projectRoot 'local.properties'), "sdk.dir=$escapedSdk")
+    $resolved = Resolve-AngaeAdb -ProjectRoot $projectRoot -NoDownload
+    if ($resolved -ne $sdkAdb) {
+        throw "Android Studio local.properties SDK discovery failed: $resolved"
+    }
+
     Write-Host 'ADB resolver isolated discovery tests PASSED' -ForegroundColor Green
 } finally {
     [Environment]::SetEnvironmentVariable('ANGAE_ADB_PATH', $beforeAdb, 'Process')
