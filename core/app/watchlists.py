@@ -221,8 +221,8 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
     lines.extend(compact_source_summary(quotes))
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
-    lines.append("※ 무료 시세 · 지연 가능 · 실시간 호가 아님")
-    lines.append(f"※ 5분 내 번호 1~{len(stocks)}: 종목 분석")
+    lines.append("※ 무료·지연 가능·실시간 아님")
+    lines.append(f"※ 5분 내 1~{len(stocks)}: 종목 분석")
     return "\n".join(lines)
 
 
@@ -240,9 +240,9 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             LEFT JOIN stock_items i ON i.room=g.room AND i.sender=g.sender AND i.group_name=g.name
             WHERE g.room=? AND g.sender=? GROUP BY g.name ORDER BY g.created_at,g.name""",
             (room, sender)).fetchall()
-        lines = ["📂 관심종목 그룹 목록", "메모리7 : 8종목 (기본·읽기전용)"]
-        lines.extend(f"{name} : {count}종목" for name, count in rows)
-        lines.append("※ 그룹 추가: 주식 그룹생성 그룹명")
+        lines = ["📂 관심그룹", "메모리7 8종목 · 기본"]
+        lines.extend(f"{name} {count}종목" for name, count in rows)
+        lines.append("※ 추가: 주식 그룹생성 그룹명")
         return "\n".join(lines)
     if action == "프리셋":
         if len(parts) != 2 or parts[1] != US_MARKET_CAP_PRESET_NAME:
@@ -267,9 +267,9 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             VALUES (?,?,?,?,?,?,?,?,?)""",
             [(room, sender, name, item.ticker, item.name, item.currency, item.market,
               item.timezone_name, idx) for idx, item in enumerate(stocks, start=1)])
-        return (f"✅ {name} 그룹에 미국 기업 10종목 등록 완료.\n"
-                "조회: 앙개야 주식 미국시총10\n"
-                f"※ 구성 기준일 {US_MARKET_CAP_PRESET_DATE}, 시총 순위 자동 갱신 없음")
+        return (f"✅ {name} 10종목 등록\n"
+                f"조회: 주식 {name}\n"
+                f"※ {US_MARKET_CAP_PRESET_DATE} 고정 구성 · 순위 자동 갱신 없음")
     if action == "그룹생성":
         if len(parts) != 2:
             raise StockQuoteError("사용법: 앙개야 주식 그룹생성 반도체")
@@ -283,7 +283,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             raise StockQuoteError(f"관심종목 그룹은 최대 {MAX_GROUPS}개까지 등록할 수 있습니다.")
         db.execute("INSERT INTO stock_groups(room,sender,name,created_at) VALUES (?,?,?,?)",
                    (room, sender, name, int(time.time())))
-        return f"✅ '{name}' 그룹을 만들었습니다.\n주식 추가 {name} MU 마이크론"
+        return f"✅ {name} 그룹 생성\n추가: 주식 추가 {name} MU 마이크론"
     if action == "그룹삭제":
         if len(parts) != 3 or parts[2] != "확인":
             raise StockQuoteError("그룹 전체 삭제를 확인하려면: 앙개야 주식 그룹삭제 그룹명 확인")
@@ -294,7 +294,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             raise StockQuoteError("해당 관심종목 그룹이 없습니다.")
         db.execute("DELETE FROM stock_items WHERE room=? AND sender=? AND group_name=?",
                    (room, sender, name))
-        return f"✅ '{name}' 관심종목 그룹을 삭제했습니다. (기존 명령 로그는 보존)"
+        return f"✅ {name} 그룹 삭제"
     if action == "추가":
         if not 3 <= len(parts) <= 4:
             raise StockQuoteError("사용법: 앙개야 주식 추가 반도체 MU 마이크론")
@@ -315,7 +315,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             VALUES (?,?,?,?,?,?,?,?,?)""",
             (room, sender, name, stock.ticker, stock.name, stock.currency, stock.market,
              stock.timezone_name, count + 1))
-        return f"✅ {name}에 {stock.name} ({stock.ticker}) 추가 완료. {count+1}/{MAX_ITEMS}종목"
+        return f"✅ {name} +{stock.name} ({stock.ticker}) · {count+1}/{MAX_ITEMS}"
     if action == "삭제":
         if len(parts) != 3:
             raise StockQuoteError("사용법: 앙개야 주식 삭제 반도체 MU")
@@ -334,5 +334,5 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
                             (room, sender, name, stock.ticker)).rowcount
         if not result:
             raise StockQuoteError("해당 그룹에 등록된 종목이 없습니다.")
-        return f"✅ {name}에서 {stock.ticker} 종목을 삭제했습니다. (기존 로그는 보존)"
+        return f"✅ {name} -{stock.ticker} 삭제"
     raise StockQuoteError("지원하지 않는 관심종목 명령입니다. '주식 도움말'을 확인하세요.")
