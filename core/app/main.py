@@ -66,6 +66,8 @@
 63. 모든 명령 응답에 module_source를 덧붙여 Android가 담당 소스 모듈을 공통 하단에 표기하도록 한다.
 64. 신규 메타 필드는 기존 reply/menu_active/duplicate/request_id·jobs/events·API 호환을 보존한다.
 65. 배포기록이 없으면 빈 값을 반환하며 main이라고 추측하거나 GitHub에 외부 요청하지 않는다.
+66. 설정 7번 전체 메뉴 트리 조회를 기존 인증/중복방지/메뉴 활성화/작업·이벤트 로그 경로에 연결한다.
+67. 메뉴 트리 렌더링은 selection_menu.py의 공통 선택지 정의를 사용하며 DB 스키마/UI/명령을 변경하지 않는다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -223,6 +225,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         report = deployment_report(VERSION)
                     elif view == "configuration":
                         report = configuration_report(AISettings.from_env().status_text())
+                    elif view == "tree":
+                        report = selection_menus.menu_tree()
                     elif view in {"logs", "stats", "errors"}:
                         with closing(connect()) as read_db:
                             if view == "logs":
