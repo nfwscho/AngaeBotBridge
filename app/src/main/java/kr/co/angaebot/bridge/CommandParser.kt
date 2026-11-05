@@ -60,8 +60,8 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.5 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
-        "상태" -> "✅ 앙개봇 Bridge v0.4.5 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
+        "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.7 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
+        "상태" -> "✅ 앙개봇 Bridge v0.4.7 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
         "도움말", "help" -> HelpNumericMenu.rootText()
 
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
@@ -111,7 +111,7 @@ object HelpNumericMenu {
         val heading = when (section) {
             "stock" -> "📊 주식·메모리7 메뉴"
             "other" -> "🛠 계산·AI·기타 명령"
-            else -> "🤖 앙개봇 v0.4.5 명령 메뉴"
+            else -> "🤖 앙개봇 v0.4.7 명령 메뉴"
         }
         return buildString {
             appendLine(heading)
