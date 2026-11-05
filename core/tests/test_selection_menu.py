@@ -11,6 +11,7 @@
 9. sqlite3.Connection은 contextlib.closing으로 끝까지 닫아 ResourceWarning을 발생시키지 않는다.
 10. 메모리7 8종목 고정 순서와 실제 그룹 최대 10종목의 번호 선택을 종목 티커로 안전하게 연결한다.
 11. 기존 5분 만료·타 채팅방 선택 차단·모의 시세 실패·중복 request_id 및 기존 DB/로그 보존을 검증한다.
+12. 관심그룹 목록 번호 1~N이 메모리7 및 실제 그룹으로 연결되는지 API/격리/로그를 검증한다.
 """
 from __future__ import annotations
 
@@ -244,6 +245,38 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertTrue(selected['ok'])
             self.assertEqual(history.call_args.args[0].ticker,'000660.KS')
             self.assertEqual(selected['reply'],'하이닉스 분석')
+
+    def test_group_list_number_selection_and_scope(self):
+        self.assertTrue(self.post('그룹생성 반도체').json()['ok'])
+        self.assertTrue(self.post('그룹생성 미국시총10').json()['ok'])
+        listed=self.post('목록').json()
+        self.assertTrue(listed['ok'])
+        self.assertTrue(listed['menu_active'])
+        self.assertIn('1. 메모리7 8종목',listed['reply'])
+        self.assertIn('2. 반도체 0종목',listed['reply'])
+        self.assertIn('3. 미국시총10 0종목',listed['reply'])
+        self.assertFalse(self.post('선택 2',sender='다른사람').json()['ok'])
+        with patch('app.main.execute_stock_command',return_value='메모리7 시세') as quote:
+            first=self.post('선택 1').json()
+            self.assertTrue(first['ok'])
+            self.assertEqual(first['reply'],'메모리7 시세')
+            quote.assert_called_once()
+        self.assertFalse(self.post('선택 3').json()['ok'])
+        listed=self.post('목록').json()
+        self.assertTrue(listed['menu_active'])
+        # 빈 그룹도 기존 시세 조회 경로를 재사용한다.
+        second=self.post('선택 2').json()
+        self.assertTrue(second['ok'])
+        self.assertIn('비어 있습니다',second['reply'])
+        listed=self.post('목록').json()
+        with patch('app.main.group_report',return_value='미국시총10 시세') as report:
+            third=self.post('선택 3').json()
+            self.assertTrue(third['ok'])
+            self.assertEqual(third['reply'],'미국시총10 시세')
+            report.assert_called_once()
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
+                             db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
 
     def test_quote_failure_does_not_offer_selection(self):
         from app.market import StockQuoteError
