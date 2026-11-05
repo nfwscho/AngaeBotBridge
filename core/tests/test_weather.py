@@ -92,7 +92,7 @@ class WeatherUnitTests(unittest.TestCase):
         weekly = forecast_text(loc, "주간")
         self.assertIn("7일 예보", weekly)
         self.assertIn("11/12(목)", weekly)
-        self.assertEqual(len([line for line in weekly.splitlines() if "· 비" in line]), 7)
+        self.assertEqual(len([line for line in weekly.splitlines() if "· 강수" in line]), 7)
         self.assertEqual(provider.call_count, 3)
         self.assertIn("Open-Meteo", today)
 
