@@ -318,6 +318,27 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
                              db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
 
+    def test_zero_from_populated_group_quote_returns_group_list(self):
+        self.assertTrue(self.post('그룹생성 반도체').json()['ok'])
+        self.assertTrue(self.post('추가 반도체 MU 마이크론').json()['ok'])
+        self.assertTrue(self.post('목록').json()['menu_active'])
+        with patch('app.main.group_report',return_value='반도체 시세'):
+            quote=self.post('선택 2').json()
+            self.assertTrue(quote['menu_active'])
+            self.assertEqual(quote['reply'],'반도체 시세')
+        back=self.post('선택 0').json()
+        self.assertTrue(back['ok'])
+        self.assertTrue(back['menu_active'])
+        self.assertIn('📂 관심그룹',back['reply'])
+        root=self.post('선택 0').json()
+        self.assertTrue(root['menu_active'])
+        self.assertIn('📊 주식 메뉴',root['reply'])
+        # 메인 메뉴의 그룹 바로가기는 그룹 목록을 거치지 않았으므로 메인으로 복귀.
+        with patch('app.main.group_report',return_value='반도체 시세'):
+            direct=self.post('선택 3').json()
+            self.assertTrue(direct['menu_active'])
+        self.assertIn('📊 주식 메뉴',self.post('선택 0').json()['reply'])
+
     def test_quote_failure_does_not_offer_selection(self):
         from app.market import StockQuoteError
         with patch('app.main.execute_stock_command',side_effect=StockQuoteError('무료 조회 실패')):
