@@ -38,6 +38,9 @@
  * 40. Android 로컬 '도' 도움말을 Core 설정 8과 동일하게 8줄로 정리하고 상태 버전을 갱신한다.
  * 41. 날 오늘/내일/주간 및 날 지역 <지명>을 Python 날씨 모듈로 전달하고 날 1~4 번호 점프는 보존한다.
  * 42. 기존 호출어/카톡 일반 대화 차단/권한·로그·메뉴·배터리 동작을 변경하지 않는다.
+ * 43. 부 매매/시세/전세/월세/지역 단축 조회를 '실거래' Python 명령에 연결하고 부 메뉴·번호·개인 기록을 보존한다.
+ * 44. 지정된 부동산 동사 외의 일반 문장은 기존대로 무시하고 별도 임의 명령을 실행하지 않는다.
+ * 45. 기존 로컬 도움말은 8줄로 유지하면서 부 3~5 실거래 기능을 안내한다.
  */
 package kr.co.angaebot.bridge
 
@@ -80,6 +83,13 @@ object CommandParser {
                 if (segments.size == 1) return ParseResult.Command("메뉴", root)
                 if (numericPath) {
                     return ParseResult.Command("메뉴", "경로 $root ${segments.drop(1).joinToString(" ")}")
+                }
+                if (index == "부") {
+                    val action = segments.drop(1).joinToString(" ")
+                    val verb = action.substringBefore(' ')
+                    if (verb in setOf("시세", "매매", "전세", "월세", "지역", "실거래")) {
+                        return ParseResult.Command("실거래", action)
+                    }
                 }
                 if (index == "날") {
                     val action = segments.drop(1).joinToString(" ")
@@ -141,7 +151,7 @@ object LocalCommandExecutor {
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
             "주 2 메모리7 시세 · 주 분 삼성전자 분석",
-            "앙 2/3/9 메모·일정 관리 · 날 1~3 예보 · 날 지역 서울",
+            "앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울",
             "1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능"
         ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
