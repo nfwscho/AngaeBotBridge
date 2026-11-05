@@ -176,16 +176,16 @@ class NaverRealtimeTests(unittest.TestCase):
         report=memory7_report(fetcher=quotes,use_cache=False)
         self.assertIn('1. 삼성전자',report)
         self.assertIn('2. 하이닉스 : 조회 불가',report)
-        self.assertIn('  국내: 네이버 폴링 · KRX',report)
+        self.assertIn('📡 한국',report)
         self.assertNotIn('   └ KRX',report)
-        self.assertIn('번호 1~8',report)
+        self.assertIn('5분 내 1~8',report)
         def group_quotes(stock): return q if stock.ticker == q.stock.ticker else None
         report=group_report('내종목', (WATCHLIST[0],WATCHLIST[2]),fetcher=group_quotes)
         self.assertIn('1. 삼성전자',report)
         self.assertIn('2. 마이크론 : 조회 불가',report)
-        self.assertIn('  국내: 네이버 폴링 · KRX',report)
+        self.assertIn('📡 한국',report)
         self.assertNotIn('   └ KRX',report)
-        self.assertIn('번호 1~2',report)
+        self.assertIn('5분 내 1~2',report)
 
 
 if __name__=='__main__': unittest.main()
