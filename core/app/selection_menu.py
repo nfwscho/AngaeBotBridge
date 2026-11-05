@@ -18,6 +18,8 @@
 16. 목록에 표시된 원래 순서/종목코드를 메모리에만 저장하여 동일 이름·별칭 또는 공급자 실패가 있어도 정확한 종목을 선택한다.
 17. '10'을 지원하지만 '10개'·'123'과 메뉴가 없는 숫자는 무시하며 5분 만료·방/발신자 격리와 잠금을 유지한다.
 18. 기존 메인 메뉴/최근 사용 명령/분석 하위 메뉴/SQLite 원본 기록·AI OFF·배터리 표시는 그대로 보존한다.
+19. 관심그룹 목록의 1번 메모리7 및 사용자 그룹을 실제 DB 정렬 순서대로 숫자 선택에 연결한다.
+20. 선택 세션은 기존 5분·방/발신자 격리·한 번 선택 후 종료를 재사용하고 DB를 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -100,6 +102,15 @@ class StockSelectionMenus:
         # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
                         for stock in stocks)
+        self._save(key, choices)
+
+    def open_groups(self, db: sqlite3.Connection, room: str, sender: str) -> None:
+        """관심그룹 목록에 표시된 번호를 동일 순서의 시세 조회 명령으로 연결한다."""
+        key = self._key(room, sender)
+        rows = db.execute("""SELECT name FROM stock_groups
+            WHERE room=? AND sender=? ORDER BY created_at,name""", (room, sender)).fetchall()
+        choices = (MenuChoice('메모리7', command_argument='메모리7'),) + tuple(
+            MenuChoice(name, command_argument=name) for (name,) in rows)
         self._save(key, choices)
 
     @staticmethod
