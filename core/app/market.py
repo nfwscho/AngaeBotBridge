@@ -1109,7 +1109,7 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
         if len({q.market_time for q in items}) > 1:
             line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
-            line += ' · 종가'
+            line += ' · 확정 종가'
         lines.append(line)
     return tuple(lines)
 
