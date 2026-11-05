@@ -2,12 +2,13 @@
 # 1. 기존 계산·시간·AI·시세·그룹·메뉴·로그 동작의 unittest를 자동 실행한다.
 # 2. Python 3.12에서 문법을 확인하고 모든 core/tests 테스트를 수행한다.
 # 3. S20+ Termux 서비스와 데이터베이스는 건드리지 않는다.
-# 4. GitHub 작업 브랜치에서만 자동 실행하며 main에는 적용하지 않는다.
+# 4. 기능 브랜치와 main에 커밋될 때 자동 실행하여 배포 전 회귀 검사를 보장한다.
 name: AngaeBot Core regression
 on:
   push:
     branches:
       - feature/compact-all-replies-20261105
+      - main
   workflow_dispatch:
 jobs:
   unittest:
