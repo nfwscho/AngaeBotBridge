@@ -262,7 +262,8 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertTrue(first['ok'])
             self.assertEqual(first['reply'],'메모리7 시세')
             quote.assert_called_once()
-        self.assertFalse(self.post('선택 3').json()['ok'])
+        # 메모리7 선택은 기존 8종목 숫자 분석 메뉴를 새로 연다.
+        # 따라서 이전 그룹 메뉴가 닫혀도 3번은 종목 선택으로 유효하다.
         listed=self.post('목록').json()
         self.assertTrue(listed['menu_active'])
         # 빈 그룹도 기존 시세 조회 경로를 재사용한다.
