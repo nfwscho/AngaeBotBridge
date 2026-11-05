@@ -67,13 +67,10 @@ def ssh_status(port: int = 8022) -> str:
 
 
 def details(uptime_seconds: int, *, services=service_status, ssh=ssh_status) -> str:
-    return ("🛠 앙개봇 운영 상세상태 (v0.4.2)\n"
-            f"Python Core: {services('angaebot-core')}\n"
-            f"Watchdog: {services('angaebot-watchdog')}\n"
-            f"SSH 서비스: {services('sshd')}\n"
-            f"SSH 8022: {ssh()}\n"
-            f"Python 가동: {format_uptime(uptime_seconds)}\n"
-            "※ 서비스 확인만 수행하며 재시작하지 않습니다.")
+    return ("🛠 서버 상세상태\n"
+            f"Core {services('angaebot-core')} · 감시 {services('angaebot-watchdog')}\n"
+            f"SSH {services('sshd')} · 8022 {ssh()}\n"
+            f"⏱ {format_uptime(uptime_seconds)}")
 
 
 def command_stats(db: sqlite3.Connection, room: str, sender: str) -> str:
@@ -86,14 +83,14 @@ def command_stats(db: sqlite3.Connection, room: str, sender: str) -> str:
                          WHERE room=? AND sender=?
                          GROUP BY command ORDER BY n DESC, command ASC LIMIT 5""",
                       (room, sender)).fetchall()
-    lines = ["📊 앙개봇 Python 명령 통계 (이 채팅·발신자)",
-             f"전체: {total:,}건 / 성공: {passed:,}건 / 실패: {failed:,}건"]
+    lines = ["📊 명령 통계 (현재 대화)",
+             f"전체 {total:,} · 성공 {passed:,} · 실패 {failed:,}"]
     if tops:
-        lines.append("많이 사용한 명령:")
+        lines.append("주요 명령:")
         lines.extend(f"• {name[:24]}: {count:,}건" for name, count in tops)
     else:
         lines.append("저장된 명령이 없습니다.")
-    lines.append("※ 이번 조회 직전까지 기록된 Python 명령 기준")
+    
     return "\n".join(lines)
 
 
@@ -103,8 +100,8 @@ def recent_errors(db: sqlite3.Connection, room: str, sender: str) -> str:
                          ORDER BY created_at DESC, rowid DESC LIMIT 5""",
                       (room, sender)).fetchall()
     if not rows:
-        return "✅ 최근 오류: 이 채팅·발신자의 Python 명령 실패 기록이 없습니다."
-    lines = ["⚠️ 최근 Python 명령 오류 5건 이내 (이 채팅·발신자)"]
+        return "✅ 최근 오류 없음 (현재 대화)"
+    lines = ["⚠️ 최근 오류 (현재 대화·최대 5건)"]
     for created, command, message in rows:
         timestamp = datetime.fromtimestamp(int(created), tz=KST).strftime("%m-%d %H:%M")
         # 기존 jobs의 실패 응답만 인용한다. 사용자 명령 인수나 이벤트 로그는 출력하지 않는다.
@@ -116,7 +113,5 @@ def recent_errors(db: sqlite3.Connection, room: str, sender: str) -> str:
 def uptime_report(uptime_seconds: int) -> str:
     now = datetime.now(KST)
     began = now - timedelta(seconds=max(0, int(uptime_seconds)))
-    return ("⏱ 앙개봇 Python 가동시간\n"
-            f"현재 프로세스 시작: {began:%Y-%m-%d %H:%M:%S} KST\n"
-            f"연속 가동: {format_uptime(uptime_seconds)}\n"
-            "※ FastAPI 프로세스 기준 (S20+ 기기 가동시간과 다름)")
+    return (f"⏱ Python 가동 {format_uptime(uptime_seconds)}\n"
+            f"시작 {began:%m/%d %H:%M} KST · Core 기준")
