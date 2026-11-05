@@ -191,7 +191,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if stock_reply is not None:
                     pass
-                elif request.command == "메모리7" or (request.command == "주식" and resolved_argument.strip() == "메모리7"):
+                elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
