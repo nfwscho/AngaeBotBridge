@@ -23,6 +23,10 @@
 21. 숫자 0은 현재 선택 화면에서 이전 메뉴(그룹 목록 또는 주식 메인 메뉴)로 돌아간다.
 22. 뒤로가기는 기존 인증·5분 만료·방/발신자 격리를 따르며 DB와 기존 로그를 변경하지 않는다.
 23. 그룹 시세 선택의 진입 화면을 기억해 주식 메인 메뉴와 관심그룹 목록으로 정확히 복귀한다.
+24. 통합 홈 메뉴와 배드민턴·요리·여행·종친·영어 콘텐츠 메뉴를 추가하되 기존 주식 메뉴/로그는 그대로 보존한다.
+25. 홈에서 번호로 콘텐츠로 이동하고 0으로 상위 화면 복귀, 00으로 홈 이동을 지원한다.
+26. 아직 구현되지 않은 콘텐츠 항목은 실제 기능이 있는 것처럼 실행하지 않고 '개발 예정'으로 안내한다.
+27. 모든 메뉴는 기존 5분 TTL/방·발신자 격리/200세션 제한/인증된 요청/기존 SQLite 불변을 재사용한다.
 """
 from __future__ import annotations
 
@@ -61,6 +65,17 @@ class MenuState:
     origin: str = 'menu'
 
 
+# 카카오톡 대메뉴와 하위 콘텐츠는 텍스트 라벨이 아니라 고정된 내부 카테고리 키로 분리한다.
+# 외부 연동/개인정보/실행 권한이 필요한 새 콘텐츠는 기능 구현 후 명시적으로 연결한다.
+CONTENT_ITEMS = {
+    '배드민턴': ('강좌·기술', '영상 라이브러리', '자세 분석', '훈련 기록'),
+    '요리': ('요리 추천', '레시피 찾기', '보유 재료 활용', '장보기'),
+    '여행': ('여행지 추천', '여행 일정', '이동 경로', '맛집·숙소'),
+    '종친': ('종친회 안내', '행사 일정', '계보·자료', '회비 안내'),
+    '영어': ('생활 영어', '영어 회화', '어휘 학습', '복습'),
+}
+
+
 class StockSelectionMenus:
     def __init__(self, *, clock=time.monotonic):
         self._clock = clock
@@ -86,7 +101,30 @@ class StockSelectionMenus:
                 self._states.pop(oldest, None)
             self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
 
-    def open(self, room: str, sender: str) -> MenuAnswer:
+    def open_home(self, room: str, sender: str) -> MenuAnswer:
+        key = self._key(room, sender)
+        choices = (
+            MenuChoice('📈 주식', page='stock-root'),
+            MenuChoice('🏸 배드민턴', page='category:배드민턴'),
+            MenuChoice('🍳 요리', page='category:요리'),
+            MenuChoice('🧭 여행', page='category:여행'),
+            MenuChoice('🌳 종친', page='category:종친'),
+            MenuChoice('📚 영어', page='category:영어'),
+        )
+        self._save(key, choices, back='home', origin='home')
+        return MenuAnswer(self._render('🤖 앙개봇 메인 메뉴', choices), menu_active=True)
+
+    def open_category(self, room: str, sender: str, category: str) -> MenuAnswer:
+        key = self._key(room, sender)
+        items = CONTENT_ITEMS.get(category)
+        if items is None:
+            raise StockQuoteError('등록되지 않은 콘텐츠 메뉴입니다.')
+        choices = tuple(MenuChoice(name, page='pending:' + category + ':' + name) for name in items)
+        self._save(key, choices, back='home', origin='category:' + category)
+        return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
+                          + '\n※ 하위 기능은 순차적으로 개발됩니다.', menu_active=True)
+
+    def open(self, room: str, sender: str, *, back: str = 'menu') -> MenuAnswer:
         key = self._key(room, sender)
         choices = (
             MenuChoice('최근 사용한 주식 조회', page='recent'),
@@ -96,7 +134,7 @@ class StockSelectionMenus:
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
         )
-        self._save(key, choices, back='menu')
+        self._save(key, choices, back=back)
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
     def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *, back: str = 'menu') -> None:
@@ -146,27 +184,42 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:10|[0-9])', number) is None:
+        if re.fullmatch(r'(?:00|10|[0-9])', number) is None:
             raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
                 self._states.pop(key, None)
-                raise StockQuoteError('메뉴가 열려 있지 않거나 5분이 지났습니다. 주를 입력하세요.')
+                raise StockQuoteError('메뉴가 열려 있지 않거나 5분이 지났습니다. 앙 또는 주를 입력하세요.')
+            if number == '00':
+                self._states.pop(key, None)
+                return self.open_home(room, sender)
             if number == '0':
                 self._states.pop(key, None)
                 back = state.back
+                if back == 'home':
+                    return self.open_home(room, sender)
                 if back == 'groups':
                     self.open_groups(db, room, sender)
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
-                return self.open(room, sender)
+                return self.open(room, sender, back='home')
             index = int(number) - 1
             if index >= len(state.choices):
                 raise StockQuoteError(f'메뉴에 없는 번호입니다. 1~{len(state.choices)}번 중 선택하세요.')
             choice = state.choices[index]
             # 하나를 선택하면 재선택/이중 실행 방지를 위해 현재 페이지를 즉시 닫는다.
             self._states.pop(key, None)
+        if choice.page == 'stock-root':
+            return self.open(room, sender, back='home')
+        if choice.page.startswith('category:'):
+            return self.open_category(room, sender, choice.page.split(':', 1)[1])
+        if choice.page.startswith('pending:'):
+            _, category, name = choice.page.split(':', 2)
+            # 단독 '준비 중' 응답으로 메뉴가 닫히지 않도록 동일 카테고리 메뉴를 다시 보여준다.
+            menu = self.open_category(room, sender, category)
+            return MenuAnswer(f'🛠 {category} / {name}: 개발 예정입니다.\n\n{menu.reply}',
+                              menu_active=True)
         if choice.page == 'recent':
             choices = self._recent(db, room, sender)
             if not choices:
