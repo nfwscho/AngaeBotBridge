@@ -254,7 +254,9 @@ class RealEstateAPITests(unittest.TestCase):
         self.assertTrue(self.post("부동산", "추가 계약 | 신규 메모").json()["ok"])
         records = self.post("부동산", "목록").json()
         self.assertTrue(records["ok"])
-        self.assertIn("신규 메모", records["reply"])
+        self.assertIn("계약 (#1)", records["reply"])
+        details = self.post("메뉴", "선택 1").json()
+        self.assertIn("신규 메모", details["reply"])
         with sqlite3.connect(self.path) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs WHERE ok=0").fetchone()[0], 1)
 
