@@ -81,13 +81,13 @@ class StockTests(unittest.TestCase):
         self.assertIn('SKHY : 조회 불가',result)
         self.assertIn('씨게이트 : 조회 불가',result)
         self.assertIn('2종목 조회 실패',result)
-        self.assertIn('1. 삼성전자 :',result)
+        self.assertIn('1. 삼성전자 ',result)
         self.assertIn('4. SKHY : 조회 불가',result)
         self.assertIn('7. 씨게이트 : 조회 불가',result)
-        self.assertIn('8. 웬디 :',result)
-        self.assertIn('번호 1~8',result)
-        self.assertLess(result.index('삼성전자 :'),result.index('하이닉스 :'))
-        self.assertLess(result.index('하이닉스 :'),result.index('마이크론 :'))
+        self.assertIn('8. WDC ',result)
+        self.assertIn('5분 내 1~8',result)
+        self.assertLess(result.index('삼성전자 '),result.index('하이닉스 '))
+        self.assertLess(result.index('하이닉스 '),result.index('마이크론 '))
 
     def test_total_failure(self):
         with self.assertRaisesRegex(StockQuoteError,'8개 종목'):
@@ -133,7 +133,7 @@ class StockTests(unittest.TestCase):
         def provider(stock):
             return make_quote(stock)
         body=memory7_report(fetcher=provider,use_cache=False)
-        self.assertIn('현지 거래일:',body)
+        self.assertIn('📡 한국',body)
         self.assertIn('한국',body)
         self.assertIn('미국',body)
         self.assertIn('일본',body)
