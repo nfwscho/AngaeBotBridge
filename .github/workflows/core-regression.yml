@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install Python Core dependencies
-        run: python -m pip install -r core/requirements.txt
+        run: python -m pip install -r core/requirements.txt httpx
       - name: Compile all Core modules
         run: python -m compileall -q core/app
       - name: Run all Python Core regression tests
