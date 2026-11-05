@@ -6,6 +6,7 @@
 4. AI OFF 상태는 실제 설정/보안 기능을 변경하지 않고 안내만 줄인다.
 5. 주식 시세 출처는 한국/미국/일본별 날짜·출처·시각을 보존한다.
 6. 기존 상세 시세 포맷과 5분 번호 선택/로그/SQLite 데이터는 수정하지 않는다.
+7. 간결 시세의 상승 빨간 🔺, 하락 파란 🔽, 보합 ➖ 표시를 회귀 검증한다.
 """
 import unittest
 from datetime import datetime
@@ -14,7 +15,7 @@ from zoneinfo import ZoneInfo
 from app.commands import execute_command
 from app.ops import details, uptime_report
 from app.ai_engine import AISettings
-from app.market import Stock, Quote, compact_source_summary
+from app.market import Stock, Quote, compact_source_summary, compact_quote_line
 
 
 class CompactAllReplyTests(unittest.TestCase):
@@ -44,6 +45,13 @@ class CompactAllReplyTests(unittest.TestCase):
         result = settings.status_text()
         self.assertIn("AI OFF", result)
         self.assertIn("configure-ai.py", result)
+
+    def test_compact_quote_direction_colors(self):
+        stock = Stock("애플", "AAPL", "USD", "미국", "America/New_York")
+        stamp = datetime(2026, 11, 5, 12, 12, tzinfo=ZoneInfo("America/New_York"))
+        for pct, expected in ((5.31, "🔺5.31%"), (-3.17, "🔽3.17%"), (0.0, "➖0.00%")):
+            quote = Quote(stock, 100, 100, pct, stamp, stamp)
+            self.assertIn(expected, compact_quote_line(quote))
 
     def test_source_summary_keeps_provenance(self):
         stock = Stock("마이크론", "MU", "USD", "미국", "America/New_York")
