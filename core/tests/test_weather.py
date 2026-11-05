@@ -88,7 +88,7 @@ class WeatherUnitTests(unittest.TestCase):
         self.assertIn("17.0℃", today)
         tomorrow = forecast_text(loc, "내일")
         self.assertIn("11/07(토)", tomorrow)
-        self.assertIn("비 80%", tomorrow) if False else self.assertIn("80%", tomorrow)
+        self.assertIn("80%", tomorrow)
         weekly = forecast_text(loc, "주간")
         self.assertIn("7일 예보", weekly)
         self.assertIn("11/12(목)", weekly)
