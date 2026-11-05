@@ -18,6 +18,11 @@
 16. 목록에 표시된 원래 순서/종목코드를 메모리에만 저장하여 동일 이름·별칭 또는 공급자 실패가 있어도 정확한 종목을 선택한다.
 17. '10'을 지원하지만 '10개'·'123'과 메뉴가 없는 숫자는 무시하며 5분 만료·방/발신자 격리와 잠금을 유지한다.
 18. 기존 메인 메뉴/최근 사용 명령/분석 하위 메뉴/SQLite 원본 기록·AI OFF·배터리 표시는 그대로 보존한다.
+19. 관심그룹 목록의 1번 메모리7 및 사용자 그룹을 실제 DB 정렬 순서대로 숫자 선택에 연결한다.
+20. 선택 세션은 기존 5분·방/발신자 격리·한 번 선택 후 종료를 재사용하고 DB를 변경하지 않는다.
+21. 숫자 0은 현재 선택 화면에서 이전 메뉴(그룹 목록 또는 주식 메인 메뉴)로 돌아간다.
+22. 뒤로가기는 기존 인증·5분 만료·방/발신자 격리를 따르며 DB와 기존 로그를 변경하지 않는다.
+23. 그룹 시세 선택의 진입 화면을 기억해 주식 메인 메뉴와 관심그룹 목록으로 정확히 복귀한다.
 """
 from __future__ import annotations
 
@@ -45,12 +50,15 @@ class MenuAnswer:
     reply: str = ''
     execute_argument: str = ''
     menu_active: bool = False
+    back: str = 'menu'
 
 
 @dataclass(frozen=True)
 class MenuState:
     expire_at: float
     choices: tuple[MenuChoice, ...]
+    back: str = 'menu'
+    origin: str = 'menu'
 
 
 class StockSelectionMenus:
@@ -67,16 +75,16 @@ class StockSelectionMenus:
     @staticmethod
     def _render(title: str, choices: tuple[MenuChoice, ...]) -> str:
         return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
-                          '※ 번호 입력 · 5분 유효'])
+                          '※ 번호 입력 · 0: 이전 메뉴 · 5분 유효'])
 
-    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...]) -> None:
+    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu', origin: str = 'menu') -> None:
         now = self._clock()
         with self._lock:
             self._states = {k: v for k, v in self._states.items() if v.expire_at > now}
             if len(self._states) >= MAX_MENU_SESSIONS and key not in self._states:
                 oldest = min(self._states, key=lambda k: self._states[k].expire_at)
                 self._states.pop(oldest, None)
-            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices)
+            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
 
     def open(self, room: str, sender: str) -> MenuAnswer:
         key = self._key(room, sender)
@@ -88,10 +96,10 @@ class StockSelectionMenus:
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
         )
-        self._save(key, choices)
+        self._save(key, choices, back='menu')
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
-    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...]) -> None:
+    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *, back: str = 'menu') -> None:
         """현재 시세표 번호와 정확히 같은 순서로 종목분석 선택 목록을 5분간 보관한다."""
         key = self._key(room, sender)
         if not stocks or len(stocks) > 10:
@@ -100,7 +108,16 @@ class StockSelectionMenus:
         # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
                         for stock in stocks)
-        self._save(key, choices)
+        self._save(key, choices, back=back)
+
+    def open_groups(self, db: sqlite3.Connection, room: str, sender: str) -> None:
+        """관심그룹 목록에 표시된 번호를 동일 순서의 시세 조회 명령으로 연결한다."""
+        key = self._key(room, sender)
+        rows = db.execute("""SELECT name FROM stock_groups
+            WHERE room=? AND sender=? ORDER BY created_at,rowid""", (room, sender)).fetchall()
+        choices = (MenuChoice('메모리7', command_argument='메모리7'),) + tuple(
+            MenuChoice(name, command_argument=name) for (name,) in rows)
+        self._save(key, choices, back='menu', origin='groups')
 
     @staticmethod
     def _recent(db: sqlite3.Connection, room: str, sender: str) -> tuple[MenuChoice, ...]:
@@ -129,13 +146,21 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:10|[1-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요.')
+        if re.fullmatch(r'(?:10|[0-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
                 self._states.pop(key, None)
                 raise StockQuoteError('메뉴가 열려 있지 않거나 5분이 지났습니다. 주를 입력하세요.')
+            if number == '0':
+                self._states.pop(key, None)
+                back = state.back
+                if back == 'groups':
+                    self.open_groups(db, room, sender)
+                    from .watchlists import execute_group_command
+                    return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
+                return self.open(room, sender)
             index = int(number) - 1
             if index >= len(state.choices):
                 raise StockQuoteError(f'메뉴에 없는 번호입니다. 1~{len(state.choices)}번 중 선택하세요.')
@@ -146,11 +171,12 @@ class StockSelectionMenus:
             choices = self._recent(db, room, sender)
             if not choices:
                 return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.')
-            self._save(key, choices)
+            self._save(key, choices, back='menu')
             return MenuAnswer(self._render('📋 내 최근 주식 조회 명령', choices), menu_active=True)
         if choice.page == 'analysis':
             choices = tuple(MenuChoice(label, '분석 ' + label) for label in
                             ('삼성전자', '하이닉스', '마이크론', '엔비디아', '애플', '샌디스크', '메모리7'))
-            self._save(key, choices)
+            self._save(key, choices, back='menu')
             return MenuAnswer(self._render('📈 분석할 종목 선택', choices), menu_active=True)
-        return MenuAnswer(execute_argument=choice.command_argument)
+        return MenuAnswer(execute_argument=choice.command_argument,
+                          back='groups' if state.origin == 'groups' else 'menu')

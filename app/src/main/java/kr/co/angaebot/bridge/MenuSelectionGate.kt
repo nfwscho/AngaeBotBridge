@@ -13,6 +13,7 @@
  * 9. 기존 모든 명령·SHA256 중복·SQLite/Android 로그·메모리7·주식 분석/AI OFF/설정·UI를 유지한다.
  * 10. 시계 주입을 지원해 시간 만료/채팅방·발신자 격리/문법 테스트를 Android 기기 없이 수행한다.
  * 11. 등록·삭제·AI·가격 알림·원격 명령 같은 부작용 선택을 이 모듈 자체에서 수행하지 않는다.
+ * 14. 활성 메뉴에서 숫자 0도 기존 선택 API로 전달해 Python Core의 이전 메뉴 이동을 지원한다.
  */
 package kr.co.angaebot.bridge
 
@@ -21,7 +22,7 @@ class MenuSelectionGate(
 ) {
     companion object {
         const val MENU_TTL_MS = 300_000L
-        private val SELECTION = Regex("^(10|[1-9])(?:번|[.)])?(?:\\s+.*)?$")
+        private val SELECTION = Regex("^(10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
     }
     private data class Scope(val room: String, val sender: String)
     private val expiresAt = mutableMapOf<Scope, Long>()

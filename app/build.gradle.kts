@@ -15,6 +15,7 @@
 // 14. v0.4.5 메모리7·관심그룹의 번호 선택/최대 10번 지원, RemoteInput 성공 시에만 메뉴 활성화한다.
 // 15. 배터리 표시/주식 분석/기존 5분 메뉴/채팅방·발신자/앱 설정과 전체 로그를 보존하고 새 권한은 없다.
 // 16. 기존 서명/패키지명으로 덮어쓰기 설치할 수 있도록 versionCode 9, versionName 0.4.5로 올린다.
+// 17. 0 이전 메뉴 선택을 위한 v0.4.6 업데이트로 versionCode 10을 사용하며 기존 applicationId/데이터는 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -28,8 +29,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.4.5"
+        versionCode = 10
+        versionName = "0.4.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

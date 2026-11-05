@@ -9,13 +9,17 @@
 # 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
 # 9. Check service status and local TCP port after restart, then remove staging files.
 # 10. Abort safely on errors; do not deploy a commit without a passing CI result.
+# 11. -LocalTests mode runs all Python tests in an isolated Linux staging directory on S20+; no GitHub Actions.
+# 12. Local mode validates Python syntax on the S20+ Linux interpreter without modifying production DB/.env/logs.
+# 13. Isolated tests must pass before any production Python module replacement or service restart.
 # Run: .\deploy-angaebot.ps1
 # Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
     [string]$Branch = 'feature/compact-all-replies-20261105',
     [string]$Repo = 'nfwscho/AngaeBotBridge',
     [string]$SshHost = 'angaebot',
-    [int]$WaitMinutes = 8
+    [int]$WaitMinutes = 8,
+    [switch]$LocalTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +60,25 @@ try {
     Assert-Exit 'Git commit lookup failed'
     Write-Host "Target commit: $sha"
 
+    if ($LocalTests) {
+        Write-Host '[2/6] Run isolated Linux regression on S20+ (no GitHub Actions)' -ForegroundColor Cyan
+        $testStage = "/data/data/com.termux/files/home/angaebot-regression-$sha"
+        $testPython = "$remoteCore/.venv/bin/python"
+        Invoke-Remote "test -x $testPython && mkdir -p $testStage" 'S20+ Python regression environment unavailable'
+        try {
+            foreach ($folder in @('app', 'tests', 'scripts')) {
+                $source = Join-Path (Join-Path $root 'core') $folder
+                if (-not (Test-Path $source)) { throw "Missing regression source folder: $source" }
+                & scp -r -o BatchMode=yes $source "${SshHost}:$testStage/"
+                Assert-Exit "Unable to stage $folder for isolated tests"
+            }
+            Invoke-Remote "cd $testStage && PYTHONDONTWRITEBYTECODE=1 $testPython -m compileall -q app && PYTHONDONTWRITEBYTECODE=1 $testPython -m unittest discover -s tests -v" 'Isolated S20+ Linux regression failed; deployment refused'
+            Write-Host 'Isolated Linux Python Core regression tests PASSED' -ForegroundColor Green
+        } finally {
+            & ssh -o BatchMode=yes $SshHost "rm -rf $testStage"
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Isolated regression staging cleanup failed; inspect S20+ temporary folder.' }
+        }
+    } else {
     Write-Host '[2/6] Verify GitHub Actions regression tests' -ForegroundColor Cyan
     $deadline = (Get-Date).AddMinutes($WaitMinutes)
     $passed = $false
@@ -82,6 +105,8 @@ try {
         Start-Sleep -Seconds 10
     } while ($true)
     if (-not $passed) { throw "CI success not confirmed within $WaitMinutes minutes. Deployment stopped." }
+
+    }
 
     Write-Host '[3/6] Prepare remote staging directories' -ForegroundColor Cyan
     Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ environment check failed'
