@@ -32,6 +32,7 @@
 28. v0.5.9 관심종목 그룹 시세표는 가격·등락률과 기존 번호 선택을 유지하고 한국·미국·일본 출처/최신 거래시각/지연상태를 목록 하단에만 표시한다.
 29. 그룹 안에서 공급자·체결시각이 다른 종목은 혼합·종목별 시각 차이를 명시하며, 시간외 가격은 각 종목의 별도 행으로 보존한다.
 30. 기존 그룹 CRUD/보안 범위/가격 소스/실패 처리/날짜/SQLite 로그/Android 배터리·권한/AI OFF는 변경하지 않는다.
+31. 관심그룹 목록에 메모리7부터 순서대로 번호를 붙이고 5분간 숫자로 그룹 시세를 선택한다.
 """
 from __future__ import annotations
 
@@ -227,9 +228,10 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             LEFT JOIN stock_items i ON i.room=g.room AND i.sender=g.sender AND i.group_name=g.name
             WHERE g.room=? AND g.sender=? GROUP BY g.name ORDER BY g.created_at,g.name""",
             (room, sender)).fetchall()
-        lines = ["📂 관심그룹", "메모리7 8종목 · 기본"]
-        lines.extend(f"{name} {count}종목" for name, count in rows)
+        lines = ["📂 관심그룹", "1. 메모리7 8종목 · 기본"]
+        lines.extend(f"{index}. {name} {count}종목" for index, (name, count) in enumerate(rows, start=2))
         lines.append("※ 추가: 주식 그룹생성 그룹명")
+        lines.append(f"※ 5분 내 1~{len(rows)+1}: 그룹 시세")
         return "\n".join(lines)
     if action == "프리셋":
         if len(parts) != 2 or parts[1] != US_MARKET_CAP_PRESET_NAME:
