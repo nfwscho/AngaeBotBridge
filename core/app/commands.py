@@ -22,6 +22,7 @@
 20. v0.5.10 서버상태 버전 갱신만 적용하며 시세 출처 통합은 market/watchlists에서 수행하고 계산·시간·AI·기존 로그는 그대로 유지한다.
 
 21. v0.5.10 미국 시세 백업 조회(나스닥 확정 일봉·네이버 해외 일봉)는 market.py만 확장하며 기존 기능/명령/SQLite/로그/UI/배터리를 보존한다.
+22. v0.6.2 코어 서버상태의 정확한 버전 표기만 갱신하고 레거시 계산/시간/AI/로그 동작을 유지한다.
 """
 from __future__ import annotations
 
@@ -107,5 +108,5 @@ def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
         now = datetime.now(timezone(timedelta(hours=9)))
         return "🕐 " + now.strftime("%m/%d %H:%M KST")
     if name == "서버상태":
-        return f"🟢 Python v0.5.10 정상 · S20+\n⏱ {uptime_seconds}초 가동"
+        return f"🟢 Python v0.6.2 정상 · S20+\n⏱ {uptime_seconds}초 가동"
     raise CommandError("허용되지 않은 Python 명령입니다.")
