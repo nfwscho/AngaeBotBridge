@@ -21,6 +21,8 @@
  * 19. 초과 입력은 잘라 저장하지 않고 거부하며 기존 AI/주식/계산/서버 API의 길이·시간 제한을 유지한다.
  * 20. 전체 메뉴 트리는 최대 3500자까지 표시해 신규 홈 섹터가 잘리지 않게 하고 답장/로그/토큰은 그대로 보존한다.
  * 21. 날씨 명령을 기존 인증 Core로 전달하고 네트워크 예보 조회에 기존 시세와 같은 읽기 제한을 적용한다.
+ * 22. 신규 '실거래' 명령과 부동산 직접 시세 조회만 기존 시세의 23초 타임아웃을 재사용한다.
+ * 23. 기존 메모·날씨·주식·AI·로그·Android UI·HTTP 보안/응답 크기/배터리 표시를 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -37,9 +39,9 @@ sealed interface PythonOutcome {
 
 object PythonBridgeClient {
     private const val BASE = "http://127.0.0.1:8765"
-    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "부동산", "투자", "금융", "메모", "일정", "기록", "날씨")
+    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "부동산", "투자", "금융", "메모", "일정", "기록", "날씨", "실거래")
     private val aiCommands = setOf("질문", "요약")
-    private val stockCommands = setOf("주식", "메모리7", "메뉴", "날씨")
+    private val stockCommands = setOf("주식", "메모리7", "메뉴", "날씨", "실거래")
     private val personalCommands = setOf("부동산", "투자", "금융", "메모", "일정", "기록")
 
     fun health(token: String): PythonOutcome = request("GET", "/v1/health", token, null)
@@ -54,7 +56,10 @@ object PythonBridgeClient {
             .put("argument", argument)
             .put("room", room.take(100))
             .put("sender", sender.take(100))
-        return request("POST", "/v1/commands", token, payload, name in aiCommands, name in stockCommands, name == "메뉴")
+        val propertyQuery = name == "부동산" &&
+            argument.substringBefore(' ') in setOf("시세", "매매", "전세", "월세", "지역", "실거래")
+        return request("POST", "/v1/commands", token, payload, name in aiCommands,
+            name in stockCommands || propertyQuery, name == "메뉴")
     }
 
     private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false, isStock: Boolean = false, isMenu: Boolean = false): PythonOutcome {
