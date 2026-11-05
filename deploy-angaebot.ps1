@@ -106,7 +106,7 @@ try {
     Invoke-Remote "rm -rf $stage $backup" '임시 폴더 정리 실패'
     Write-Host "배포 성공: $sha" -ForegroundColor Green
 } catch {
-    Write-Error "배포 중단: $($_.Exception.Message)"
+    Write-Warning "배포 중단: $($_.Exception.Message)"
     if ($deploymentStarted) { Undo-Remote }
     exit 1
 } finally {
