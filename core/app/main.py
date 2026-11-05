@@ -82,6 +82,11 @@
 77. 날씨 지역 설정만 별도 weather_locations 테이블에 저장하고 기존 jobs/events 로그를 그대로 남긴다.
 78. 날씨 단축/하위 메뉴 응답의 5분 번호 세션과 전용 기능 모듈 정보를 기존 Android Bridge에 전달한다.
 79. 공급자 장애 및 잘못된 지역은 기존 COMMAND_REJECTED와 경고 응답으로 기록하며 가짜 예보를 출력하지 않는다.
+80. 부동산 실거래가: 서울 구·법정동 5자리 매매/전세/월세 조회를 국토부 XML API로 지원한다.
+81. '부 지역 강남구' 조회 지역은 별도 SQLite 테이블에 보존하고 기존 부동산 개인메모 CRUD는 유지한다.
+82. 메뉴 2→3/4/5 실거래 조회와 단축어 부 매매/전세/월세/시세는 DB 쓰기 락 밖에서 수행한다.
+83. API 키 미설정·연결 장애·취소 계약은 보수적으로 처리하며 기존 인증·중복 방지·jobs/events 로그·module_source를 보존한다.
+84. Android UI/배터리·주식/날씨/AI 및 기존 SQLite 테이블은 수정/초기화하지 않는다.
 """
 from __future__ import annotations
 
@@ -111,9 +116,12 @@ from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS
                                RecordError, init_records_schema, execute_record_command)
 from .weather import (WeatherError, init_weather_schema, get_location, resolve_location,
                       save_location, forecast_text, location_help)
+from .real_estate import (RealEstateError, init_real_estate_schema, resolve_district,
+                          save_district, parse_transaction_query, region_help,
+                          transaction_report)
 
-VERSION = "0.7.2"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨"} | PERSONAL_COMMANDS
+VERSION = "0.7.3"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래"} | PERSONAL_COMMANDS
 
 
 class CommandRequest(BaseModel):
@@ -163,6 +171,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         # 독립 메모/일정 테이블만 새로 생성. 기존 주식/AI/이벤트 테이블에는 변경 없음.
         init_records_schema(db)
         init_weather_schema(db)
+        init_real_estate_schema(db)
 
     api = FastAPI(title="AngaeBot Core", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -188,7 +197,12 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         resolved_argument = request.argument
         selection_back = 'menu'
         weather_update = None
-        if request.command in {"주식", "메모리7", "메뉴", "날씨"}:
+        estate_update = None
+        estate_request = (request.command == "실거래" or
+                          (request.command == "부동산" and
+                           request.argument.strip().split(" ", 1)[0] in
+                           {"지역", "시세", "매매", "전세", "월세", "실거래"}))
+        if request.command in {"주식", "메모리7", "메뉴", "날씨", "실거래"} or estate_request:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
             if old is not None:
@@ -199,6 +213,23 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         "module_source": module_for(request.command, request.argument, old[2])}
             try:
                 # 메뉴도 주식과 동일한 인증·중복 요청·jobs/events 로그 경로를 통과한다.
+                if estate_request:
+                    action = " ".join(request.argument.split())
+                    if action.startswith("지역 "):
+                        estate_update = resolve_district(action[3:].strip())
+                    elif action in {"", "지역", "도움말", "실거래", "메뉴"}:
+                        with closing(connect()) as read_db:
+                            stock_reply = region_help(read_db, request.room, request.sender)
+                        selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                        stock_menu_active = True
+                    else:
+                        with closing(connect()) as read_db:
+                            kind, district, apartment = parse_transaction_query(
+                                read_db, request.room, request.sender, action)
+                        stock_reply = transaction_report(kind, district, apartment)
+                        selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                        stock_reply += "\n※ 부 3~5 재조회 · 0 이전 · 00 홈"
+                        stock_menu_active = True
                 if request.command == "날씨":
                     action = request.argument.strip()
                     if action in ("", "메뉴"):
@@ -251,8 +282,21 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
-                if stock_reply is not None or weather_update is not None:
+                if stock_reply is not None or weather_update is not None or estate_update is not None:
                     pass
+                elif request.command == "메뉴" and resolved_argument.startswith("실거래조회 "):
+                    with closing(connect()) as read_db:
+                        kind, district, apartment = parse_transaction_query(
+                            read_db, request.room, request.sender, resolved_argument)
+                    stock_reply = transaction_report(kind, district, apartment)
+                    selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                    stock_reply += "\n※ 부 3~5 재조회 · 0 이전 · 00 홈"
+                    stock_menu_active = True
+                elif request.command == "메뉴" and resolved_argument == "실거래설정 안내":
+                    with closing(connect()) as read_db:
+                        stock_reply = region_help(read_db, request.room, request.sender)
+                    selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                    stock_menu_active = True
                 elif request.command in {"메뉴", "날씨"} and resolved_argument.startswith("날씨조회 "):
                     with closing(connect()) as read_db:
                         location = get_location(read_db, request.room, request.sender)
@@ -336,7 +380,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         selection_menus.open_quotes(request.room, request.sender, stocks,
                             back=selection_back)
                         stock_menu_active = True
-            except (StockQuoteError, RecordError, WeatherError) as error:
+            except (StockQuoteError, RecordError, WeatherError, RealEstateError) as error:
                 stock_error = error
         with lock:
             with closing(connect()) as db, db:
@@ -349,10 +393,16 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             "duplicate": True,
                             "module_source": module_for(request.command, request.argument, row[2])}
                 try:
-                    if request.command in {"주식", "메모리7", "메뉴", "날씨"}:
+                    if request.command in {"주식", "메모리7", "메뉴", "날씨", "실거래"} or estate_request:
                         if stock_error is not None:
                             raise stock_error
-                        if weather_update is not None:
+                        if estate_update is not None:
+                            save_district(db, request.room, request.sender, estate_update)
+                            selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                            stock_menu_active = True
+                            reply = (f"✅ 부동산 조회 지역: {estate_update.name} ({estate_update.code})"
+                                     "\n※ 부 3~5 실거래 조회 · 0 이전 · 00 홈")
+                        elif weather_update is not None:
                             save_location(db, request.room, request.sender, weather_update)
                             selection_menus.open_category(request.room, request.sender, "날씨")
                             stock_menu_active = True
@@ -417,7 +467,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except (CommandError, AIError, StockQuoteError, RecordError, WeatherError) as error:
+                except (CommandError, AIError, StockQuoteError, RecordError, WeatherError, RealEstateError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())
