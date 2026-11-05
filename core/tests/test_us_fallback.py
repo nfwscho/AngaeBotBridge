@@ -123,7 +123,7 @@ class UsFallbackTests(unittest.TestCase):
             with self.assertRaisesRegex(StockQuoteError, '미국 무료 시세'):
                 fetch_quote(WATCHLIST[2],opener=opener,now=NOW)
         self.assertIn('US_QUOTE_FAILED ticker=MU',logs.output[0])
-        self.assertEqual(len(urls),3)
+        self.assertEqual(len(urls),5)
 
     def test_mismatched_ticker_or_asset_is_rejected(self):
         stock=WATCHLIST[2]

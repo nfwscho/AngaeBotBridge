@@ -1,5 +1,5 @@
 """
-앙개봇 Python Core v0.5.9 실행기 — 모든 기능 상세 설명
+앙개봇 Python Core v0.5.10 실행기 — 모든 기능 상세 설명
 1. 기존 start-termux.sh의 .env 인증키 로딩, FastAPI 앱, 127.0.0.1:8765 바인딩을 유지한다.
 2. data/.core-run.lock에 POSIX flock을 걸어 runit/수동 실행 중복을 방지한다.
 3. 잠금 FD를 uvicorn 프로세스에 상속해 exec 이후에도 단일 실행 상태를 유지한다.
@@ -18,7 +18,8 @@
 14. v0.5.3에서 한글 종목 별칭 조회가 추가되어도 재시작·단일 인스턴스·로그 보관은 이전과 같다.
 15. v0.5.6 자원정리 회귀테스트에도 기존 runit 단일실행/서버 로그 보존/락/포트 점유검사는 변경하지 않는다.
 16. v0.5.8 시작 로그 버전만 갱신하며 기존 runit·watchdog·잠금·포트·로그·설정을 유지한다.
-17. v0.5.9 시작 로그 버전만 갱신하여 기존 서버·파일잠금·로그 보관·watchdog·재시작 흐름은 보존한다.
+17. v0.5.10 시작 로그 버전만 갱신하여 기존 서버·파일잠금·로그 보관·watchdog·재시작 흐름은 보존한다.
+18. v0.5.10 시작 버전 문자열 외 실행 잠금/기록/서비스 재시작은 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -102,7 +103,7 @@ def launch(core: Path = CORE) -> int:
     finally:
         if output > 2:
             os.close(output)
-    marker = f'CORE_START version=0.5.9 pid={os.getpid()}'
+    marker = f'CORE_START version=0.5.10 pid={os.getpid()}'
     if archived:
         marker += f' previous_log_archived={archived.name}'
     os.write(2, (marker + '\n').encode('utf-8'))

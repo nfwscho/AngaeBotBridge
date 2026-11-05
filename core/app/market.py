@@ -47,6 +47,12 @@
 44. 공급자/체결시각이 시장 안에서 서로 다르면 혼합 출처와 최신 거래시각(종목별 시각 상이)을 표시해 잘못된 단일 실시간 시세로 오인하지 않는다.
 45. 기존 quote_line()의 기본 원문 상세 표시 및 KRX/NXT 장전·장후 가격 별도 표시, 30초 캐시, 기록, 번호, 예외 처리는 모두 보존한다.
 46. 한국 네이버/미국 Yahoo·나스닥/일본 Yahoo Japan·라쿠텐 및 5일·1개월·3개월 분석, Android 배터리·UI·권한과 유료 API OFF를 변경하지 않는다.
+43. v0.5.10 미국 Yahoo·나스닥 현재가가 모두 차단될 때 나스닥 과거 거래내역의 최근 확정 일봉 2건으로 종가·전일대비를 보완한다.
+44. 나스닥 과거 일봉도 실패하면 독립된 네이버 해외 일봉 JSON 공급자를 마지막으로 시도한다(검증된 나스닥 상장 티커 한정).
+45. 일봉 보조 시세는 거래일·종목·통화(USD)·정규장 마감 여부·전일 종가·수익률을 엄격히 검증하며 실시간으로 표시하지 않는다.
+46. 실패 공급자별 HTTP/데이터 오류와 사용된 보조 공급자를 기존 서버 로그에 기록하되 토큰/원문/개인정보는 기록하지 않는다.
+47. 한국 네이버 KRX/NXT·일본 키오시아·기존 메모리7/관심그룹·숫자 메뉴·배터리·전체 SQLite·AI/운영 로그는 보존한다.
+48. 조회 실패가 전부인 경우에는 금액을 만들거나 직전 시세를 실시간인 양 표시하지 않고 종전 조회 불가를 유지한다.
 """
 from __future__ import annotations
 
@@ -93,6 +99,10 @@ _URLS = ('https://query1.finance.yahoo.com/v8/finance/chart/',
          'https://query2.finance.yahoo.com/v8/finance/chart/')
 _YAHOO_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
 _NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stocks'
+_NASDAQ_DAILY = 'https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&limit=10'
+_NAVER_US_DAILY = 'https://api.stock.naver.com/chart/foreign/item/{reuters}?periodType=dayCandle'
+# 개별 티커의 상장 거래소를 추측하지 않는다. 확인 가능한 나스닥 상장 종목만 해외 차트에 연결한다.
+_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
 _US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
 _MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
@@ -330,6 +340,135 @@ def fetch_nasdaq_quote(stock: Stock, *, opener=urlopen, now: datetime | None = N
             raise StockQuoteError(f'나스닥 HTTP {error.code}') from error
         raise StockQuoteError('나스닥 공개 시세 조회 불가') from error
 
+
+
+def _us_daily_quote(stock: Stock, records: object, *, now: datetime, source: str,
+                    date_field: str, price_field: str, formats: tuple[str, ...]) -> Quote:
+    """완료된 미 증시 일봉 두 건만 종가로 사용; 임의 시각·가격·등락률 보간을 금지."""
+    if stock.market != '미국' or stock.currency != 'USD' or not _US_TICKER_RE.fullmatch(stock.ticker):
+        raise StockQuoteError('미국 일봉은 검증된 미국 티커만 지원')
+    if now.tzinfo is None:
+        raise StockQuoteError('일봉 기준 시간대 누락')
+    if not isinstance(records, list):
+        raise StockQuoteError('미국 일봉 목록 형식 오류')
+    local_now = now.astimezone(_timezone(stock.timezone_name))
+    values: dict[date, float] = {}
+    for row in records[:160]:
+        if not isinstance(row, dict):
+            continue
+        raw_date = row.get(date_field)
+        if not isinstance(raw_date, str):
+            continue
+        trade_day = None
+        for fmt in formats:
+            try:
+                trade_day = datetime.strptime(raw_date,fmt).date()
+                break
+            except ValueError:
+                continue
+        if trade_day is None or trade_day > local_now.date():
+            continue
+        if trade_day == local_now.date() and local_now.time() < dt_time(16,15):
+            # 장중 미확정 종가 또는 정규장 직후 미완성 데이터는 절대 사용하지 않는다.
+            continue
+        price = _nasdaq_number(row.get(price_field))
+        if price is None:
+            continue
+        if trade_day in values and abs(values[trade_day] - price) > 1e-8:
+            raise StockQuoteError('같은 거래일의 미국 종가가 서로 다릅니다.')
+        values[trade_day] = price
+    days = sorted(values, reverse=True)
+    if len(days) < 2:
+        raise StockQuoteError('미국 정규장 확정 종가가 2건 미만입니다.')
+    latest, previous_day = days[:2]
+    if (local_now.date()-latest).days > 10 or (latest-previous_day).days > 10:
+        raise StockQuoteError('미국 종가 거래일이 너무 오래되었습니다.')
+    price, prev_price = values[latest], values[previous_day]
+    change = (price / prev_price - 1.0) * 100
+    if not math.isfinite(change) or abs(change) > 1000:
+        raise StockQuoteError('미국 종가 등락률 오류')
+    market_time = datetime.combine(latest, dt_time(16, 0), tzinfo=_timezone(stock.timezone_name))
+    return Quote(stock, price, prev_price, change, market_time,
+                 now.astimezone(timezone(timedelta(hours=9))),source=source)
+
+
+def parse_nasdaq_daily_quote(stock: Stock, payload: dict, *, now: datetime | None = None) -> Quote:
+    """Nasdaq 공개 종목 과거 거래내역의 일별 종가(정규장 종료 후)만 사용한다."""
+    now = now or datetime.now(timezone.utc)
+    if not isinstance(payload,dict) or not isinstance(payload.get('data'),dict):
+        raise StockQuoteError('나스닥 과거 시세 응답 형식 오류')
+    data=payload['data']
+    if data.get('symbol') not in (None, '', stock.ticker):
+        raise StockQuoteError('나스닥 과거 시세 티커 불일치')
+    table=data.get('tradesTable')
+    if not isinstance(table,dict):
+        raise StockQuoteError('나스닥 과거 거래내역이 없습니다.')
+    return _us_daily_quote(stock,table.get('rows'),now=now,source='나스닥 확정 종가',
+                           date_field='date',price_field='close',formats=('%m/%d/%Y',))
+
+
+def fetch_nasdaq_daily_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) -> Quote:
+    """공개 Nasdaq historical 일봉 대체 경로. API 사용은 보장되지 않는다."""
+    if stock.market != '미국' or stock.currency != 'USD' or not _US_TICKER_RE.fullmatch(stock.ticker):
+        raise StockQuoteError('나스닥 미국 종목만 지원')
+    req = Request(_NASDAQ_DAILY.format(ticker=stock.ticker),
+                  headers={'User-Agent': _YAHOO_USER_AGENT,
+                           'Accept': 'application/json, text/plain, */*',
+                           'Accept-Language': 'en-US,en;q=0.9',
+                           'Origin': 'https://www.nasdaq.com',
+                           'Referer': 'https://www.nasdaq.com/'}, method='GET')
+    try:
+        with opener(req,timeout=FETCH_TIMEOUT) as response:
+            raw=response.read(MAX_RESPONSE_BYTES+1)
+        if len(raw)>MAX_RESPONSE_BYTES:
+            raise StockQuoteError('나스닥 과거 시세 응답 용량 초과')
+        return parse_nasdaq_daily_quote(stock,json.loads(raw),now=now)
+    except (HTTPError,URLError,TimeoutError,OSError,ValueError,json.JSONDecodeError) as e:
+        if isinstance(e,StockQuoteError):
+            raise
+        if isinstance(e,HTTPError):
+            raise StockQuoteError(f'나스닥 일봉 HTTP {e.code}') from e
+        raise StockQuoteError('나스닥 일봉 조회 불가') from e
+
+
+def parse_naver_us_daily_quote(stock: Stock,payload: object,*,now: datetime | None=None) -> Quote:
+    """Naver 해외 종목의 확정된 USD 일봉만 검사. 잘못된 상장거래소는 조회하지 않는다."""
+    now=now or datetime.now(timezone.utc)
+    if stock.ticker not in _NAVER_NASDAQ_SYMBOLS or stock.market!='미국' or stock.currency!='USD':
+        raise StockQuoteError('네이버 해외 일봉 미지원 종목')
+    code=stock.ticker+'.O'
+    if isinstance(payload,dict):
+        for key in ('reutersCode','itemCode'):
+            if payload.get(key) not in (None,'',code,stock.ticker):
+                raise StockQuoteError('네이버 해외 일봉 종목코드 불일치')
+        rows=payload.get('priceInfos')
+        if rows is None: rows=payload.get('priceInfoList')
+    else:
+        rows=payload
+    return _us_daily_quote(stock,rows,now=now,source='네이버 해외 확정 종가',
+                           date_field='localDate',price_field='closePrice',
+                           formats=('%Y%m%d','%Y-%m-%d'))
+
+
+def fetch_naver_us_daily_quote(stock: Stock,*,opener=urlopen,now: datetime | None=None) -> Quote:
+    """나스닥 상장 티커를 사전 허용목록으로 제한한 네이버 해외 일봉 보조 조회."""
+    if stock.ticker not in _NAVER_NASDAQ_SYMBOLS or stock.market!='미국' or stock.currency!='USD':
+        raise StockQuoteError('네이버 해외 일봉 미지원 종목')
+    req=Request(_NAVER_US_DAILY.format(reuters=stock.ticker+'.O'),
+                headers={'User-Agent':_YAHOO_USER_AGENT,'Accept':'application/json',
+                         'Referer':'https://m.stock.naver.com/'}, method='GET')
+    try:
+        with opener(req,timeout=FETCH_TIMEOUT) as response:
+            raw=response.read(MAX_RESPONSE_BYTES+1)
+        if len(raw)>MAX_RESPONSE_BYTES:
+            raise StockQuoteError('네이버 해외 일봉 응답 용량 초과')
+        return parse_naver_us_daily_quote(stock,json.loads(raw),now=now)
+    except (HTTPError,URLError,TimeoutError,OSError,ValueError,json.JSONDecodeError) as e:
+        if isinstance(e,StockQuoteError):
+            raise
+        if isinstance(e,HTTPError):
+            raise StockQuoteError(f'네이버 해외 일봉 HTTP {e.code}') from e
+        raise StockQuoteError('네이버 해외 일봉 조회 불가') from e
 
 
 # 지역별 무료 공개 페이지에서 실제 시세를 확인한다. 사용자 지정 URL은 허용하지 않는다.
@@ -788,16 +927,22 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
             except StockQuoteError:
                 return fetch_rakuten_quote(stock, opener=opener, now=now)
     if stock.market == '미국':
-        try:
-            return fetch_yahoo_quote(stock, opener=opener, now=now)
-        except StockQuoteError as first:
+        errors=[]
+        for supplier, lookup in (('Yahoo',fetch_yahoo_quote),
+                                 ('Nasdaq info',fetch_nasdaq_quote),
+                                 ('Nasdaq daily',fetch_nasdaq_daily_quote),
+                                 ('Naver overseas daily',fetch_naver_us_daily_quote)):
             try:
-                return fetch_nasdaq_quote(stock, opener=opener, now=now)
-            except StockQuoteError as second:
-                # 사용자 자격증명/요청 원문은 남기지 않고 실패 공급자/티커만 기록한다.
-                _MARKET_LOG.warning('US_QUOTE_FAILED ticker=%s yahoo=%s nasdaq=%s',
-                                    stock.ticker, str(first), str(second))
-                raise StockQuoteError('미국 무료 시세 제공처 조회 실패') from second
+                quote=lookup(stock,opener=opener,now=now)
+                if errors:
+                    # 기존 오류 로그를 유지하면서 어떤 대체 제공처에서 복구됐는지도 식별한다.
+                    _MARKET_LOG.info('US_QUOTE_FALLBACK_OK ticker=%s source=%s previous=%s',
+                                     stock.ticker,supplier,','.join(errors))
+                return quote
+            except StockQuoteError as e:
+                errors.append(supplier + ':' + str(e))
+        _MARKET_LOG.warning('US_QUOTE_FAILED ticker=%s providers=%s',stock.ticker,';'.join(errors))
+        raise StockQuoteError('미국 무료 시세 제공처 조회 실패')
     return fetch_yahoo_quote(stock, opener=opener, now=now)
 
 
@@ -870,6 +1015,8 @@ def quote_line(item: Quote, *, source_details: bool = True) -> str:
         # 시간외 가격은 본장과 다른 가격이므로 기존처럼 해당 종목에 별도 표시한다.
         extra = _domestic_after_text(item) if item.stock.market == '한국' else ''
         return body + ('\n' + extra if extra else '')
+    if item.stock.market == '미국' and item.source in ('나스닥 확정 종가','네이버 해외 확정 종가'):
+        return body + f"\n   └ 미국 {item.market_time.strftime('%m/%d')} 정규장 종가 · {item.source} · 실시간 아님"
     if item.stock.market == '미국' and item.source == '나스닥 웹':
         # 공개 웹 응답은 별도 실시간 거래소 라이선스/세션을 보증하지 않는다.
         return body + f"\n   └ 미국 {item.market_time.strftime('%m/%d %H:%M')} ET · 나스닥 공개 시세(지연 여부 미확인)"
@@ -900,8 +1047,12 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
                             else (q.domestic.provider if q.domestic is not None else '공급자 미확인'))
                 status = _domestic_status_label(q)
             elif region == '미국':
-                provider = '나스닥 공개 시세' if q.source == '나스닥 웹' else 'Yahoo Finance'
-                status = '지연 여부 미확인'
+                provider = ('나스닥 공개 시세' if q.source == '나스닥 웹'
+                            else q.source if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
+                            else 'Yahoo Finance')
+                status = ('최근 정규장 확정 종가(실시간 아님)'
+                          if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
+                          else '지연 여부 미확인')
             else:
                 provider = q.source or 'Yahoo Finance'
                 status = '지연 여부 미확인'
