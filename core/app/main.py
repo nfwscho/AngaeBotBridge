@@ -174,7 +174,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply = execute_stock_command(request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
-                        selection_menus.open_quotes(request.room, request.sender, WATCHLIST)
+                        selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
+                                                    back=selection_back)
                         stock_menu_active = True
                 elif request.command == "주식" and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
