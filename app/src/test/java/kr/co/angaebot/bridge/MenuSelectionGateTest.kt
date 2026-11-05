@@ -8,6 +8,7 @@
  * 6. v0.4.5는 메모리7 및 관심종목 시세표에서 번호 10/10번/10.까지 허용하고 10개/123/1만원은 거부한다.
  * 7. 기존 숫자 메뉴 1~9, 5분 만료, 방·발신자 격리, 명령·배터리/SQLite/로그 흐름을 보존한다.
  * 8. 메뉴가 활성화된 경우에만 0/0번을 이전 메뉴 선택으로 변환하며 일반 대화 오인식은 차단한다.
+ * 9. 통합 메뉴 명령을 전달하고 00으로 홈 이동을 지원한다. 기존 5분·방/발신자 격리를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,14 +24,15 @@ class MenuSelectionGateTest {
         assertNull(gate.parseSelection("0", "방", "나"))
         gate.setActive("방", "나", true)
         for (number in listOf("1", "1번", "1.", "1)", "1 선택")) {
-            assertEquals(ParseResult.Command("주식", "선택 1"), gate.parseSelection(number, "방", "나"))
+            assertEquals(ParseResult.Command("메뉴", "선택 1"), gate.parseSelection(number, "방", "나"))
         }
         for (number in listOf("0", "0번", "0.", "0)", "0 선택")) {
-            assertEquals(ParseResult.Command("주식", "선택 0"), gate.parseSelection(number, "방", "나"))
+            assertEquals(ParseResult.Command("메뉴", "선택 0"), gate.parseSelection(number, "방", "나"))
         }
         for (number in listOf("10", "10번", "10.", "10)", "10 선택")) {
-            assertEquals(ParseResult.Command("주식", "선택 10"), gate.parseSelection(number, "방", "나"))
+            assertEquals(ParseResult.Command("메뉴", "선택 10"), gate.parseSelection(number, "방", "나"))
         }
+        assertEquals(ParseResult.Command("메뉴", "선택 00"), gate.parseSelection("00", "방", "나"))
         assertNull(gate.parseSelection("0", "다른방", "나"))
         assertNull(gate.parseSelection("1", "다른방", "나"))
         assertNull(gate.parseSelection("1", "방", "다른사람"))
@@ -40,7 +42,7 @@ class MenuSelectionGateTest {
         val gate = MenuSelectionGate(clockMs = { now })
         gate.setActive("방", "나", true)
         now += 299_999L
-        assertEquals(ParseResult.Command("주식", "선택 2"), gate.parseSelection("2", "방", "나"))
+        assertEquals(ParseResult.Command("메뉴", "선택 2"), gate.parseSelection("2", "방", "나"))
         now += 1L
         assertNull(gate.parseSelection("2", "방", "나"))
         assertNull(gate.parseSelection("0", "방", "나"))

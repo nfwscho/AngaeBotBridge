@@ -14,6 +14,8 @@
  * 10. 시계 주입을 지원해 시간 만료/채팅방·발신자 격리/문법 테스트를 Android 기기 없이 수행한다.
  * 11. 등록·삭제·AI·가격 알림·원격 명령 같은 부작용 선택을 이 모듈 자체에서 수행하지 않는다.
  * 14. 활성 메뉴에서 숫자 0도 기존 선택 API로 전달해 Python Core의 이전 메뉴 이동을 지원한다.
+ * 15. 1~10과 0/00을 주식 전용이 아닌 통합 메뉴 선택 API로 전달한다.
+ * 16. 기존 5분 TTL/정확한 방·발신자 보호/활성화 시점/일상 대화 차단을 그대로 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -22,7 +24,7 @@ class MenuSelectionGate(
 ) {
     companion object {
         const val MENU_TTL_MS = 300_000L
-        private val SELECTION = Regex("^(10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
+        private val SELECTION = Regex("^(00|10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
     }
     private data class Scope(val room: String, val sender: String)
     private val expiresAt = mutableMapOf<Scope, Long>()
@@ -51,6 +53,6 @@ class MenuSelectionGate(
             return null
         }
         val number = SELECTION.matchEntire(text.trim())?.groupValues?.get(1) ?: return null
-        return ParseResult.Command("주식", "선택 $number")
+        return ParseResult.Command("메뉴", "선택 $number")
     }
 }

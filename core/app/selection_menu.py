@@ -23,6 +23,15 @@
 21. 숫자 0은 현재 선택 화면에서 이전 메뉴(그룹 목록 또는 주식 메인 메뉴)로 돌아간다.
 22. 뒤로가기는 기존 인증·5분 만료·방/발신자 격리를 따르며 DB와 기존 로그를 변경하지 않는다.
 23. 그룹 시세 선택의 진입 화면을 기억해 주식 메인 메뉴와 관심그룹 목록으로 정확히 복귀한다.
+24. 통합 홈 메뉴와 배드민턴·요리·여행·종친·영어 콘텐츠 메뉴를 추가하되 기존 주식 메뉴/로그는 그대로 보존한다.
+25. 홈에서 번호로 콘텐츠로 이동하고 0으로 상위 화면 복귀, 00으로 홈 이동을 지원한다.
+26. 아직 구현되지 않은 콘텐츠 항목은 실제 기능이 있는 것처럼 실행하지 않고 '개발 예정'으로 안내한다.
+27. 모든 메뉴는 기존 5분 TTL/방·발신자 격리/200세션 제한/인증된 요청/기존 SQLite 불변을 재사용한다.
+28. 홈 6번 영어 대신 날씨, 7번 읽기 전용 설정·운영 관리 메뉴를 추가한다.
+29. 설정에서 상태/배포 이력/로그 요약/환경 설정 상태/통계를 조회하되 비밀키와 타인 로그를 보이지 않는다.
+30. 메뉴 점프는 정확한 숫자 경로를 실제 메뉴 선택으로 순회해 중간 시세 조회 없이 최종 명령만 실행한다.
+31. 그룹·종목·최근조회 메뉴의 동적 선택은 소유 채팅방/발신자 범위만 읽으며 CRUD·AI·임의 명령을 허용하지 않는다.
+32. 기존 주식 메뉴 및 0/00/5분 세션·단축어·기능·로그·DB 스키마는 모두 유지한다.
 """
 from __future__ import annotations
 
@@ -61,6 +70,17 @@ class MenuState:
     origin: str = 'menu'
 
 
+# 카카오톡 대메뉴와 하위 콘텐츠는 텍스트 라벨이 아니라 고정된 내부 카테고리 키로 분리한다.
+# 외부 연동/개인정보/실행 권한이 필요한 새 콘텐츠는 기능 구현 후 명시적으로 연결한다.
+CONTENT_ITEMS = {
+    '배드민턴': ('강좌·기술', '영상 라이브러리', '자세 분석', '훈련 기록'),
+    '요리': ('요리 추천', '레시피 찾기', '보유 재료 활용', '장보기'),
+    '여행': ('여행지 추천', '여행 일정', '이동 경로', '맛집·숙소'),
+    '종친': ('종친회 안내', '행사 일정', '계보·자료', '회비 안내'),
+    '날씨': ('오늘 날씨', '내일 날씨', '주간 예보', '지역 설정'),
+}
+
+
 class StockSelectionMenus:
     def __init__(self, *, clock=time.monotonic):
         self._clock = clock
@@ -75,7 +95,7 @@ class StockSelectionMenus:
     @staticmethod
     def _render(title: str, choices: tuple[MenuChoice, ...]) -> str:
         return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
-                          '※ 번호 입력 · 0: 이전 메뉴 · 5분 유효'])
+                          '※ 번호 입력 · 0: 이전 · 00: 홈 · 5분 유효'])
 
     def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu', origin: str = 'menu') -> None:
         now = self._clock()
@@ -86,7 +106,96 @@ class StockSelectionMenus:
                 self._states.pop(oldest, None)
             self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
 
-    def open(self, room: str, sender: str) -> MenuAnswer:
+    def open_home(self, room: str, sender: str) -> MenuAnswer:
+        key = self._key(room, sender)
+        choices = (
+            MenuChoice('📈 주식', page='stock-root'),
+            MenuChoice('🏸 배드민턴', page='category:배드민턴'),
+            MenuChoice('🍳 요리', page='category:요리'),
+            MenuChoice('🧭 여행', page='category:여행'),
+            MenuChoice('🌳 종친', page='category:종친'),
+            MenuChoice('🌤 날씨', page='category:날씨'),
+            MenuChoice('⚙️ 설정·운영', page='settings-root'),
+        )
+        self._save(key, choices, back='home', origin='home')
+        return MenuAnswer(self._render('🤖 앙개봇 메인 메뉴', choices), menu_active=True)
+
+    def open_category(self, room: str, sender: str, category: str) -> MenuAnswer:
+        key = self._key(room, sender)
+        items = CONTENT_ITEMS.get(category)
+        if items is None:
+            raise StockQuoteError('등록되지 않은 콘텐츠 메뉴입니다.')
+        choices = tuple(MenuChoice(name, page='pending:' + category + ':' + name) for name in items)
+        self._save(key, choices, back='home', origin='category:' + category)
+        return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
+                          + '\n※ 하위 기능은 순차적으로 개발됩니다.', menu_active=True)
+
+    def open_settings(self, room: str, sender: str) -> MenuAnswer:
+        """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
+        key = self._key(room, sender)
+        choices = (
+            MenuChoice('서버·서비스 상태', page='ops:status'),
+            MenuChoice('배포 버전·커밋', page='ops:deployment'),
+            MenuChoice('최근 실행 로그', page='ops:logs'),
+            MenuChoice('설정 현황 (읽기 전용)', page='ops:configuration'),
+            MenuChoice('명령 통계', page='ops:stats'),
+            MenuChoice('최근 오류', page='ops:errors'),
+        )
+        self._save(key, choices, back='home', origin='settings')
+        return MenuAnswer(self._render('⚙️ 설정·운영 메뉴', choices)
+                          + '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만', menu_active=True)
+
+    def navigate_path(self, db: sqlite3.Connection, room: str, sender: str,
+                      root: str, numbers: tuple[str, ...]) -> MenuAnswer:
+        """메뉴 점프: 실제 메뉴 정의를 단계별로 따라가며 최종 선택만 실행한다.
+
+        경로 전체는 1~10, 0, 00 중 최대 다섯 단계만 허용한다.
+        중간 메모리7/그룹 선택은 실제 시세 HTTP를 중복 호출하지 않고
+        기존 정확한 종목 메뉴를 준비한다. 마지막 종목 분석은 main.py가
+        기존 인증·dedup·DB 잠금 외부의 조회 루틴으로만 실행한다.
+        """
+        if not numbers or len(numbers) > 5 or any(
+            re.fullmatch(r'(?:00|10|[0-9])', number) is None for number in numbers
+        ):
+            raise StockQuoteError('메뉴 점프는 번호 1~10을 공백으로 최대 5개 입력하세요.')
+        if root == '홈':
+            answer = self.open_home(room, sender)
+        elif root == '주식':
+            answer = self.open(room, sender, back='home')
+        elif root == '설정':
+            answer = self.open_settings(room, sender)
+        elif root in CONTENT_ITEMS:
+            answer = self.open_category(room, sender, root)
+        else:
+            raise StockQuoteError('등록되지 않은 메뉴 점프 시작 메뉴입니다.')
+
+        for i, number in enumerate(numbers):
+            answer = self.choose(db, room, sender, number)
+            last = i == len(numbers) - 1
+            if last:
+                return answer
+            if answer.execute_argument:
+                arg = answer.execute_argument.strip()
+                from .watchlists import is_group_quote_request, load_group
+                if arg == '메모리7':
+                    from .market import WATCHLIST
+                    self.open_quotes(room, sender, WATCHLIST, back=answer.back)
+                elif arg == '목록':
+                    self.open_groups(db, room, sender)
+                elif is_group_quote_request(arg):
+                    group = load_group(db, room, sender, arg)
+                    if not group:
+                        raise StockQuoteError('빈 관심그룹에는 추가 숫자 선택이 없습니다.')
+                    self.open_quotes(room, sender, group, back=answer.back)
+                else:
+                    raise StockQuoteError('이 메뉴는 마지막 선택 단계입니다. 이후 번호를 제거하세요.')
+            elif not answer.menu_active:
+                raise StockQuoteError('이 메뉴는 다음 하위 메뉴가 없습니다.')
+            elif answer.reply.startswith('🛠'):
+                raise StockQuoteError('개발 예정 기능에서는 추가 번호를 선택할 수 없습니다.')
+        raise StockQuoteError('메뉴 점프 경로를 확인하세요.')
+
+    def open(self, room: str, sender: str, *, back: str = 'menu') -> MenuAnswer:
         key = self._key(room, sender)
         choices = (
             MenuChoice('최근 사용한 주식 조회', page='recent'),
@@ -96,7 +205,7 @@ class StockSelectionMenus:
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
         )
-        self._save(key, choices, back='menu')
+        self._save(key, choices, back=back)
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
     def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *, back: str = 'menu') -> None:
@@ -146,27 +255,49 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:10|[0-9])', number) is None:
+        if re.fullmatch(r'(?:00|10|[0-9])', number) is None:
             raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
                 self._states.pop(key, None)
-                raise StockQuoteError('메뉴가 열려 있지 않거나 5분이 지났습니다. 주를 입력하세요.')
+                raise StockQuoteError('메뉴가 열려 있지 않거나 5분이 지났습니다. 앙 또는 주를 입력하세요.')
+            if number == '00':
+                self._states.pop(key, None)
+                return self.open_home(room, sender)
             if number == '0':
                 self._states.pop(key, None)
                 back = state.back
+                if back == 'home':
+                    return self.open_home(room, sender)
+                if back == 'settings':
+                    return self.open_settings(room, sender)
                 if back == 'groups':
                     self.open_groups(db, room, sender)
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
-                return self.open(room, sender)
+                return self.open(room, sender, back='home')
             index = int(number) - 1
             if index >= len(state.choices):
                 raise StockQuoteError(f'메뉴에 없는 번호입니다. 1~{len(state.choices)}번 중 선택하세요.')
             choice = state.choices[index]
             # 하나를 선택하면 재선택/이중 실행 방지를 위해 현재 페이지를 즉시 닫는다.
             self._states.pop(key, None)
+        if choice.page == 'stock-root':
+            return self.open(room, sender, back='home')
+        if choice.page == 'settings-root':
+            return self.open_settings(room, sender)
+        if choice.page.startswith('ops:'):
+            return MenuAnswer(execute_argument='설정보기 ' + choice.page.split(':', 1)[1],
+                              back='settings')
+        if choice.page.startswith('category:'):
+            return self.open_category(room, sender, choice.page.split(':', 1)[1])
+        if choice.page.startswith('pending:'):
+            _, category, name = choice.page.split(':', 2)
+            # 단독 '준비 중' 응답으로 메뉴가 닫히지 않도록 동일 카테고리 메뉴를 다시 보여준다.
+            menu = self.open_category(room, sender, category)
+            return MenuAnswer(f'🛠 {category} / {name}: 개발 예정입니다.\n\n{menu.reply}',
+                              menu_active=True)
         if choice.page == 'recent':
             choices = self._recent(db, room, sender)
             if not choices:

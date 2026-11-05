@@ -53,6 +53,19 @@
 
 51. v0.5.10 미국 시세 백업 조회(나스닥 확정 일봉·네이버 해외 일봉)는 market.py만 확장하며 기존 기능/명령/SQLite/로그/UI/배터리를 보존한다.
 52. 주식 목록 응답은 그룹 번호 선택 세션을 활성화하고 기존 선택/시세/인증/로그 흐름을 그대로 재사용한다.
+53. 통합 메뉴 명령은 기존 인증 FastAPI/SQLite 요청 중복 방지/작업·이벤트 로그를 그대로 사용한다.
+54. 홈/주식/배드민턴/요리/여행/종친/영어 메뉴와 0 이전·00 홈을 주식 기존 선택 상태에서 통합 관리한다.
+55. 홈에서 기존 주식 시세·분석을 선택하면 기존 stock/history/watchlists 모듈로 전달하며 DB·AI/Android 로그는 보존한다.
+56. 미개발 콘텐츠 기능은 안내만 제공하며 외부 AI 호출/파일 변경/개인정보 조회를 실행하지 않는다.
+57. v0.6.0 홈 6번은 날씨로, 7번은 읽기 전용 설정·운영 메뉴로 대체/추가한다.
+58. 현재 Core 상태/배포 정보/설정 요약/현재 방·발신자의 명령 로그만 조회하며 민감 정보는 노출하지 않는다.
+59. '메뉴 경로 주식 2 2' 등 연속 번호 메뉴 점프는 최종 항목만 실행해 불필요한 외부 시세 호출을 방지한다.
+60. 각 메뉴 점프는 최대 5개 정확한 숫자로 제한하며 기존 인증·중복 요청·jobs/events 로깅·TTL 보호를 재사용한다.
+61. 기존 주식 분석/관심목록/AI/설정/배터리/Android UI/DB 스키마 및 기존 명령은 제거하지 않는다.
+62. v0.6.1 인증 Core health에는 실제 S20+ 배포 기록의 branch/sha를 선택 필드로 제공한다.
+63. 모든 명령 응답에 module_source를 덧붙여 Android가 담당 소스 모듈을 공통 하단에 표기하도록 한다.
+64. 신규 메타 필드는 기존 reply/menu_active/duplicate/request_id·jobs/events·API 호환을 보존한다.
+65. 배포기록이 없으면 빈 값을 반환하며 main이라고 추측하거나 GitHub에 외부 요청하지 않는다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -71,15 +84,17 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
-from .ops import details, command_stats, recent_errors, uptime_report
+from .ops import (details, command_stats, recent_errors, uptime_report,
+                  deployment_report, recent_command_log, configuration_report, deployment_identity)
+from .module_info import module_for
 from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
-from .selection_menu import StockSelectionMenus
+from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 
-VERSION = "0.5.10"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7"}
+VERSION = "0.6.1"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
 
 
 class CommandRequest(BaseModel):
@@ -135,7 +150,9 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
 
     @api.get("/v1/health", dependencies=[Depends(authenticated)])
     def health():
-        return {"ok": True, "version": VERSION, "uptime_seconds": int(time.monotonic() - began)}
+        revision = deployment_identity()
+        return {"ok": True, "version": VERSION, "uptime_seconds": int(time.monotonic() - began),
+                "deployment_branch": revision["branch"], "deployment_sha": revision["sha"]}
 
     @api.post("/v1/commands", dependencies=[Depends(authenticated)])
     def command(request: CommandRequest):
@@ -148,17 +165,45 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         stock_menu_active = False
         resolved_argument = request.argument
         selection_back = 'menu'
-        if request.command in {"주식", "메모리7"}:
+        if request.command in {"주식", "메모리7", "메뉴"}:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
             if old is not None:
                 if old[0] != request.command or old[1] != request.argument:
                     raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
-                return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id, "duplicate": True}
+                return {"ok": bool(old[3]), "reply": old[2], "request_id": request.request_id,
+                        "duplicate": True,
+                        "module_source": module_for(request.command, request.argument, old[2])}
             try:
-                # 짧은 메뉴/번호 선택은 동일한 인증·dedup·jobs/events 흐름에서 먼저 해석한다.
-                if request.command == "주식" and request.argument.strip() == "메뉴":
-                    menu = selection_menus.open(request.room, request.sender)
+                # 메뉴도 주식과 동일한 인증·중복 요청·jobs/events 로그 경로를 통과한다.
+                if request.command == "메뉴":
+                    action = request.argument.strip()
+                    if action in ("", "홈"):
+                        menu = selection_menus.open_home(request.room, request.sender)
+                    elif action == "주식":
+                        menu = selection_menus.open(request.room, request.sender, back='home')
+                    elif action in CONTENT_ITEMS:
+                        menu = selection_menus.open_category(request.room, request.sender, action)
+                    elif action == "설정":
+                        menu = selection_menus.open_settings(request.room, request.sender)
+                    elif action.startswith("경로 "):
+                        parts = action.split()
+                        if len(parts) < 3:
+                            raise StockQuoteError("메뉴 점프 사용법: 주 2 2 / 앙 1 2 / 설 3")
+                        with closing(connect()) as read_db:
+                            menu = selection_menus.navigate_path(read_db, request.room, request.sender,
+                                                               parts[1], tuple(parts[2:]))
+                    elif action.startswith("선택 "):
+                        with closing(connect()) as read_db:
+                            menu = selection_menus.choose(read_db, request.room, request.sender,
+                                                          action[3:].strip())
+                    else:
+                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/날/설 또는 번호 선택")
+                    stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
+                    resolved_argument = menu.execute_argument
+                    selection_back = menu.back
+                elif request.command == "주식" and request.argument.strip() == "메뉴":
+                    menu = selection_menus.open(request.room, request.sender, back='home')
                     stock_reply, stock_menu_active = menu.reply, menu.menu_active
                 elif request.command == "주식" and request.argument.startswith("선택 "):
                     with closing(connect()) as read_db:
@@ -170,14 +215,35 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if stock_reply is not None:
                     pass
-                elif request.command == "메모리7" or (request.command == "주식" and resolved_argument.strip() == "메모리7"):
-                    stock_reply = execute_stock_command(request.command, resolved_argument)
+                elif request.command == "메뉴" and resolved_argument.startswith("설정보기 "):
+                    view = resolved_argument.split(" ", 1)[1]
+                    if view == "status":
+                        report = details(int(time.monotonic() - began))
+                    elif view == "deployment":
+                        report = deployment_report(VERSION)
+                    elif view == "configuration":
+                        report = configuration_report(AISettings.from_env().status_text())
+                    elif view in {"logs", "stats", "errors"}:
+                        with closing(connect()) as read_db:
+                            if view == "logs":
+                                report = recent_command_log(read_db, request.room, request.sender)
+                            elif view == "stats":
+                                report = command_stats(read_db, request.room, request.sender)
+                            else:
+                                report = recent_errors(read_db, request.room, request.sender)
+                    else:
+                        raise StockQuoteError("등록되지 않은 설정 메뉴 항목입니다.")
+                    refreshed = selection_menus.open_settings(request.room, request.sender)
+                    stock_reply = report + "\n\n" + refreshed.reply
+                    stock_menu_active = True
+                elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
+                    stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
                         selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
                                                     back=selection_back)
                         stock_menu_active = True
-                elif request.command == "주식" and is_analysis_request(resolved_argument):
+                elif request.command in {"주식", "메뉴"} and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
                     if len(parts) < 2:
                         raise StockQuoteError("사용법: 앙개야 주식 분석 마이크론 (또는 삼성전자/하이닉스/그룹명)")
@@ -202,7 +268,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 if stock is None:
                                     raise invalid_name
                             stock_reply = individual_report(fetch_history(stock))
-                elif request.command == "주식" and is_group_quote_request(resolved_argument):
+                elif request.command in {"주식", "메뉴"} and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, resolved_argument.strip())
                     stock_reply = group_report(resolved_argument.strip(), stocks)
@@ -220,14 +286,16 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                 if row:
                     if row[0] != request.command or row[1] != request.argument:
                         raise HTTPException(status_code=409, detail="동일 요청 ID에 다른 명령을 사용할 수 없습니다.")
-                    return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id, "duplicate": True}
+                    return {"ok": bool(row[3]), "reply": row[2], "request_id": request.request_id,
+                            "duplicate": True,
+                            "module_source": module_for(request.command, request.argument, row[2])}
                 try:
-                    if request.command in {"주식", "메모리7"}:
+                    if request.command in {"주식", "메모리7", "메뉴"}:
                         if stock_error is not None:
                             raise stock_error
                         if stock_reply is not None:
                             reply = stock_reply
-                        elif request.command == "주식":
+                        elif request.command in {"주식", "메뉴"}:
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
                             if resolved_argument.strip() == '목록':
                                 selection_menus.open_groups(db, request.room, request.sender)
@@ -284,7 +352,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                            (now, "INFO" if ok else "WARN", "COMMAND_DONE" if ok else "COMMAND_REJECTED",
                             f"request_id={request.request_id} command={request.command} ok={ok}"))
         return {"ok": ok, "reply": reply, "request_id": request.request_id, "duplicate": False,
-                "menu_active": stock_menu_active if ok else False}
+                "menu_active": stock_menu_active if ok else False,
+                "module_source": module_for(request.command, resolved_argument, reply)}
 
     return api
 

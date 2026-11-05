@@ -16,6 +16,9 @@
 // 15. 배터리 표시/주식 분석/기존 5분 메뉴/채팅방·발신자/앱 설정과 전체 로그를 보존하고 새 권한은 없다.
 // 16. 기존 서명/패키지명으로 덮어쓰기 설치할 수 있도록 versionCode 9, versionName 0.4.5로 올린다.
 // 17. 0 이전 메뉴 선택을 위한 v0.4.6 업데이트로 versionCode 10을 사용하며 기존 applicationId/데이터는 유지한다.
+// 18. 통합 콘텐츠 단축어/홈 메뉴 업데이트는 v0.4.7(versionCode 11)로 덮어쓰기 설치하며 데이터·권한·서명을 유지한다.
+// 19. 날씨·운영 메뉴, 연속 번호 메뉴 점프 v0.4.8(versionCode 12), 기존 앱 ID·권한·SQLite 로그/설정·동작 보존.
+// 20. 응답별 담당 소스 및 실배포 브랜치 표시 v0.4.9(versionCode 13), 기존 앱 데이터·권한·서명·UI/로그 보존.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -29,8 +32,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.4.6"
+        versionCode = 13
+        versionName = "0.4.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -3,17 +3,16 @@
 # 2. Python 3.12에서 문법을 확인하고 모든 core/tests 테스트를 수행한다.
 # 3. S20+ Termux 서비스와 데이터베이스는 건드리지 않는다.
 # 4. 기능 브랜치와 main에 커밋될 때 자동 실행하여 배포 전 회귀 검사를 보장한다.
-# 5. 메뉴 0 기능의 Android Kotlin 단위 테스트와 APK debug 빌드를 추가하고 빌드 결과를 보관한다.
+# 5. 통합 메뉴 및 단축어의 Android Kotlin 단위 테스트와 APK debug 빌드를 수행하고 결과를 보관한다.
+# 6. Android ADB 탐색 보조 스크립트의 PowerShell 5.1/7 문법 및 경로 탐색 회귀 테스트를 수행한다.
+# 7. 실제 ADB 다운로드/실기기 설치는 CI에서 수행하지 않으며 기존 운영 데이터에 접근하지 않는다.
+# 8. push 이벤트에서만 전체 CI를 수행해 기능 PR의 push/PR 중복 실행과 메일을 줄인다.
+# 9. 기능 SHA 검증과 승인된 main 병합 후 테스트, workflow_dispatch 수동 실행은 유지한다.
 name: AngaeBot Core regression
 on:
   push:
     branches:
-      - feature/compact-all-replies-20261105
-      - feature/group-number-selection-20261105
-      - feature/menu-back-zero-20261105
-      - main
-  pull_request:
-    branches:
+      - 'feature/**'
       - main
   workflow_dispatch:
 jobs:
@@ -26,13 +25,15 @@ jobs:
           python-version: '3.12'
       - name: Install Python Core dependencies
         run: python -m pip install -r core/requirements.txt httpx
-      - name: Validate PowerShell deploy script syntax
+      - name: Validate PowerShell deploy and ADB script syntax
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+          }
       - name: Compile all Core modules
         run: python -m compileall -q core/app
       - name: Run all Python Core regression tests
@@ -43,15 +44,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate Windows PowerShell 5.1 deployment syntax
+      - name: Validate Windows PowerShell 5.1 deployment scripts
         shell: powershell
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
-          $text = [System.IO.File]::ReadAllText((Resolve-Path './deploy-angaebot.ps1'))
-          if (@($text.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) { throw 'Non-ASCII characters found in deployment script.' }
+          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+            $text = [System.IO.File]::ReadAllText((Resolve-Path $file))
+            if (@($text.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) { throw "Non-ASCII characters in $file" }
+          }
+      - name: Test Android SDK ADB auto-discovery
+        shell: powershell
+        run: .\scripts\test-resolve-adb.ps1
 
   android-debug:
     runs-on: ubuntu-latest
