@@ -23,6 +23,11 @@
  * 25. 상/도는 Android 로컬 상태/도움말을 호출하며 주 단축 분석 기능을 유지한다.
  * 26. 앙개야 단독과 앙개야 메뉴는 홈으로 연결하고 기존 장문 명령은 유지한다.
  * 27. 일반 단어의 앞 한 글자를 단축어로 오인하지 않고 사용자 호출어를 우선한다.
+ * 28. 날씨 단축 '날' 및 읽기 전용 설정·운영 단축 '설'을 추가하고 '영' 메뉴 호출을 종료한다.
+ * 29. 메뉴 점프 '주 2', '주 2 2', '앙 1 2', '설 3'의 정확한 연속 숫자만 한 번에 Core로 전달한다.
+ * 30. 주 분/주 목록/주 분석 등의 기존 별칭, 사용자 호출어, 5분 숫자 메뉴·보안·로그 동작을 그대로 보존한다.
+ * 31. 최종 단계의 정상 API 응답 외에 중간 단계별 카톡 자동발신을 하지 않는다.
+ * 32. 새 Android Bridge v0.4.8과 도움말을 표시하고 기타 로컬 명령/UI/설정·로그를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -36,20 +41,34 @@ object CommandParser {
         val message = text.trim()
         val prefix = wakeWord.trim()
         if (prefix.isEmpty()) return ParseResult.NoTrigger
-        // 정확히 한 글자인 경우만 단축 메뉴로 처리한다. 사용자 지정 호출어는 우선 보호한다.
+        // 호출어는 정확한 한 글자 또는 공백+숫자 경로로만 인식한다.
+        // 접두사가 일반 문장에 우연히 등장하면 실행하지 않는다.
+        val segments = message.split(Regex("\\s+"))
+        val index = segments.firstOrNull().orEmpty()
+        val numericPath = segments.size in 2..6 &&
+            segments.drop(1).all { it.matches(Regex("(?:00|10|[0-9])")) }
         if (message != prefix) {
-            val shortcut = when (message) {
-                "앙" -> ParseResult.Command("메뉴", "홈")
-                "민" -> ParseResult.Command("메뉴", "배드민턴")
-                "요" -> ParseResult.Command("메뉴", "요리")
-                "여" -> ParseResult.Command("메뉴", "여행")
-                "종" -> ParseResult.Command("메뉴", "종친")
-                "영" -> ParseResult.Command("메뉴", "영어")
-                "상" -> ParseResult.Command("상태", "")
-                "도" -> ParseResult.Command("도움말", "")
+            val root = when (index) {
+                "앙" -> "홈"
+                "민" -> "배드민턴"
+                "요" -> "요리"
+                "여" -> "여행"
+                "종" -> "종친"
+                "날" -> "날씨"
+                "설" -> "설정"
                 else -> null
             }
-            if (shortcut != null) return shortcut
+            if (root != null) {
+                if (segments.size == 1) return ParseResult.Command("메뉴", root)
+                if (numericPath) {
+                    return ParseResult.Command("메뉴", "경로 $root ${segments.drop(1).joinToString(" ")}")
+                }
+                return ParseResult.NoTrigger
+            }
+            when (message) {
+                "상" -> return ParseResult.Command("상태", "")
+                "도" -> return ParseResult.Command("도움말", "")
+            }
         }
         // '주'는 사용자가 직접 선택한 짧은 주식 호출어. 원래 호출어 및 사용자 설정을 먼저 보호한다.
         // 정확히 '주'이거나 '주'+공백/탭/개행일 때만 사용하고, 붙여 쓴 일반 단어는 무시한다.
@@ -57,6 +76,10 @@ object CommandParser {
             (message.length == 1 || message[1].isWhitespace())) {
             val stockArgument = message.substring(1).trim()
             if (stockArgument.isEmpty()) return ParseResult.Command("주식", "메뉴")
+            val parts = stockArgument.split(Regex("\\s+"))
+            if (parts.size in 1..5 && parts.all { it.matches(Regex("(?:00|10|[0-9])")) }) {
+                return ParseResult.Command("메뉴", "경로 주식 ${parts.joinToString(" ")}")
+            }
             val action = stockArgument.takeWhile { !it.isWhitespace() }
             if (action == "분") {
                 val target = stockArgument.substring(action.length).trim()
@@ -74,16 +97,19 @@ object CommandParser {
         }
         val command = commandText.substringBefore(' ').trim()
         val argument = commandText.substringAfter(' ', "").trim()
-        return if (command == "메뉴" && argument.isEmpty()) ParseResult.Command("메뉴", "홈")
-               else ParseResult.Command(command, argument)
+        if (command == "메뉴" && argument.isEmpty()) return ParseResult.Command("메뉴", "홈")
+        if (command == "메뉴" && argument.split(Regex("\\s+")).let { parts ->
+                parts.size in 1..5 && parts.all { it.matches(Regex("(?:00|10|[0-9])")) }
+            }) return ParseResult.Command("메뉴", "경로 홈 $argument")
+        return ParseResult.Command(command, argument)
     }
 }
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.7 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
-        "상태" -> "✅ 앙개봇 Bridge v0.4.7 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
-        "도움말", "help" -> "🤖 앙개봇 v0.4.7 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 메뉴: 앙(홈) / 주(주식) / 민(배드민턴) / 요(요리) / 여(여행) / 종(종친) / 영(영어)\n※ 상(상태) / 도(도움말) / 주 분 삼성전자(빠른 분석)\n※ 메뉴 번호 1~10 선택 · 0 이전 · 00 홈 · 5분 유효."
+        "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.8 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
+        "상태" -> "✅ 앙개봇 Bridge v0.4.8 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
+        "도움말", "help" -> "🤖 앙개봇 v0.4.8 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 메뉴: 앙(홈) / 주(주식) / 민(배드민턴) / 요(요리) / 여(여행) / 종(종친) / 날(날씨) / 설(설정)\n※ 상(상태) / 도(도움말) / 주 분 삼성전자(빠른 분석)\n※ 메뉴 점프: 주 2 / 주 2 2 / 앙 1 2 / 설 3\n※ 메뉴 번호 1~10 선택 · 0 이전 · 00 홈 · 5분 유효."
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
     }
 }
