@@ -4,10 +4,10 @@ from app.commands import safe_calculate, execute_command, CommandError
 
 class CommandTests(unittest.TestCase):
     def test_multiplication(self):
-        self.assertEqual(safe_calculate('123*456'), '🧮 계산 결과: 56,088')
+        self.assertEqual(safe_calculate('123*456'), '🧮 56,088')
 
     def test_parentheses(self):
-        self.assertEqual(safe_calculate('(10 + 2) * 3'), '🧮 계산 결과: 36')
+        self.assertEqual(safe_calculate('(10 + 2) * 3'), '🧮 36')
 
     def test_division(self):
         self.assertIn('2.5', safe_calculate('5/2'))
