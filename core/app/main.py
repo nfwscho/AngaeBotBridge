@@ -54,6 +54,7 @@
 51. v0.5.10 미국 시세 백업 조회(나스닥 확정 일봉·네이버 해외 일봉)는 market.py만 확장하며 기존 기능/명령/SQLite/로그/UI/배터리를 보존한다.
 52. 주식 목록 응답은 그룹 번호 선택 세션을 활성화하고 기존 선택/시세/인증/로그 흐름을 그대로 재사용한다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
+45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
 from __future__ import annotations
 
@@ -146,6 +147,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         stock_error = None
         stock_menu_active = False
         resolved_argument = request.argument
+        selection_back = 'menu'
         if request.command in {"주식", "메모리7"}:
             with closing(connect()) as read_db:
                 old = read_db.execute("SELECT command,argument,result,ok FROM jobs WHERE request_id=?", (request.request_id,)).fetchone()
@@ -164,6 +166,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                                       request.argument[3:].strip())
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
+                    selection_back = menu.back
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if stock_reply is not None:
                     pass
@@ -205,7 +208,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     # 방/발신자에 실제 등록된 그룹 종목만 원래 출력 순서대로 선택 가능.
                     if stocks:
                         selection_menus.open_quotes(request.room, request.sender, stocks,
-                            back='groups' if request.argument.startswith('선택 ') else 'menu')
+                            back=selection_back)
                         stock_menu_active = True
             except StockQuoteError as error:
                 stock_error = error
