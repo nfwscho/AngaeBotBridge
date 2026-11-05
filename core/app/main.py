@@ -239,7 +239,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         db.execute("""INSERT INTO ai_sessions(room,sender,generation)
                             VALUES (?,?,1) ON CONFLICT(room,sender)
                             DO UPDATE SET generation = generation + 1""", (request.room, request.sender))
-                        reply = "🧠 이 대화의 이전 AI 문맥을 초기화했습니다. (기존 로그는 보존됩니다.)"
+                        reply = "🧠 AI 대화 문맥 초기화 완료"
                     elif request.command in {"질문", "요약"}:
                         settings = AISettings.from_env()
                         gen_row = db.execute("SELECT generation FROM ai_sessions WHERE room=? AND sender=?",
