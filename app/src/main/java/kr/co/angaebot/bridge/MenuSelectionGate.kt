@@ -62,7 +62,7 @@ class HelpMenuGate(private val clockMs: () -> Long = { System.nanoTime() / 1_000
     private data class Scope(val room: String, val sender: String)
     private data class State(val section: String, val expiresAt: Long)
     private val states = mutableMapOf<Scope, State>()
-    private val selection = Regex("^(10|[0-9])(?:번|[.)])?(?:\\\\s+선택)?$")
+    private val selection = Regex("^(10|[0-9])(?:번|[.)])?(?:\\s+선택)?$")
     @Synchronized fun open(room: String, sender: String, section: String = "") {
         if (room.isBlank() || sender.isBlank()) return
         val now = clockMs()
