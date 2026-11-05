@@ -12,6 +12,7 @@
 10. 설정 8번 도움말은 실제 생성 모듈 core.menu, 통합 상태는 core.ops로 구별하고 나머지 응답 모듈도 보존한다.
 11. v0.7.0 개인 기록 CRUD·일정·검색·상세보기는 core.personal_records로 식별하고 기존 메뉴·주식·AI 표시를 보존한다.
 12. 날씨 조회/지역 설정 결과는 core.weather, 메뉴 진입은 core.menu로 구분하며 중복 API 응답에도 같은 모듈을 표시한다.
+13. 부동산 매매·전월세 공식 실거래 조회 및 지역 설정은 core.real_estate로 식별하고 개인메모는 core.records를 보존한다.
 """
 from __future__ import annotations
 
@@ -25,6 +26,11 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         return 'core.ai'
     if command in {'계산', '시간', '서버상태'}:
         return 'core.commands'
+    if command == '실거래' or (
+        command == '부동산' and arg.split(' ', 1)[0] in
+        {'시세', '매매', '전세', '월세', '지역', '실거래'}
+    ):
+        return 'core.real_estate'
     if command in {'메모', '일정', '부동산', '투자', '금융', '기록'}:
         return 'core.records'
     if command == '메모리7':
@@ -32,6 +38,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
     if command == '날씨':
         return 'core.menu' if '날씨 메뉴' in reply else 'core.weather'
     if command in {'메뉴', '주식'}:
+        if arg.startswith('실거래조회 ') or arg == '실거래설정 안내':
+            return 'core.real_estate'
         if arg.startswith(('날씨조회 ', '날씨설정 ')) or reply.startswith(
             ('🌤 서울 ', '🌦 서울 ', '🌤 부산 ', '🌦 부산 ', '🗓 ', '📍 날씨 지역 설정')
         ):
