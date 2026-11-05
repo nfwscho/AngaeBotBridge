@@ -131,7 +131,14 @@ try {
         Assert-Exit 'Resolved ADB failed the version check'
         $allDevices = @(& $adbExe devices)
         Assert-Exit 'ADB device listing failed'
-        $deviceLines = @($allDevices | Where-Object { $_ -match '^\S+\s+device\s*
+        $deviceLines = @($allDevices | Where-Object { $_ -match '^\S+\s+device\s*$' })
+        if ($deviceLines.Count -eq 0) {
+            $untrusted = @($allDevices | Where-Object { $_ -match '^\S+\s+(unauthorized|offline)' })
+            if ($untrusted.Count -gt 0) {
+                throw 'Android device unauthorized/offline. Unlock S20+, enable USB debugging, and approve the PC authorization popup.'
+            }
+            throw 'No authorized Android device found via USB ADB. Connect S20+, enable USB debugging, and approve this PC on the phone.'
+        }
         $s20 = @()
         foreach ($line in $deviceLines) {
             $serial = ($line.Trim() -split '\s+')[0]
@@ -179,76 +186,6 @@ try {
         & $adbExe -s $androidSerial install -r -t $apkFile
         Assert-Exit 'Android APK update failed; Core is already updated'
         $packagePath = (& $adbExe -s $androidSerial shell pm path kr.co.angaebot.bridge | Out-String).Trim()
-        Assert-Exit 'Android package verification failed; Core is already updated'
-        if ($packagePath -notmatch 'package:') { throw 'Android package not installed after update; Core is already updated.' }
-        Write-Host "Android APK verified on $androidSerial" -ForegroundColor Green
-    }
-    Write-Host "Deployment successful: $sha" -ForegroundColor Green
-} catch {
-    Write-Warning "Deployment stopped: $($_.Exception.Message)"
-    if ($deploymentStarted) { Undo-Remote }
-    if ($coreApplied -and $InstallAndroid) {
-        Write-Warning 'Core deployment completed, but Android upgrade/verification may be incomplete.'
-    }
-    exit 1
-} finally {
-    Set-Location $root
-}
- })
-        if ($deviceLines.Count -eq 0) {
-            $untrusted = @($allDevices | Where-Object { $_ -match '^\S+\s+(unauthorized|offline)' })
-            if ($untrusted.Count -gt 0) {
-                throw 'Android device unauthorized/offline. Unlock S20+, enable USB debugging, and approve the PC authorization popup.'
-            }
-            throw 'No authorized Android device found via USB ADB. Connect S20+, enable USB debugging, and approve this PC on the phone.'
-        }
-        $s20 = @()
-        foreach ($line in $deviceLines) {
-            $serial = ($line.Trim() -split '\s+')[0]
-            $model = (& adb -s $serial shell getprop ro.product.model | Out-String).Trim()
-            Assert-Exit 'ADB model lookup failed'
-            if ($model -match '^(SM-G985|SM-G986)') { $s20 += $serial }
-        }
-        if ($s20.Count -ne 1) {
-            throw 'Expected exactly one authorized Galaxy S20+ (SM-G985/SM-G986) via ADB.'
-        }
-        $androidSerial = $s20[0]
-        Write-Host "  Android target: $androidSerial (Galaxy S20+)"
-        $gradle = Join-Path $root 'gradlew.bat'
-        $apkFile = Join-Path $root 'app\build\outputs\apk\debug\app-debug.apk'
-        if (-not (Test-Path $gradle)) { throw 'Gradle wrapper missing.' }
-        & $gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-        Assert-Exit 'Android tests or APK build failed; no deployment was attempted'
-        if (-not (Test-Path $apkFile)) { throw 'Debug APK not found; deployment stopped.' }
-    }
-
-    Write-Host '[3/6] Prepare remote staging directories' -ForegroundColor Cyan
-    Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ environment check failed'
-
-    Write-Host '[4/6] Upload and compile-check Python modules' -ForegroundColor Cyan
-    $files = @(Get-ChildItem -LiteralPath (Join-Path $root 'core/app') -Filter '*.py' -File)
-    if ($files.Count -lt 1) { throw 'No Python modules found for upload.' }
-    $paths = @($files | ForEach-Object { $_.FullName })
-    & scp -o BatchMode=yes @paths "${SshHost}:$stage/"
-    Assert-Exit 'SCP upload failed'
-    Invoke-Remote "$remoteCore/.venv/bin/python -m compileall -q $stage" 'S20+ Python compile check failed'
-
-    Write-Host '[5/6] Apply modules and restart Core service' -ForegroundColor Cyan
-    Invoke-Remote "cp -p $remoteCore/app/*.py $backup/" 'Temporary rollback copy failed'
-    $deploymentStarted = $true
-    Invoke-Remote "cp -p $stage/*.py $remoteCore/app/ && sv restart $service" 'Apply or Core service restart failed'
-
-    Write-Host '[6/6] Verify Core service and TCP port' -ForegroundColor Cyan
-    Start-Sleep -Seconds 3
-    Invoke-Remote "sv status $service && $remoteCore/.venv/bin/python -c 'import socket; socket.create_connection((socket.inet_ntoa(bytes([127,0,0,1])),8765),5).close()'" 'Core service verification failed'
-    $deploymentStarted = $false
-    $coreApplied = $true
-    Invoke-Remote "rm -rf $stage $backup" 'Staging cleanup failed'
-    if ($InstallAndroid) {
-        Write-Host '[Android] Upgrade existing S20+ Bridge without clearing app data' -ForegroundColor Cyan
-        & adb -s $androidSerial install -r -t $apkFile
-        Assert-Exit 'Android APK update failed; Core is already updated'
-        $packagePath = (& adb -s $androidSerial shell pm path kr.co.angaebot.bridge | Out-String).Trim()
         Assert-Exit 'Android package verification failed; Core is already updated'
         if ($packagePath -notmatch 'package:') { throw 'Android package not installed after update; Core is already updated.' }
         Write-Host "Android APK verified on $androidSerial" -ForegroundColor Green
