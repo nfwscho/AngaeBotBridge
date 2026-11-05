@@ -9,9 +9,9 @@
 # 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
 # 9. Check service status and local TCP port after restart, then remove staging files.
 # 10. Abort safely on errors; do not deploy a commit without a passing CI result.
-# 11. -LocalTests mode runs the complete Python unittest suite locally instead of requiring GitHub Actions.
-# 12. Local mode validates Python syntax and uses the selected feature branch exact commit; no DB/.env/log changes.
-# 13. Local tests must pass before any SSH/SCP or S20+ service restart.
+# 11. -LocalTests mode runs all Python tests in an isolated Linux staging directory on S20+; no GitHub Actions.
+# 12. Local mode validates Python syntax on the S20+ Linux interpreter without modifying production DB/.env/logs.
+# 13. Isolated tests must pass before any production Python module replacement or service restart.
 # Run: .\deploy-angaebot.ps1
 # Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
@@ -61,34 +61,23 @@ try {
     Write-Host "Target commit: $sha"
 
     if ($LocalTests) {
-        Write-Host '[2/6] Run local Python Core regression tests (GitHub Actions not used)' -ForegroundColor Cyan
-        $python = $null
-        $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
-        if ($pyLauncher) {
-            & py -3.12 --version 2>$null
-            if ($LASTEXITCODE -eq 0) { $python = @('py', '-3.12') }
-        }
-        if (-not $python) {
-            $pythonExe = Get-Command python -ErrorAction SilentlyContinue
-            if (-not $pythonExe) { throw 'Python 3.12 is required for local regression tests.' }
-            $version = (& python -c 'import sys; print("%d.%d" % sys.version_info[:2])').Trim()
-            Assert-Exit 'Python version check failed'
-            if ($version -ne '3.12') { throw "Python 3.12 required; found $version" }
-            $python = @('python')
-        }
-        $pythonCommand = $python[0]
-        $pythonArgs = @()
-        if ($python.Count -gt 1) { $pythonArgs = @($python[1..($python.Count-1)]) }
-        & $pythonCommand @pythonArgs -m compileall -q core/app
-        Assert-Exit 'Local Python compile check failed'
-        Push-Location (Join-Path $root 'core')
+        Write-Host '[2/6] Run isolated Linux regression on S20+ (no GitHub Actions)' -ForegroundColor Cyan
+        $testStage = "/data/data/com.termux/files/home/angaebot-regression-$sha"
+        $testPython = "$remoteCore/.venv/bin/python"
+        Invoke-Remote "test -x $testPython && mkdir -p $testStage" 'S20+ Python regression environment unavailable'
         try {
-            & $pythonCommand @pythonArgs -m unittest discover -s tests -v
-            Assert-Exit 'Local Python Core regression tests failed; deployment refused'
+            foreach ($folder in @('app', 'tests', 'scripts')) {
+                $source = Join-Path (Join-Path $root 'core') $folder
+                if (-not (Test-Path $source)) { throw "Missing regression source folder: $source" }
+                & scp -r -o BatchMode=yes $source "${SshHost}:$testStage/"
+                Assert-Exit "Unable to stage $folder for isolated tests"
+            }
+            Invoke-Remote "cd $testStage && PYTHONDONTWRITEBYTECODE=1 $testPython -m compileall -q app && PYTHONDONTWRITEBYTECODE=1 $testPython -m unittest discover -s tests -v" 'Isolated S20+ Linux regression failed; deployment refused'
+            Write-Host 'Isolated Linux Python Core regression tests PASSED' -ForegroundColor Green
         } finally {
-            Pop-Location
+            & ssh -o BatchMode=yes $SshHost "rm -rf $testStage"
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Isolated regression staging cleanup failed; inspect S20+ temporary folder.' }
         }
-        Write-Host 'Local Python Core regression tests PASSED' -ForegroundColor Green
     } else {
     Write-Host '[2/6] Verify GitHub Actions regression tests' -ForegroundColor Cyan
     $deadline = (Get-Date).AddMinutes($WaitMinutes)
