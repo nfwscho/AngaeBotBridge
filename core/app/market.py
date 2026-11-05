@@ -1105,11 +1105,11 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
                 providers.append(source)
         latest = max(q.market_time for q in items)
         zone = 'ET' if region == '미국' else ('JST' if region == '일본' else 'KST')
-        line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M} {zone}'
+        line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M}'
         if len({q.market_time for q in items}) > 1:
-            line += ' (종목별 시각 상이)'
+            line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
-            line += ' · 확정 종가'
+            line += ' · 종가'
         lines.append(line)
     return tuple(lines)
 
@@ -1152,14 +1152,12 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
-    if dates:
-        pass  # 거래일은 compact_source_summary에서 국가별로 표시
     lines.append('')
     lines.extend(compact_source_summary(quotes))
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
-    lines.append('※ 무료 시세 · 지연 가능 · 실시간 호가 아님')
-    lines.append('※ 5분 내 번호 1~8: 종목 분석')
+    lines.append('※ 무료·지연 가능·실시간 아님')
+    lines.append('※ 5분 내 1~8: 종목 분석')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote:
         with _CACHE_LOCK:
