@@ -9,6 +9,7 @@
 7. 기존 주식·AI/로그·SQLite·설정·Android UI/배터리 기능은 그대로 보존한다.
 8. 네트워크 연결·장치·서버 재시작·외부 파일 변경 없이 임시 SQLite DB와 mock만 사용한다.
 9. 설정 메뉴의 8번 도움말을 기존 1~7 항목과 함께 읽기 전용 회귀 검증한다.
+10. v0.7.1 홈 설정 경로는 10, 날씨는 8로 변경하고 직접 설 경로·기존 통계 조회를 보존한다.
 """
 from __future__ import annotations
 
@@ -73,11 +74,11 @@ class MenuJumpCoreTests(unittest.TestCase):
                 self.assertEqual(history.call_args.args[0].ticker, "000660.KS")
 
     def test_jump_to_nested_menu_and_back(self):
-        a = self.post("경로 홈 7").json()
+        a = self.post("경로 홈 10").json()
         self.assertIn("설정·운영 메뉴", a["reply"])
         b = self.post("선택 0").json()
         self.assertIn("메인 메뉴", b["reply"])
-        c = self.post("경로 홈 6").json()
+        c = self.post("경로 홈 8").json()
         self.assertIn("날씨 메뉴", c["reply"])
         d = self.post("선택 00").json()
         self.assertIn("메인 메뉴", d["reply"])

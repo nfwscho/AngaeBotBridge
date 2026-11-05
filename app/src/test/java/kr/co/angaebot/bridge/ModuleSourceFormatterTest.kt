@@ -7,6 +7,7 @@
  * 5. 모르는 모듈 ID는 Python 연결의 기본 경로로 안전하게 처리한다.
  * 6. 기존 배터리 푸터는 마지막 줄에 그대로 남고 SQLite/UI/RemoteInput을 수정하지 않는다.
  * 7. Android 기기/네트워크 없이 순수 Kotlin 테스트를 수행한다.
+ * 8. v0.4.11 개인메모·일정/부동산/금융투자 소스 모듈과 기존 표시가 함께 유지됨을 검사한다.
  */
 package kr.co.angaebot.bridge
 
@@ -20,6 +21,7 @@ class ModuleSourceFormatterTest {
         assertTrue(ModuleSourceFormatter.append("분석", "core.history").contains("core/app/history.py"))
         assertTrue(ModuleSourceFormatter.append("설정", "core.ops").contains("core/app/ops.py"))
         assertTrue(ModuleSourceFormatter.append("홈", "core.menu").contains("core/app/selection_menu.py"))
+        assertTrue(ModuleSourceFormatter.append("메모", "core.records").contains("core/app/personal_records.py"))
         assertEquals("bridge.commands", ModuleSourceFormatter.localCommandSource("상태"))
         assertTrue(ModuleSourceFormatter.append("상태", "bridge.commands").contains("CommandParser.kt"))
     }

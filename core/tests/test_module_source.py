@@ -6,6 +6,7 @@
 4. SHA/브랜치 형식, 파일 크기, 손상 기록은 모두 미확인으로 안전하게 처리한다.
 5. 테스트용 임시 SQLite/metadata만 사용하며 GitHub, S20+, 외부 네트워크·파일을 변경하지 않는다.
 6. 기존 기능과 로그·사용자 데이터·권한·API 토큰/메시지는 그대로 유지한다.
+7. 개인 기록 명령과 목록 응답은 core.records로 표시되며 기존 모듈명은 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -33,7 +34,11 @@ class ModuleSourceTests(unittest.TestCase):
             ('메모리7','', '', 'core.market'),
             ('질문','안녕하세요', '', 'core.ai'),
             ('상세상태','', '', 'core.ops'),
-            ('시간','', '', 'core.commands')
+            ('시간','', '', 'core.commands'),
+            ('메모','목록', '', 'core.records'),
+            ('일정','추가 2035-01-01 건강검진', '', 'core.records'),
+            ('투자','검색 반도체', '', 'core.records'),
+            ('메뉴','', '🗂 최근 기록', 'core.records')
         ]
         for cmd,arg,reply,want in cases:
             with self.subTest(cmd=cmd, arg=arg):

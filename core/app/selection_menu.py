@@ -38,6 +38,12 @@
 36. 전체 트리 조회는 DB/시세/외부 API를 읽거나 수정하지 않으며 기존 세션·인증·로그 경로를 따른다.
 37. 설정 1번 통합 상태와 8번 간결 도움말을 추가하고 기존 1~7 번호/기능을 보존한다.
 38. 도움말은 설정의 인증·번호 점프·5분 세션을 재사용하며 기존 주식/AI/로그·DB는 유지한다.
+39. 홈 8 부동산, 9 금융·투자, 10 개인 메모·일정으로 확장하며 기존 홈 1~7 번호를 유지한다.
+40. 분야별 최신 메모·다가오는 일정을 목록에서 번호로 상세 조회하고 0/00·5분 스코프·로그를 보존한다.
+41. 개인 기록의 제목/본문은 SQLite 개인 기록 모듈에서만 다루며 메뉴 세션에는 번호/제목만 임시 저장한다.
+42. v0.7.1 홈 1~10 순서는 주식/부동산/금융·투자/여행/배드민턴/요리/종친/날씨/개인/설정으로 구성한다.
+43. 전체 메뉴 트리·설정 8 도움말·연속 번호 경로는 같은 홈 정의를 사용하므로 순서가 항상 일치한다.
+44. 기존 부/투/메 단축어를 유지하면서 금(투자)·개(개인)를 추가하고 로그/인증·5분 선택 세션을 유지한다.
 """
 from __future__ import annotations
 
@@ -48,6 +54,8 @@ import time
 from dataclasses import dataclass
 
 from .market import Stock, StockQuoteError
+from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
+                               get_record, list_records, record_preview, record_detail, help_text)
 
 MENU_TTL_SECONDS = 300
 MAX_MENU_SESSIONS = 200
@@ -118,11 +126,14 @@ class StockSelectionMenus:
         """홈 항목의 단일 정의: 실제 응답과 전체 메뉴 트리에서 함께 사용한다."""
         return (
             MenuChoice('📈 주식', page='stock-root'),
+            MenuChoice('🏠 부동산', page='records:root:부동산'),
+            MenuChoice('💰 금융·투자', page='records:root:금융·투자'),
+            MenuChoice('🧭 여행', page='category:여행'),
             MenuChoice('🏸 배드민턴', page='category:배드민턴'),
             MenuChoice('🍳 요리', page='category:요리'),
-            MenuChoice('🧭 여행', page='category:여행'),
             MenuChoice('🌳 종친', page='category:종친'),
             MenuChoice('🌤 날씨', page='category:날씨'),
+            MenuChoice('🗂 개인 메모·일정', page='records:root:개인'),
             MenuChoice('⚙️ 설정·운영', page='settings-root'),
         )
 
@@ -153,6 +164,24 @@ class StockSelectionMenus:
         )
 
     @staticmethod
+    def _record_sector_choices(sector: str) -> tuple[MenuChoice, ...]:
+        """개인 기록의 실제 메뉴 정의와 전체 트리·번호 이동에 같은 선택지를 사용한다."""
+        if sector not in PERSONAL_SECTORS:
+            raise StockQuoteError('지원하지 않는 기록 분야입니다.')
+        choices = (
+            MenuChoice('최근 메모 목록', page='records:list:' + sector),
+            MenuChoice('메모 등록·검색 안내', page='records:help:' + sector),
+        )
+        if sector == '개인':
+            return (
+                choices[0],
+                MenuChoice('다가오는 일정', page='records:upcoming:개인'),
+                MenuChoice('메모 등록·검색 안내', page='records:help:개인'),
+                MenuChoice('일정 등록·관리 안내', page='records:help:일정'),
+            )
+        return choices
+
+    @staticmethod
     def _category_choices(category: str) -> tuple[MenuChoice, ...]:
         """현재 콘텐츠 정의를 재사용해 트리와 실사용 메뉴의 번호 일치를 보장한다."""
         return tuple(MenuChoice(name, page='pending:' + category + ':' + name)
@@ -170,11 +199,12 @@ class StockSelectionMenus:
         return '\n'.join((
             '📖 앙개봇 도움말',
             '앙(홈) · 주(주식) · 설(설정)',
-            '민(배드민턴) · 요(요리) · 여(여행) · 종(종친) · 날(날씨)',
+            '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
+            '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 시세 · 주 분 삼성전자 분석',
-            '1~10 선택 · 0 이전 · 00 홈 · 메뉴 5분 유효',
-            '※ 시세는 무료·지연 가능 · 도: 간편 도움말 · 상: Android 상태',
+            '앙 2/3/9 메모·일정 관리 · 분야별 등록/검색',
+            '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
 
     @classmethod
@@ -208,12 +238,14 @@ class StockSelectionMenus:
                     walk(cls._category_choices(choice.page.split(':', 1)[1]), path)
                 elif choice.page == 'analysis':
                     walk(cls._analysis_choices(), path)
+                elif choice.page.startswith('records:root:'):
+                    walk(cls._record_sector_choices(choice.page.split(':', 2)[2]), path)
 
         walk(cls._home_choices())
         lines.extend([
             '',
-            '※ 빠른 이동: 앙 1 6 1 / 앙 7 7 / 설 7 / 설 8 / 주 6 1',
-            '※ 단축: 앙 홈 · 주 주식 · 민 배드민턴 · 요 요리 · 여 여행 · 종 종친 · 날 날씨 · 설 설정',
+            '※ 빠른 이동: 앙 2 1 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
+            '※ 단축: 앙 홈 · 주 주식 · 부 부동산 · 금 금융·투자 · 개 개인 · 여 여행 · 민 배드민턴 · 요 요리 · 종 종친 · 날 날씨 · 설 설정',
             '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
             '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',
         ])
@@ -234,6 +266,32 @@ class StockSelectionMenus:
         self._save(key, choices, back='home', origin='category:' + category)
         return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
                           + '\n※ 하위 기능은 순차적으로 개발됩니다.', menu_active=True)
+
+    def open_record_sector(self, room: str, sender: str, sector: str) -> MenuAnswer:
+        """홈 개인 기록 분야. 제목 목록은 선택 때만 DB에서 읽고 내용은 저장하지 않는다."""
+        key = self._key(room, sender)
+        choices = self._record_sector_choices(sector)
+        self._save(key, choices, back='home', origin='records-sector:' + sector)
+        alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
+        return MenuAnswer(self._render('📂 ' + sector + ' 메뉴', choices)
+                          + f'\n※ 등록: {alias} 추가 제목 | 내용', menu_active=True)
+
+    def open_record_results(self, room: str, sender: str,
+                            rows, *, sector: str = '개인', heading: str = '최근 기록') -> MenuAnswer:
+        """기록을 삭제/수정하지 않는 번호 선택용 목록. 세션에는 본문을 넣지 않는다."""
+        key = self._key(room, sender)
+        if sector not in PERSONAL_SECTORS and sector != '전체':
+            raise StockQuoteError('지원하지 않는 개인 기록 메뉴입니다.')
+        if not rows:
+            if sector in PERSONAL_SECTORS:
+                parent = self.open_record_sector(room, sender, sector)
+                return MenuAnswer('📭 저장된 기록이 없습니다.\n\n' + parent.reply, menu_active=True)
+            return MenuAnswer('📭 검색된 기록이 없습니다.\n※ 앙 또는 메로 다시 검색하세요.')
+        choices = tuple(MenuChoice(record_preview(item), page=f'records:view:{item.id}:{sector}')
+                        for item in rows[:10])
+        self._save(key, choices, back='records-sector:' + sector if sector in PERSONAL_SECTORS else 'home',
+                   origin='records-results')
+        return MenuAnswer(self._render('🗂 ' + heading, choices), menu_active=True)
 
     def open_settings(self, room: str, sender: str) -> MenuAnswer:
         """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
@@ -264,6 +322,8 @@ class StockSelectionMenus:
             answer = self.open_settings(room, sender)
         elif root in CONTENT_ITEMS:
             answer = self.open_category(room, sender, root)
+        elif root in PERSONAL_SECTORS:
+            answer = self.open_record_sector(room, sender, root)
         else:
             raise StockQuoteError('등록되지 않은 메뉴 점프 시작 메뉴입니다.')
 
@@ -363,6 +423,8 @@ class StockSelectionMenus:
                     return self.open_home(room, sender)
                 if back == 'settings':
                     return self.open_settings(room, sender)
+                if back.startswith('records-sector:'):
+                    return self.open_record_sector(room, sender, back.split(':', 1)[1])
                 if back == 'groups':
                     self.open_groups(db, room, sender)
                     from .watchlists import execute_group_command
@@ -378,6 +440,30 @@ class StockSelectionMenus:
             return self.open(room, sender, back='home')
         if choice.page == 'settings-root':
             return self.open_settings(room, sender)
+        if choice.page.startswith('records:root:'):
+            return self.open_record_sector(room, sender, choice.page.split(':', 2)[2])
+        if choice.page.startswith('records:list:'):
+            sector = choice.page.split(':', 2)[2]
+            return self.open_record_results(room, sender,
+                    list_records(db, room, sender, category=sector, kind='note'),
+                    sector=sector, heading=sector + ' 최근 메모')
+        if choice.page.startswith('records:upcoming:'):
+            sector = choice.page.split(':', 2)[2]
+            return self.open_record_results(room, sender,
+                    list_records(db, room, sender, category=sector, kind='schedule', upcoming=True),
+                    sector=sector, heading='다가오는 개인 일정')
+        if choice.page.startswith('records:help:'):
+            target = choice.page.split(':', 2)[2]
+            sector = '개인' if target == '일정' else target
+            command = '일정' if target == '일정' else '메모' if target == '개인' else '부동산' if target == '부동산' else '투자'
+            parent = self.open_record_sector(room, sender, sector)
+            return MenuAnswer(help_text(command) + '\n\n' + parent.reply, menu_active=True)
+        if choice.page.startswith('records:view:'):
+            _, _, id_text, sector = choice.page.split(':', 3)
+            record = get_record(db, room, sender, int(id_text),
+                                category=sector if sector in PERSONAL_SECTORS else None)
+            parent = self.open_record_sector(room, sender, record.category)
+            return MenuAnswer(record_detail(record) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('ops:'):
             return MenuAnswer(execute_argument='설정보기 ' + choice.page.split(':', 1)[1],
                               back='settings')
