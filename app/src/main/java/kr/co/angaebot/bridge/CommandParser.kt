@@ -19,6 +19,10 @@
  * 21. v0.4.5는 배터리 표시를 별도 모듈에서 추가하므로 파싱 동작을 보존하고 로컬 상태·도움말의 버전만 갱신한다.
  * 22. v0.4.5는 최대 10종목 선택/배터리 상태를 지원하고 로컬 상태·도움말 버전만 갱신한다.
  * 23. 기존 긴 호출어/주·주 분·숫자 선택·AI OFF/명령 파싱·로그/권한·UI 동작은 모두 보존한다.
+ * 24. 정확한 한 글자 앙/민/요/여/종/영을 통합 홈/콘텐츠 메뉴로 연결한다.
+ * 25. 상/도는 Android 로컬 상태/도움말을 호출하며 주 단축 분석 기능을 유지한다.
+ * 26. 앙개야 단독과 앙개야 메뉴는 홈으로 연결하고 기존 장문 명령은 유지한다.
+ * 27. 일반 단어의 앞 한 글자를 단축어로 오인하지 않고 사용자 호출어를 우선한다.
  */
 package kr.co.angaebot.bridge
 
@@ -32,6 +36,21 @@ object CommandParser {
         val message = text.trim()
         val prefix = wakeWord.trim()
         if (prefix.isEmpty()) return ParseResult.NoTrigger
+        // 정확히 한 글자인 경우만 단축 메뉴로 처리한다. 사용자 지정 호출어는 우선 보호한다.
+        if (message != prefix) {
+            val shortcut = when (message) {
+                "앙" -> ParseResult.Command("메뉴", "홈")
+                "민" -> ParseResult.Command("메뉴", "배드민턴")
+                "요" -> ParseResult.Command("메뉴", "요리")
+                "여" -> ParseResult.Command("메뉴", "여행")
+                "종" -> ParseResult.Command("메뉴", "종친")
+                "영" -> ParseResult.Command("메뉴", "영어")
+                "상" -> ParseResult.Command("상태", "")
+                "도" -> ParseResult.Command("도움말", "")
+                else -> null
+            }
+            if (shortcut != null) return shortcut
+        }
         // '주'는 사용자가 직접 선택한 짧은 주식 호출어. 원래 호출어 및 사용자 설정을 먼저 보호한다.
         // 정확히 '주'이거나 '주'+공백/탭/개행일 때만 사용하고, 붙여 쓴 일반 단어는 무시한다.
         if (prefix != "주" && message.isNotEmpty() && message[0] == '주' &&
@@ -49,10 +68,14 @@ object CommandParser {
         val rest = message.substring(prefix.length)
         if (rest.isNotEmpty() && !rest.first().isWhitespace()) return ParseResult.NoTrigger
         val commandText = rest.trim()
-        if (commandText.isBlank()) return ParseResult.Command("도움말", "")
+        if (commandText.isBlank()) {
+            return if (prefix == "앙개야") ParseResult.Command("메뉴", "홈")
+                   else ParseResult.Command("도움말", "")
+        }
         val command = commandText.substringBefore(' ').trim()
         val argument = commandText.substringAfter(' ', "").trim()
-        return ParseResult.Command(command, argument)
+        return if (command == "메뉴" && argument.isEmpty()) ParseResult.Command("메뉴", "홈")
+               else ParseResult.Command(command, argument)
     }
 }
 
@@ -60,7 +83,7 @@ object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
         "테스트", "ping" -> "✅ 앙개봇 Bridge v0.4.5 정상 작동 중입니다.\n카카오톡 빠른 답장을 요청했습니다."
         "상태" -> "✅ 앙개봇 Bridge v0.4.5 동작 중\n처리 위치: Galaxy S20+\n모드: Android + 선택형 Python\nPython 명령: 별도 연결 설정 / PC 연동: 향후 단계"
-        "도움말", "help" -> "🤖 앙개봇 v0.4.5 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 주식 명령: 주(메뉴) / 주 분 삼성전자 / 주 분 마이크론 / 주 목록\n※ 메뉴가 열린 뒤 5분 동안 숫자 1~10을 입력해 선택할 수 있습니다."
+        "도움말", "help" -> "🤖 앙개봇 v0.4.5 명령\n앙개야 테스트\n앙개야 상태\n앙개야 도움말\n[Python 연결 ON 시]\n앙개야 계산 123*456\n앙개야 시간\n앙개야 서버상태\n앙개야 상세상태\n앙개야 통계\n앙개야 최근오류\n앙개야 가동시간\n앙개야 주식 메모리7\n앙개야 메모리7\n앙개야 질문 안녕하세요\n앙개야 요약 본문\n앙개야 AI상태\n앙개야 대화초기화\n※ AI 기능은 Termux에서 별도 설정해야 합니다.\n※ 주식 시세는 비공식 무료 데이터로 지연될 수 있습니다.\n※ Windows PC 명령은 향후 단계에서 추가됩니다.\n※ 단축 메뉴: 앙(홈) / 주(주식) / 민(배드민턴) / 요(요리) / 여(여행) / 종(종친) / 영(영어)\n※ 상(상태) / 도(도움말) / 주 분 삼성전자(빠른 분석)\n※ 메뉴 번호 1~10 선택 · 0 이전 · 00 홈 · 5분 유효."
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
     }
 }
