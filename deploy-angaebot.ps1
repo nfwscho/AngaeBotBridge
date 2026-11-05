@@ -18,6 +18,8 @@
 # 17. Detect ADB in Android Studio SDK, environment paths, or a verified Google user cache.
 # 18. If ADB is missing, the resolver can download a pinned official archive after license consent.
 # 19. Invoke ADB by resolved full path without requiring Windows PATH changes.
+# 20. If Java is missing from the shell, reuse Android Studio's bundled JBR
+#     for the Gradle APK build without changing machine settings.
 # Run: .\deploy-angaebot.ps1
 # Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
@@ -154,6 +156,23 @@ try {
         $gradle = Join-Path $root 'gradlew.bat'
         $apkFile = Join-Path $root 'app\build\outputs\apk\debug\app-debug.apk'
         if (-not (Test-Path $gradle)) { throw 'Gradle wrapper missing.' }
+        if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME) -and
+            -not (Get-Command 'java.exe' -ErrorAction SilentlyContinue)) {
+            $jbrCandidates = @()
+            if ($env:ProgramFiles) {
+                $jbrCandidates += (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr')
+            }
+            if ($env:LOCALAPPDATA) {
+                $jbrCandidates += (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr')
+            }
+            foreach ($jbr in $jbrCandidates) {
+                if (Test-Path -LiteralPath (Join-Path $jbr 'bin\java.exe') -PathType Leaf) {
+                    $env:JAVA_HOME = $jbr
+                    Write-Host "  Java resolved from Android Studio: $env:JAVA_HOME" -ForegroundColor Green
+                    break
+                }
+            }
+        }
         & $gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
         Assert-Exit 'Android tests or APK build failed; no deployment was attempted'
         if (-not (Test-Path $apkFile)) { throw 'Debug APK not found; deployment stopped.' }
