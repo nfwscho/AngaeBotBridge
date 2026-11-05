@@ -17,6 +17,7 @@
  * v0.4.10은 테스트/ping·계산·질문 명령이 카톡에서 무시됨을 검사하고, 간결 도움말과 상태 번호를 확인한다.
  * v0.4.12은 신규 부·금·개 및 홈 10/9 경로와 구형 투·메 호환을 회귀 검증한다.
  * 신규 날씨 단축 조회/지역 설정은 정확한 명령으로만 인식하고 기존 숫자 게이트·일상문장 차단을 보존한다.
+ * 부 시세/매매/전세/월세/지역 직접 조회 단축어를 검증하고 기존 부 메모·번호 점프 및 8줄 도움말을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -130,6 +131,23 @@ class CommandParserTest {
         }
         assertEquals(ParseResult.Command("주식", "분석 삼성전자"), CommandParser.parse("주 분 삼성전자", "앙개야"))
     }
+    @Test fun realEstateShortcutsAndCompatibility() {
+        assertEquals(ParseResult.Command("메뉴", "부동산"), CommandParser.parse("부", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 부동산 3"), CommandParser.parse("부 3", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 부동산 4"), CommandParser.parse("부 4", "앙개야"))
+        assertEquals(ParseResult.Command("실거래", "시세 강남구"), CommandParser.parse("부 시세 강남구", "앙개야"))
+        assertEquals(ParseResult.Command("실거래", "매매 서울 강남구 래미안"), CommandParser.parse("부 매매 서울 강남구 래미안", "앙개야"))
+        assertEquals(ParseResult.Command("실거래", "전세 마포구"), CommandParser.parse("부 전세 마포구", "앙개야"))
+        assertEquals(ParseResult.Command("실거래", "월세 강남구"), CommandParser.parse("부 월세 강남구", "앙개야"))
+        assertEquals(ParseResult.Command("실거래", "지역 동작구"), CommandParser.parse("부 지역 동작구", "앙개야"))
+        assertEquals(ParseResult.Command("부동산", "추가 계약 | 유지"), CommandParser.parse("앙개야 부동산 추가 계약 | 유지", "앙개야"))
+        assertEquals(ParseResult.Command("부동산", "시세 강남구"), CommandParser.parse("앙개야 부동산 시세 강남구", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("부 매물 추천", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("부동산시세", "앙개야"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("부 3~5 실거래"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").lines().size <= 8)
+    }
+
     @Test fun weatherCommands() {
         assertEquals(ParseResult.Command("메뉴", "날씨"), CommandParser.parse("날", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 날씨 2"), CommandParser.parse("날 2", "앙개야"))
