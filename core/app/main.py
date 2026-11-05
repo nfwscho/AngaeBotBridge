@@ -225,7 +225,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         raise StockQuoteError("등록되지 않은 설정 메뉴 항목입니다.")
                     refreshed = selection_menus.open_settings(request.room, request.sender)
-                    stock_reply = report + "\\n\\n" + refreshed.reply
+                    stock_reply = report + "\n\n" + refreshed.reply
                     stock_menu_active = True
                 elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
