@@ -7,6 +7,7 @@
 5. 기존 주식 시세·분석 명령은 통합 메뉴에서도 동일한 실행 함수로 처리된다.
 6. 인증 FastAPI의 중복 요청 감지·jobs/events SQLite 로깅·원래 명령 보존을 검사한다.
 7. S20+/Android/실데이터 없이 순수 메모리와 모의 응답만 사용한다.
+8. 홈 8~10 신규 카테고리로 인해 8번은 유효하며 11번만 잘못된 번호로 검증한다.
 """
 from __future__ import annotations
 
@@ -60,7 +61,7 @@ class GlobalMenuUnitTests(unittest.TestCase):
         with self.assertRaises(StockQuoteError):
             self.menus.choose(self.db, "방", "남", "1")
         with self.assertRaises(StockQuoteError):
-            self.menus.choose(self.db, "방", "나", "8")
+            self.menus.choose(self.db, "방", "나", "11")
         self.now += MENU_TTL_SECONDS
         with self.assertRaisesRegex(StockQuoteError, "5분"):
             self.menus.choose(self.db, "방", "나", "1")

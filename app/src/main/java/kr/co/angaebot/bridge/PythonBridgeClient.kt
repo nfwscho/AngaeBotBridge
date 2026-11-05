@@ -17,6 +17,9 @@
  * 15. 번호 선택이 주식 분석을 호출할 수 있으므로 기존 주식의 23초 응답 제한을 통합 메뉴에도 적용한다.
  * 16. v0.4.9는 인증 Core 응답의 module_source와 health의 실제 배포 브랜치/SHA만 추가로 읽는다.
  * 17. 기존 HTTP 타임아웃, 응답 본문, 토큰·SQLite/사용자 로그/오류 처리·JSON 필드는 모두 보존한다.
+ * 18. v0.4.11 신규 메모/일정/부동산/투자/금융/기록 명령은 최대 1000자까지 원문 그대로 Core에 전달한다.
+ * 19. 초과 입력은 잘라 저장하지 않고 거부하며 기존 AI/주식/계산/서버 API의 길이·시간 제한을 유지한다.
+ * 20. 전체 메뉴 트리는 최대 3500자까지 표시해 신규 홈 섹터가 잘리지 않게 하고 답장/로그/토큰은 그대로 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -33,18 +36,21 @@ sealed interface PythonOutcome {
 
 object PythonBridgeClient {
     private const val BASE = "http://127.0.0.1:8765"
-    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴")
+    val supportedCommands = setOf("계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "부동산", "투자", "금융", "메모", "일정", "기록")
     private val aiCommands = setOf("질문", "요약")
     private val stockCommands = setOf("주식", "메모리7", "메뉴")
+    private val personalCommands = setOf("부동산", "투자", "금융", "메모", "일정", "기록")
 
     fun health(token: String): PythonOutcome = request("GET", "/v1/health", token, null)
 
     fun execute(token: String, requestId: String, name: String, argument: String, room: String, sender: String): PythonOutcome {
         if (name !in supportedCommands) return PythonOutcome.Failure("지원하지 않는 Python 명령")
+        val limit = if (name in aiCommands || name in personalCommands) 1000 else 160
+        if (argument.length > limit) return PythonOutcome.Failure("명령 내용은 ${limit}자 이내로 입력하세요.")
         val payload = JSONObject()
             .put("request_id", requestId)
             .put("command", name)
-            .put("argument", argument.take(if (name in aiCommands) 1000 else 160))
+            .put("argument", argument)
             .put("room", room.take(100))
             .put("sender", sender.take(100))
         return request("POST", "/v1/commands", token, payload, name in aiCommands, name in stockCommands)
@@ -94,7 +100,7 @@ object PythonBridgeClient {
             }
             val reply = json.optString("reply", "")
             if (reply.isBlank()) return PythonOutcome.Failure("Python 응답에 내용이 없습니다.")
-            return PythonOutcome.Success(reply.take(1800), json.optBoolean("duplicate", false),
+            return PythonOutcome.Success(reply.take(if (name == "메뉴") 3500 else 1800), json.optBoolean("duplicate", false),
                 json.optBoolean("ok", false), json.optBoolean("menu_active", false),
                 moduleSource = json.optString("module_source", ""))
         } catch (e: java.net.ConnectException) {

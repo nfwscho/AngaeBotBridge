@@ -10,6 +10,7 @@
 8. 중복된 요청의 표시 역시 순수 함수로 처리하며 추가 API/DB 요청이나 부작용은 없다.
 9. '설정보기 tree' 응답은 읽기 전용 트리를 실제로 생성하는 core.menu로 표시하고 나머지 설정 조회는 core.ops를 유지한다.
 10. 설정 8번 도움말은 실제 생성 모듈 core.menu, 통합 상태는 core.ops로 구별하고 나머지 응답 모듈도 보존한다.
+11. v0.7.0 개인 기록 CRUD·일정·검색·상세보기는 core.personal_records로 식별하고 기존 메뉴·주식·AI 표시를 보존한다.
 """
 from __future__ import annotations
 
@@ -23,6 +24,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         return 'core.ai'
     if command in {'계산', '시간', '서버상태'}:
         return 'core.commands'
+    if command in {'메모', '일정', '부동산', '투자', '금융', '기록'}:
+        return 'core.records'
     if command == '메모리7':
         return 'core.market'
     if command in {'메뉴', '주식'}:
@@ -43,6 +46,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
             return 'core.market' if command == '주식' else 'core.watchlists'
         if not arg or arg == '메뉴':
             return 'core.menu'
+        if reply.startswith(('🗂 ', '📒 메모 #', '📅 일정 #', '📭 저장된 기록')):
+            return 'core.records'
         if '메뉴' in reply or '개발 예정' in reply:
             return 'core.menu'
         if reply.startswith('💾') or reply.startswith('📊'):

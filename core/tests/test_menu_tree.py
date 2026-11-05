@@ -8,6 +8,7 @@
 6. DB 스키마·원래 jobs/events 기록·Android 로그/UI/AI/주식시세 경로는 변경하지 않는다.
 8. 설정 도움말은 기존 7번 전체 트리 다음의 8번으로 추가되어 함께 표시된다.
 7. 카카오톡/Termux/외부 시세 접근 없이 TestClient와 임시 SQLite만 사용한다.
+9. 홈 8~10 부동산·금융투자·개인메모/일정 트리를 기존 단축어/번호와 함께 표시한다.
 """
 from __future__ import annotations
 
@@ -42,6 +43,9 @@ class MenuTreeUnitTests(unittest.TestCase):
         tree = StockSelectionMenus.menu_tree()
         self.assertIn("7-7. 전체 메뉴 트리", tree)
         self.assertIn("7-8. 도움말", tree)
+        self.assertIn("8-1. 최근 메모 목록", tree)
+        self.assertIn("9-1. 최근 메모 목록", tree)
+        self.assertIn("10-2. 다가오는 일정", tree)
         self.assertIn("1-1. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
         self.assertIn("1-5. 관심종목 목록 [본인 관심그룹 목록]", tree)
         self.assertIn("1-2. 메모리7 현재 시세 [조회 후 종목 선택]", tree)

@@ -54,7 +54,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 2 메모리7 시세"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.10"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.11"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
@@ -70,6 +70,25 @@ class CommandParserTest {
         assertTrue(!help.contains("상세상태"))
         assertTrue(help.lines().size <= 8)
     }
+    @Test fun personalRecordSectorsAndCommands() {
+        assertEquals(ParseResult.Command("메뉴", "부동산"), CommandParser.parse("부", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "금융·투자"), CommandParser.parse("투", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "개인"), CommandParser.parse("메", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 부동산 1"), CommandParser.parse("부 1", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 금융·투자 1"), CommandParser.parse("투 1", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 개인 2"), CommandParser.parse("메 2", "앙개야"))
+        for (name in listOf("메모", "일정", "부동산", "투자", "금융", "기록")) {
+            assertEquals(ParseResult.Command(name, "목록"),
+                         CommandParser.parse("앙개야 $name 목록", "앙개야"))
+        }
+        assertEquals(ParseResult.Command("메모", "추가 계약 | 확인"),
+                     CommandParser.parse("앙개야 메모 추가 계약 | 확인", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("부동산", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("투자가", "앙개야"))
+        assertEquals(ParseResult.NoTrigger, CommandParser.parse("메모장", "앙개야"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("부/투/메"))
+    }
+
     @Test fun exactShortcutMenus() {
         val menuShortcuts = mapOf(
             "앙" to "홈", "민" to "배드민턴", "요" to "요리",

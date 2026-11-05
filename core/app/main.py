@@ -71,6 +71,10 @@
 68. v0.6.2 설정 8번 간결 도움말 및 설정 1번 통합 상태를 제공하고 기존 설정 번호/로그를 유지한다.
 69. 운영 상태는 Core·감시·SSH·가동시간·배포정보를 읽기 전용으로 표시하며 기존 상세상태 명령도 보존한다.
 70. 카카오톡 사용자 명령만 비활성화하므로 계산/AI 레거시 내부 API·DB/사용자 로그는 호환성을 유지한다.
+71. v0.7.0 개인 기록: 인증된 방·발신자별 부동산/금융·투자/개인 메모·일정 별도 SQLite 테이블을 생성한다.
+72. 메모·일정의 등록/수정/삭제는 기존 jobs/events 단일 트랜잭션·request_id 중복방지를 재사용한다.
+73. 목록·검색·상세보기 번호는 5분 메뉴의 기존 인증·0/00 경로를 재사용하며 카톡 수동 입력만 지원한다.
+74. Samsung Notes 자동 연동·민감정보 암호화·알림 예약은 구현하지 않고 사용자가 중요 메모만 입력하도록 한다.
 44. 주식 선택 0은 현재 화면의 이전 메뉴를 열고 기존 인증·로그·5분 세션을 보존한다.
 45. 그룹 시세 화면의 진입 출처를 유지해 메인 메뉴/관심그룹 목록 중 올바른 이전 화면으로 돌아간다.
 """
@@ -98,9 +102,11 @@ from .watchlists import (init_schema, is_group_quote_request, load_group, group_
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
+from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
+                               RecordError, init_records_schema, execute_record_command)
 
-VERSION = "0.6.2"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"}
+VERSION = "0.7.0"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴"} | PERSONAL_COMMANDS
 
 
 class CommandRequest(BaseModel):
@@ -147,6 +153,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
             ON ai_turns(room, sender, generation, id)""")
         # v0.5.0: 관심종목 테이블만 추가. 기존 jobs/events/ai 데이터는 절대 변경하지 않는다.
         init_schema(db)
+        # 독립 메모/일정 테이블만 새로 생성. 기존 주식/AI/이벤트 테이블에는 변경 없음.
+        init_records_schema(db)
 
     api = FastAPI(title="AngaeBot Core", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -190,6 +198,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         menu = selection_menus.open(request.room, request.sender, back='home')
                     elif action in CONTENT_ITEMS:
                         menu = selection_menus.open_category(request.room, request.sender, action)
+                    elif action in PERSONAL_SECTORS:
+                        menu = selection_menus.open_record_sector(request.room, request.sender, action)
                     elif action == "설정":
                         menu = selection_menus.open_settings(request.room, request.sender)
                     elif action.startswith("경로 "):
@@ -204,7 +214,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             menu = selection_menus.choose(read_db, request.room, request.sender,
                                                           action[3:].strip())
                     else:
-                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/날/설 또는 번호 선택")
+                        raise StockQuoteError("메뉴 사용법: 앙/주/민/요/여/종/날/설/부/투/메 또는 번호 선택")
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
@@ -291,7 +301,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         selection_menus.open_quotes(request.room, request.sender, stocks,
                             back=selection_back)
                         stock_menu_active = True
-            except StockQuoteError as error:
+            except (StockQuoteError, RecordError) as error:
                 stock_error = error
         with lock:
             with closing(connect()) as db, db:
@@ -317,6 +327,17 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         else:
                             # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
                             reply = execute_stock_command(request.command, request.argument)
+                    elif request.command in PERSONAL_COMMANDS:
+                        result = execute_record_command(db, request.room, request.sender,
+                                                        request.command, request.argument)
+                        if result.rows is not None:
+                            menu = selection_menus.open_record_results(
+                                request.room, request.sender, result.rows,
+                                sector=result.sector, heading=result.reply.replace('🗂 ', ''))
+                            reply = menu.reply
+                            stock_menu_active = menu.menu_active
+                        else:
+                            reply = result.reply
                     elif request.command == "상세상태":
                         reply = details(int(time.monotonic() - began))
                     elif request.command == "통계":
@@ -355,7 +376,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except (CommandError, AIError, StockQuoteError) as error:
+                except (CommandError, AIError, StockQuoteError, RecordError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())

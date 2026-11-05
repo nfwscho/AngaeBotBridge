@@ -10,6 +10,7 @@
  * 8. 허용된 저장소 파일 외의 임의 경로·토큰/로그 원문을 출력하지 않는다.
  * 9. 포맷터는 Android SDK 없이 테스트 가능한 순수 Kotlin 코드다.
  * 10. 이 파일은 네트워크/DB/설정 변경 및 카카오톡 전송 요청을 실행하지 않는다.
+ * 11. v0.4.11 신규 개인 기록·부동산·금융 투자·일정 모듈의 실제 경로를 표기한다.
  */
 package kr.co.angaebot.bridge
 
@@ -18,6 +19,7 @@ object ModuleSourceFormatter {
         "bridge.commands" to ("Bridge 명령·상태" to "app/src/main/java/kr/co/angaebot/bridge/CommandParser.kt"),
         "bridge.python" to ("Python 연결" to "app/src/main/java/kr/co/angaebot/bridge/PythonBridgeClient.kt"),
         "core.menu" to ("공통 메뉴" to "core/app/selection_menu.py"),
+        "core.records" to ("개인 메모·일정" to "core/app/personal_records.py"),
         "core.market" to ("주식 시세" to "core/app/market.py"),
         "core.watchlists" to ("관심종목·그룹" to "core/app/watchlists.py"),
         "core.history" to ("주식 분석" to "core/app/history.py"),
