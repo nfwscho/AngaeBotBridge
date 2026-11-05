@@ -1,0 +1,47 @@
+# 앙개봇 Python Core 전체 기능 보존 회귀 검사
+# 1. 기존 계산·시간·AI·시세·그룹·메뉴·로그 동작의 unittest를 자동 실행한다.
+# 2. Python 3.12에서 문법을 확인하고 모든 core/tests 테스트를 수행한다.
+# 3. S20+ Termux 서비스와 데이터베이스는 건드리지 않는다.
+# 4. GitHub 작업 브랜치에서만 자동 실행하며 main에는 적용하지 않는다.
+name: AngaeBot Core regression
+on:
+  push:
+    branches:
+      - feature/compact-all-replies-20261105
+  workflow_dispatch:
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python Core dependencies
+        run: python -m pip install -r core/requirements.txt httpx
+      - name: Validate PowerShell deploy script syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+      - name: Compile all Core modules
+        run: python -m compileall -q core/app
+      - name: Run all Python Core regression tests
+        working-directory: core
+        run: python -m unittest discover -s tests -v
+
+  windows-powershell-51:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Windows PowerShell 5.1 deployment syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './deploy-angaebot.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+          $text = [System.IO.File]::ReadAllText((Resolve-Path './deploy-angaebot.ps1'))
+          if (@($text.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0) { throw 'Non-ASCII characters found in deployment script.' }

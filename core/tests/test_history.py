@@ -83,8 +83,8 @@ class HistoryUnitTests(unittest.TestCase):
         self.assertIsNone(period_result(data,21).cumulative_pct)
         self.assertIsNone(period_result(data,63).volatility_pct)
         report=individual_report(HistoryResult(WATCHLIST[2],data,'모의'))
-        self.assertIn('1개월(21일): 데이터 부족',report)
-        self.assertIn('3개월(63일): 데이터 부족',report)
+        self.assertIn('1개월(21일) 데이터 부족',report)
+        self.assertIn('3개월(63일) 데이터 부족',report)
         self.assertEqual(report.count('데이터 부족'),2)
 
     def test_five_closed_sessions_with_prices_and_daily_returns(self):
@@ -92,9 +92,9 @@ class HistoryUnitTests(unittest.TestCase):
         report=individual_report(HistoryResult(WATCHLIST[0],data,'네이버'))
         self.assertIn('삼성전자 (005930.KS)',report)
         self.assertEqual(sum('원 (' in line for line in report.splitlines()),5)
-        self.assertIn('5거래일 누적: +5.10%', report)
-        self.assertIn('1개월(21일): 데이터 부족', report)
-        self.assertIn('장마감 종가',report)
+        self.assertIn('5일 누적 +5.10%', report)
+        self.assertIn('1개월(21일) 데이터 부족', report)
+        self.assertIn('비공식·지연 가능',report)
 
     def test_yahoo_uses_adjusted_closes_and_filters_null_and_future(self):
         stock=WATCHLIST[2]

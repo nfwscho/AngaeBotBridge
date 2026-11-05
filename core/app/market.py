@@ -53,6 +53,7 @@
 46. 실패 공급자별 HTTP/데이터 오류와 사용된 보조 공급자를 기존 서버 로그에 기록하되 토큰/원문/개인정보는 기록하지 않는다.
 47. 한국 네이버 KRX/NXT·일본 키오시아·기존 메모리7/관심그룹·숫자 메뉴·배터리·전체 SQLite·AI/운영 로그는 보존한다.
 48. 조회 실패가 전부인 경우에는 금액을 만들거나 직전 시세를 실시간인 양 표시하지 않고 종전 조회 불가를 유지한다.
+26. 카카오톡 간결 시세 목록은 상승 🔺 +, 하락 ▽ -, 보합 ➖로 구분하며 기존 가격·등락률·출처·로그는 유지한다.
 """
 from __future__ import annotations
 
@@ -1068,6 +1069,53 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
     return ('시세 출처 · 기준시각:', *result) if result else ()
 
 
+def compact_quote_line(item: Quote) -> str:
+    """카카오톡 목록 전용: 가격 정밀도를 최소화하되 원본 Quote는 변경하지 않는다."""
+    stock = item.stock
+    aliases = {'웨스턴디지털': 'WDC', '웬디': 'WDC', 'SK하이닉스': '하이닉스'}
+    name = aliases.get(stock.name, stock.name)
+    if stock.currency == 'KRW':
+        price = f'{item.price / 10000:.1f}만' if item.price < 1_000_000 else f'{item.price / 10000:,.0f}만'
+    elif stock.currency == 'JPY':
+        price = f'¥{item.price:,.0f}'
+    else:
+        price = f'${item.price:,.0f}' if item.price >= 500 else f'${item.price:,.2f}'
+    arrow = '🔺' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '➖')
+    sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
+    return f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
+
+
+def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
+    """성공한 종목의 출처/시각만 표시; 혼합 출처 및 확정 종가를 숨기지 않는다."""
+    lines = []
+    for region in ('한국', '미국', '일본'):
+        items = [q for q in quotes if q is not None and q.stock.market == region]
+        if not items:
+            continue
+        providers = []
+        for q in items:
+            if region == '한국':
+                source = '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일') else (q.domestic.provider if q.domestic else '야후')
+            elif q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가'):
+                source = '나스닥 종가' if q.source.startswith('나스닥') else '네이버 종가'
+            elif q.source == '나스닥 웹':
+                source = '나스닥'
+            else:
+                source = q.source or '야후'
+                source = source.replace('Yahoo Finance', '야후')
+            if source not in providers:
+                providers.append(source)
+        latest = max(q.market_time for q in items)
+        zone = 'ET' if region == '미국' else ('JST' if region == '일본' else 'KST')
+        line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M} {zone}'
+        if len({q.market_time for q in items}) > 1:
+            line += ' · 시각 상이'
+        if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
+            line += ' · 확정 종가'
+        lines.append(line)
+    return tuple(lines)
+
+
 def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cache: bool = True) -> str:
     """8개 결과를 고정 순서로 표시. 실패 종목은 조회 불가로 명확히 처리한다."""
     global _CACHE
@@ -1098,7 +1146,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
             lines.append(f'{index}. {stock.name} : 조회 불가')
         else:
             success += 1
-            line = quote_line(item, source_details=False)
+            line = compact_quote_line(item)
             if item.market_time.date() < latest_dates[stock.market]:
                 line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
             lines.append(f'{index}. {line}')
@@ -1106,13 +1154,12 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
-    if dates:
-        lines.append('현지 거래일: ' + ' · '.join(f'{m} {dates[m]}' for m in ('한국', '미국', '일본') if m in dates))
-    lines.extend(market_source_summary(quotes))
+    lines.append('')
+    lines.extend(compact_source_summary(quotes))
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
-    lines.append('※ 무료 공개 시세는 지연될 수 있으며 정규장 기준 · 투자 주문용 실시간 호가 아님')
-    lines.append('※ 5분 내 번호 1~8만 보내면 해당 종목의 5일·1개월·3개월 분석')
+    lines.append('※ 무료·지연 가능·실시간 아님')
+    lines.append('※ 5분 내 1~8: 종목 분석')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote:
         with _CACHE_LOCK:

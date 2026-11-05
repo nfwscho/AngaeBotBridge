@@ -97,7 +97,7 @@ def safe_calculate(expression: str) -> str:
         formatted = str(int(val)) if val.is_integer() else f"{val:,.10g}"
     else:
         formatted = f"{val:,}"
-    return f"🧮 계산 결과: {formatted}"
+    return f"🧮 {formatted}"
 
 
 def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
@@ -105,7 +105,7 @@ def execute_command(name: str, argument: str, uptime_seconds: int) -> str:
         return safe_calculate(argument)
     if name == "시간":
         now = datetime.now(timezone(timedelta(hours=9)))
-        return "🕐 서울 현재 시각: " + now.strftime("%Y-%m-%d %H:%M:%S KST")
+        return "🕐 " + now.strftime("%m/%d %H:%M KST")
     if name == "서버상태":
-        return f"🐍 앙개봇 Python v0.5.10 정상 실행 중\n실행 위치: Galaxy S20+ / Termux\n가동 시간: {uptime_seconds}초"
+        return f"🟢 Python v0.5.10 정상 · S20+\n⏱ {uptime_seconds}초 가동"
     raise CommandError("허용되지 않은 Python 명령입니다.")

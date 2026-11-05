@@ -56,9 +56,9 @@ class AISettings:
 
     def status_text(self) -> str:
         if not self.enabled:
-            return "🤖 AI 대화 기능: OFF\nTermux에서 scripts/configure-ai.py로 활성화하세요.\n기존 계산·시간 명령은 계속 사용 가능합니다."
-        return (f"🤖 AI 대화 기능: ON\n제공자: {self.provider}\n"
-                f"모델: {self.model or '(미설정)'}\n대화 문맥: {'ON' if self.memory_enabled else 'OFF'}")
+            return "🤖 AI OFF · Termux: scripts/configure-ai.py"
+        return (f"🤖 AI ON · {self.provider} / {self.model or '미설정'}\n"
+                f"문맥 {'ON' if self.memory_enabled else 'OFF'}")
 
     def endpoint(self) -> str:
         if self.provider not in {"openai", "ollama"}:

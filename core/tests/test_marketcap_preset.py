@@ -68,7 +68,7 @@ class MarketCapPresetTests(unittest.TestCase):
             self.assertEqual([s.name for s in stocks],[a for _,a in US_MARKET_CAP_PRESET])
             self.assertTrue(all(s.currency=='USD' for s in stocks))
             http.assert_not_called()
-        self.assertIn('미국시총10 : 10종목',self.run_command('목록'))
+        self.assertIn('미국시총10 10종목',self.run_command('목록'))
 
     def test_existing_group_is_not_overwritten(self):
         self.run_command('그룹생성 반도체')
@@ -96,9 +96,9 @@ class MarketCapPresetTests(unittest.TestCase):
             def fake(stock):
                 return Quote(stock,100,99,(100/99-1)*100,timestamp,timestamp)
             report = group_report('미국시총10',load_group(self.db,self.room,self.sender,'미국시총10'),fetcher=fake)
-            self.assertIn('엔비디아 : $100.00',report)
-            self.assertIn('일라이릴리 : $100.00',report)
-            self.assertEqual(report.count(' : $100.00'),10)
+            self.assertIn('엔비디아 $100.00',report)
+            self.assertIn('일라이릴리 $100.00',report)
+            self.assertEqual(report.count(' $100.00'),10)
             self.assertLess(report.index('엔비디아'),report.index('일라이릴리'))
             network.assert_not_called()
 

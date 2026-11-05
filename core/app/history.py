@@ -305,18 +305,18 @@ def _period_text(bars: tuple[DailyBar, ...], sessions: int) -> str:
 
 def individual_report(history: HistoryResult, *, fetched_at: datetime | None = None) -> str:
     stock, bars = history.stock, history.bars
-    lines = [f'📈 {stock.name} ({stock.ticker}) 최근 5거래일 종가']
+    lines = [f'📈 {stock.name} ({stock.ticker}) 5거래일']
     last_five = bars[-5:]
     for index, bar in enumerate(last_five):
         previous = bars[-len(last_five) + index - 1] if len(bars) > len(last_five) or index > 0 else None
         daily = ((bar.adjusted / previous.adjusted - 1) * 100) if previous else None
         lines.append(f'{bar.date:%m/%d} {_currency_close(stock, bar.close)} ({_sign(daily)})')
-    lines.append('5거래일 누적: ' + _sign(period_result(bars, 5).cumulative_pct))
-    lines.append('1개월(21일): ' + _period_text(bars, _ONE_MONTH_SESSIONS))
-    lines.append('3개월(63일): ' + _period_text(bars, _THREE_MONTH_SESSIONS))
-    lines.append(f'기준 거래일 {bars[-1].date:%Y-%m-%d} · {history.source}')
-    lines.append('※ 일별은 종가·수익률은 수정종가 우선. 변동성=일간 로그수익률 표준편차×√252, 연율화.')
-    lines.append('※ 장마감 종가 기준, 비공식/지연 데이터. 알림·자동매매 없음.')
+    lines.append('5일 누적 ' + _sign(period_result(bars, 5).cumulative_pct))
+    lines.append('1개월(21일) ' + _period_text(bars, _ONE_MONTH_SESSIONS))
+    lines.append('3개월(63일) ' + _period_text(bars, _THREE_MONTH_SESSIONS))
+    lines.append(f'📡 {bars[-1].date:%m/%d} · {history.source}')
+    lines.append('※ 일별 종가 / 수익률 수정종가 우선 / 변동성 연율화(σ×√252)')
+    lines.append('※ 비공식·지연 가능 · 자동매매 없음')
     return '\n'.join(lines)
 
 
@@ -333,7 +333,7 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher=None) -> str:
     # 10개 그룹에서도 Android 23초 제한 내 응답하도록 요청당 최대 10종목을 병렬 실행.
     with ThreadPoolExecutor(max_workers=min(10, len(stocks))) as pool:
         results = list(pool.map(one, stocks))
-    lines = [f'📊 {name} 그룹 5일·1개월·3개월 변동성']
+    lines = [f'📊 {name} 5일·1개월·3개월']
     available = 0
     for stock, result in zip(stocks, results):
         if result is None:
@@ -348,8 +348,8 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher=None) -> str:
         lines.append(f'{stock.name}[{result.bars[-1].date:%m/%d}] 5일 {_sign(p5.cumulative_pct)} | 1M {one_month} | 3M {three_month}')
     if available == 0:
         raise StockQuoteError(f'{name} 그룹의 과거 종가를 조회하지 못했습니다.')
-    lines.append('※ 1M=21일·3M=63거래일 / σ=연율화 실현변동성(%, 표준편차×√252).')
-    lines.append('※ 장마감 종가·수정종가 우선 / 비공식·지연 시세. 자동 알림 없음.')
+    lines.append('※ 1M=21일·3M=63일 / σ=연율화 변동성')
+    lines.append('※ 수정종가 우선 · 비공식·지연 가능 · 알림 없음')
     return '\n'.join(lines)
 
 

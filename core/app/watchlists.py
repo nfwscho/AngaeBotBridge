@@ -42,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
-from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line, market_source_summary
+from .market import Stock, WATCHLIST, StockQuoteError, fetch_quote, quote_line, market_source_summary, compact_quote_line, compact_source_summary
 
 MAX_GROUPS = 10
 MAX_ITEMS = 10
@@ -156,21 +156,8 @@ def resolve_stock(value: str, alias: str = "") -> Stock:
 
 
 def command_help() -> str:
-    return ("📋 관심종목 사용법\n"
-            "앙개야 주식 목록\n"
-            "앙개야 주식 그룹생성 반도체\n"
-            "앙개야 주식 프리셋 미국시총10\n"
-            "앙개야 주식 추가 반도체 마이크론\n"
-            "앙개야 주식 추가 반도체 삼성전자\n"
-            "앙개야 주식 반도체\n"
-            "앙개야 주식 분석 마이크론 (5일·1개월·3개월)\n"
-            "앙개야 주식 분석 삼성전자 / 하이닉스 / 엔비디아\n"
-            "앙개야 주식 분석 메모리7\n"
-            "앙개야 주식 분석 반도체\n"
-            "앙개야 주식 삭제 반도체 마이크론\n"
-            "앙개야 주식 그룹삭제 반도체 확인\n"
-            "※ 메모리7은 원본 보존 · 그룹당 최대 10종목\n"
-            "※ 미국시총10은 2026-11-04 고정 구성(순위 자동 변경 없음) · AI/API 키 불필요")
+    """기존 모든 주식 명령을 유지하며 중복 예시만 줄인 도움말."""
+    return "\n".join(['📋 주식 명령','주식 목록 / 주식 메모리7','주식 그룹생성 반도체','주식 프리셋 미국시총10','주식 추가 반도체 삼성전자','주식 반도체 / 주식 분석 반도체','주식 분석 마이크론','주식 삭제 반도체 마이크론','주식 그룹삭제 반도체 확인','※ 그룹 최대 10종목 · 메모리7 보호','※ 미국시총10 고정 구성 · AI 불필요'])
 
 
 def is_group_quote_request(argument: str) -> bool:
@@ -211,17 +198,18 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
             lines.append(f"{index}. {stock.name} : 조회 불가")
             failed += 1
         else:
-            lines.append(f"{index}. {quote_line(quote, source_details=False)}")
+            lines.append(f"{index}. {compact_quote_line(quote)}")
             dates[stock.market] = quote.market_time.strftime("%m/%d")
     if failed == len(stocks):
         raise StockQuoteError(f"'{name}' 그룹의 모든 시세를 조회하지 못했습니다.")
     if dates:
-        lines.append("현지 거래일: " + " · ".join(f"{market} {dates[market]}" for market in ("한국", "미국", "일본") if market in dates))
-    lines.extend(market_source_summary(quotes))
+        pass  # 거래일/기준시각은 압축 출처에서 표시
+    lines.append('')
+    lines.extend(compact_source_summary(quotes))
     if failed:
         lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
-    lines.append("※ 무료 비공식·지연 시세 가능 / 투자 주문 기능 없음")
-    lines.append(f"※ 5분 내 번호 1~{len(stocks)}만 보내면 해당 종목의 5일·1개월·3개월 분석")
+    lines.append("※ 무료·지연 가능·실시간 아님")
+    lines.append(f"※ 5분 내 1~{len(stocks)}: 종목 분석")
     return "\n".join(lines)
 
 
@@ -239,9 +227,9 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             LEFT JOIN stock_items i ON i.room=g.room AND i.sender=g.sender AND i.group_name=g.name
             WHERE g.room=? AND g.sender=? GROUP BY g.name ORDER BY g.created_at,g.name""",
             (room, sender)).fetchall()
-        lines = ["📂 관심종목 그룹 목록", "메모리7 : 8종목 (기본·읽기전용)"]
-        lines.extend(f"{name} : {count}종목" for name, count in rows)
-        lines.append("※ 그룹 추가: 주식 그룹생성 그룹명")
+        lines = ["📂 관심그룹", "메모리7 8종목 · 기본"]
+        lines.extend(f"{name} {count}종목" for name, count in rows)
+        lines.append("※ 추가: 주식 그룹생성 그룹명")
         return "\n".join(lines)
     if action == "프리셋":
         if len(parts) != 2 or parts[1] != US_MARKET_CAP_PRESET_NAME:
@@ -266,9 +254,9 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             VALUES (?,?,?,?,?,?,?,?,?)""",
             [(room, sender, name, item.ticker, item.name, item.currency, item.market,
               item.timezone_name, idx) for idx, item in enumerate(stocks, start=1)])
-        return (f"✅ {name} 그룹에 미국 기업 10종목 등록 완료.\n"
-                "조회: 앙개야 주식 미국시총10\n"
-                f"※ 구성 기준일 {US_MARKET_CAP_PRESET_DATE}, 시총 순위 자동 갱신 없음")
+        return (f"✅ {name} 10종목 등록\n"
+                f"조회: 주식 {name}\n"
+                f"※ {US_MARKET_CAP_PRESET_DATE} 고정 구성 · 순위 자동 갱신 없음")
     if action == "그룹생성":
         if len(parts) != 2:
             raise StockQuoteError("사용법: 앙개야 주식 그룹생성 반도체")
@@ -282,7 +270,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             raise StockQuoteError(f"관심종목 그룹은 최대 {MAX_GROUPS}개까지 등록할 수 있습니다.")
         db.execute("INSERT INTO stock_groups(room,sender,name,created_at) VALUES (?,?,?,?)",
                    (room, sender, name, int(time.time())))
-        return f"✅ '{name}' 그룹을 만들었습니다.\n주식 추가 {name} MU 마이크론"
+        return f"✅ {name} 그룹 생성\n추가: 주식 추가 {name} MU 마이크론"
     if action == "그룹삭제":
         if len(parts) != 3 or parts[2] != "확인":
             raise StockQuoteError("그룹 전체 삭제를 확인하려면: 앙개야 주식 그룹삭제 그룹명 확인")
@@ -293,7 +281,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             raise StockQuoteError("해당 관심종목 그룹이 없습니다.")
         db.execute("DELETE FROM stock_items WHERE room=? AND sender=? AND group_name=?",
                    (room, sender, name))
-        return f"✅ '{name}' 관심종목 그룹을 삭제했습니다. (기존 명령 로그는 보존)"
+        return f"✅ {name} 그룹 삭제"
     if action == "추가":
         if not 3 <= len(parts) <= 4:
             raise StockQuoteError("사용법: 앙개야 주식 추가 반도체 MU 마이크론")
@@ -314,7 +302,7 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
             VALUES (?,?,?,?,?,?,?,?,?)""",
             (room, sender, name, stock.ticker, stock.name, stock.currency, stock.market,
              stock.timezone_name, count + 1))
-        return f"✅ {name}에 {stock.name} ({stock.ticker}) 추가 완료. {count+1}/{MAX_ITEMS}종목"
+        return f"✅ {name} +{stock.name} ({stock.ticker}) · {count+1}/{MAX_ITEMS}"
     if action == "삭제":
         if len(parts) != 3:
             raise StockQuoteError("사용법: 앙개야 주식 삭제 반도체 MU")
@@ -333,5 +321,5 @@ def execute_group_command(db: sqlite3.Connection, room: str, sender: str, argume
                             (room, sender, name, stock.ticker)).rowcount
         if not result:
             raise StockQuoteError("해당 그룹에 등록된 종목이 없습니다.")
-        return f"✅ {name}에서 {stock.ticker} 종목을 삭제했습니다. (기존 로그는 보존)"
+        return f"✅ {name} -{stock.ticker} 삭제"
     raise StockQuoteError("지원하지 않는 관심종목 명령입니다. '주식 도움말'을 확인하세요.")
