@@ -12,6 +12,8 @@
  * v0.4.3: 단축 주가 메뉴를 열고 기존 긴 호출어의 도움말 및 별칭을 보존하는지 검사한다.
  * v0.4.5: 설치 버전 상태 텍스트만 0.4.4로 갱신하고 기존 단축 명령/숫자 메뉴 전체 회귀 테스트를 유지한다.
  * 통합 메뉴: 앙·주·민·요·여·종·영·상·도 정확한 단축어, 사용자 호출어 보호, 장문 명령 호환성을 검사한다.
+ * v0.4.8: 영 호출 제거, 날씨·설정 한 글자 단축 메뉴와 주/앙/날/설 1~5단계 숫자 메뉴 점프를 검증한다.
+ * 기존 주 분/주 목록/상/도/사용자 호출어 및 일반 문장 오인식 방지 회귀 테스트를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -47,7 +49,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙개야 주식 메모리7"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.7"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.8"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
@@ -57,7 +59,7 @@ class CommandParserTest {
     @Test fun exactShortcutMenus() {
         val menuShortcuts = mapOf(
             "앙" to "홈", "민" to "배드민턴", "요" to "요리",
-            "여" to "여행", "종" to "종친", "영" to "영어"
+            "여" to "여행", "종" to "종친", "날" to "날씨", "설" to "설정"
         )
         for ((shortcut, category) in menuShortcuts) {
             assertEquals(ParseResult.Command("메뉴", category), CommandParser.parse(shortcut, "앙개야"))
@@ -65,12 +67,26 @@ class CommandParserTest {
         assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙개야 메뉴", "앙개야"))
         assertEquals(ParseResult.Command("상태", ""), CommandParser.parse("상", "앙개야"))
         assertEquals(ParseResult.Command("도움말", ""), CommandParser.parse("도", "앙개야"))
-        for (text in listOf("앙상블", "민트", "요리", "여행", "종친", "영어", "상황", "도움")) {
+        for (text in listOf("앙상블", "민트", "요리", "여행", "종친", "영어", "날씨", "설정", "영", "상황", "도움")) {
             assertEquals(ParseResult.NoTrigger, CommandParser.parse(text, "앙개야"))
         }
         assertEquals(ParseResult.Command("메뉴", "홈"), CommandParser.parse("앙", "앙개야"))
         // 앱에 별도 호출어를 설정한 경우 기존 호출어 우선 규칙은 유지된다.
         assertEquals(ParseResult.Command("도움말", ""), CommandParser.parse("앙", "앙"))
+    }
+    @Test fun menuJumpChainedNumbers() {
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 2"), CommandParser.parse("주 2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 2 2"), CommandParser.parse("주 2 2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 6 2"), CommandParser.parse("주   6  2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2 2"), CommandParser.parse("앙 1 2 2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2"), CommandParser.parse("앙개야 메뉴 1 2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 설정 3"), CommandParser.parse("설 3", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 날씨 1"), CommandParser.parse("날 1", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 요리 2"), CommandParser.parse("요 2", "앙개야"))
+        for (text in listOf("주변 2", "설정 2", "날씨 2", "민트 1", "요 레시피", "앙상블 1")) {
+            assertEquals(ParseResult.NoTrigger, CommandParser.parse(text, "앙개야"))
+        }
+        assertEquals(ParseResult.Command("주식", "분석 삼성전자"), CommandParser.parse("주 분 삼성전자", "앙개야"))
     }
     @Test fun shortStockWakeWord() {
         assertEquals(ParseResult.Command("주식", "메뉴"), CommandParser.parse("주", "앙개야"))
