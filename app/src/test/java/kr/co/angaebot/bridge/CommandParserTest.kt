@@ -19,6 +19,7 @@
  * 신규 날씨 단축 조회/지역 설정은 정확한 명령으로만 인식하고 기존 숫자 게이트·일상문장 차단을 보존한다.
  * 부 시세/매매/전세/월세/지역 직접 조회 단축어를 검증하고 기존 부 메모·번호 점프 및 8줄 도움말을 보존한다.
  * 공통 시세표 99 상세보기 숫자 경로는 1~10번 종목 분석과 충돌하지 않고 기존 0/00 및 메뉴 인증 흐름을 유지한다.
+ * AI·반도체기자재 섹터의 97/98 페이지와 99 상세, 기존 주 2 메모리7·그룹 9/10 종목 분석을 함께 검사한다.
  */
 package kr.co.angaebot.bridge
 
@@ -121,6 +122,10 @@ class CommandParserTest {
         assertEquals(ParseResult.Command("메뉴", "경로 주식 2 2"), CommandParser.parse("주 2 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 주식 2 99"), CommandParser.parse("주 2 99", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 주식 3 99"), CommandParser.parse("주 3 99", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 7"), CommandParser.parse("주 7", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 7 98"), CommandParser.parse("주 7 98", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 7 98 99"), CommandParser.parse("주 7 98 99", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 8 98 97"), CommandParser.parse("주 8 98 97", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 3 99"), CommandParser.parse("앙 1 3 99", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 주식 6 2"), CommandParser.parse("주   6  2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2 2"), CommandParser.parse("앙 1 2 2", "앙개야"))
