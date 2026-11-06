@@ -1001,11 +1001,11 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                                                  stock.ticker, ','.join(p.session for p in from_naver))
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
                             _MARKET_LOG.info('US_EXTENDED_NAVER_FAILED ticker=%s reason=%s',
-                                             stock.ticker, type(e).__name__)
+                                             stock.ticker, str(e)[:160])
                     if desired and not any(p.session == desired for p in extra) and supplier == 'Yahoo':
                         try:
                             from_yahoo = fetch_yahoo(stock, quote, opener=opener, now=now_us,
-                                                     timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
+                                                     timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES * 4,
                                                      user_agent=_YAHOO_USER_AGENT)
                             extra += tuple(p for p in from_yahoo if p.session not in {v.session for v in extra})
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
