@@ -20,6 +20,7 @@
 18. 미국 네이버 루트 closePrice와 검증된 overPrice가 다를 때 명시적 장외 가격을 우선 사용한다.
 19. 메모리7 기본 1행 대표세션과 7번 상세 다중행, 장외 정규장대비 비교기준을 각각 검사한다.
 20. 카카오톡 간략표시의 프리/애프터 한 글자 P/A 및 9번 상세보기·9번 간략보기 전환 안내를 검증한다.
+21. P/A 한 줄 시세의 삼각형과 등락률 사이 공백 제거 회귀를 검증한다.
 """
 from __future__ import annotations
 
@@ -162,7 +163,7 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn('includePrePost=true', calls[1])
         rendered = compact_quote_line(fetched)
-        self.assertEqual(rendered, '마이크론 $101.00 🔺 +1.00% A')
+        self.assertEqual(rendered, '마이크론 $101.00 🔺+1.00% A')
         self.assertNotIn('\n', rendered)
         detail = quote_line(fetched)
         self.assertIn('[정규]', detail)
