@@ -12,6 +12,7 @@
 10. NYSE .N 폴링 응답이 빈 경우 basic .N과 bare 티커만 제한적으로 확인하고 JSON 루트 키·항목 개수만 출력한다.
 11. 나머지 허용 NYSE 종목의 bare-code 공개 폴링이 실제 종목을 반환하는지 역시 가격/토큰 없이 항목 개수와 종목코드만 기록한다.
 12. 일부 NYSE ORCL/ANET/DELL 폴링의 datas=[]인 경우 사용할 수 있는 basic bare-code 응답을 실제 GitHub 네트워크로 확인한다.
+13. 네이버 NYSE 조회가 차단된 ORCL/ANET/DELL의 나스닥 웹 공개 secondaryData·marketStatus 구조를 가격·개인정보 없이 확인한다.
 """
 from __future__ import annotations
 
@@ -90,6 +91,35 @@ def main():
                   f'session={session} fields={keys} extended_fields={extended_fields}')
         except Exception as exc:
             print(f'{label}: unavailable ({type(exc).__name__})')
+
+
+    # 기존 네이버 비차단 진단에 더해 미국 거래소 공개 응답의 세션 구조만 확인.
+    # 가격이나 사용자 데이터는 출력하지 않는다.
+    for ticker in ('ORCL', 'ANET', 'DELL'):
+        uri = f'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stocks'
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Origin': 'https://www.nasdaq.com',
+                'Referer': 'https://www.nasdaq.com/',
+            }
+            with urlopen(Request(uri, headers=headers), timeout=3.0) as response:
+                raw = response.read(180001)
+                code = response.status
+            if len(raw) > 180000:
+                raise ValueError('응답 크기 초과')
+            payload = json.loads(raw)
+            data = payload.get('data') if isinstance(payload, dict) else None
+            primary = data.get('primaryData') if isinstance(data, dict) else None
+            secondary = data.get('secondaryData') if isinstance(data, dict) else None
+            fields = ','.join(secondary.keys()) if isinstance(secondary, dict) else ''
+            print(f'US_{ticker}_NASDAQ: HTTP {code} symbol='
+                  f'{data.get("symbol") if isinstance(data, dict) else None} '
+                  f'marketStatus={data.get("marketStatus") if isinstance(data, dict) else None} '
+                  f'primary={isinstance(primary, dict)} secondary_keys={fields}')
+        except Exception as exc:
+            print(f'US_{ticker}_NASDAQ: unavailable ({type(exc).__name__})')
 
 
 if __name__ == '__main__':
