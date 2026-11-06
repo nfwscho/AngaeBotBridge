@@ -141,7 +141,7 @@ class StockTests(unittest.TestCase):
         self.assertIn('US',body)
         self.assertIn('JP',body)
         self.assertIn('지연',body)
-        self.assertIn('9. 🔎 상세보기',body)
+        self.assertIn('99. 🔎 상세보기',body)
 
 
 if __name__=='__main__': unittest.main()
