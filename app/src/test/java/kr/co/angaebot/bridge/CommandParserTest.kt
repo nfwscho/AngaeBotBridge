@@ -21,6 +21,7 @@
  * 공통 시세표 99 상세보기 숫자 경로는 1~10번 종목 분석과 충돌하지 않고 기존 0/00 및 메뉴 인증 흐름을 유지한다.
  * AI·반도체기자재 섹터의 97/98 페이지와 99 상세, 기존 주 2 메모리7·그룹 9/10 종목 분석을 함께 검사한다.
  * 고정 섹터 1~19 번호 경로와 '앙개야 모듈' 최근 기능 모듈 상세 조회를 기존 8줄 도움말 및 호출어 보호와 함께 확인한다.
+ * 변경된 주식 홈 1 반도체주·2 미국시총10·3 AI·4 반도체기자재·5 데센 순서를 실제 로컬 도움말에서 검증하고 기존 메모리7 직접 명령은 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -57,7 +58,11 @@ class CommandParserTest {
     @Test fun stockMemory7() {
         assertEquals(ParseResult.Command("주식", "메모리7"), CommandParser.parse("앙개야 주식 메모리7", "앙개야"))
         assertEquals(ParseResult.Command("메모리7", ""), CommandParser.parse("앙개야 메모리7", "앙개야"))
-        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 2 메모리7 시세"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("주 1 반도체주"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("2 미국시총10"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("3 AI"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("4 반도체기자재"))
+        assertTrue(LocalCommandExecutor.execute("도움말", "").contains("5 데센"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
         assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.14"))
