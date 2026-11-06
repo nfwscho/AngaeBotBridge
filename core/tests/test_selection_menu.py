@@ -3,6 +3,8 @@
 1. 메인 메뉴 1~6번, 최근 조회·분석 서브메뉴 생성과 1~10 번호 입력을 검증한다.
 18. 주식 메뉴의 기존 1~6번 동작을 유지하면서 7번 상세 시세 보기, 1~8 종목 분석, 0 이전, 독립 채팅방·사용자 격리를 검증한다.
 19. '주 7'에 대응하는 메뉴 경로 주식 7의 직접 실행·정확한 모듈 표기·기존 jobs/events 로그를 검증한다.
+20. 메모리7 결과 화면에서 숫자 9로 간략↔상세 전환하며 원래 1~8 종목 분석·5분 메뉴·인증·중복방지를 유지한다.
+21. 사용자 관심그룹 10종목 번호와 메모리7 전용 숫자 9가 섞이지 않게 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -117,6 +119,22 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
         with self.assertRaisesRegex(StockQuoteError,'1~10'):
             self.menus.choose(self.db,'방','나','11')
+
+    def test_memo7_inline_nine_toggles_only_in_memo7_selection(self):
+        self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='compact')
+        ninth = self.menus.choose(self.db,'방','나','9')
+        self.assertEqual(ninth.execute_argument, '메모리7 상세')
+        self.assertFalse(ninth.menu_active)
+        self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='detail')
+        self.assertEqual(self.menus.choose(self.db,'방','나','9').execute_argument,'메모리7')
+        self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='compact')
+        self.assertEqual(self.menus.choose(self.db,'방','나','1').execute_argument,'분석 005930.KS')
+        ten = tuple(Stock('그룹',f'TEST{i}', 'USD', '미국', 'America/New_York')
+                    for i in range(10))
+        with self.assertRaisesRegex(StockQuoteError,'메모리7'):
+            self.menus.open_quotes('방','나', ten, memory7_view='compact')
+        self.menus.open_quotes('방','나', ten)
+        self.assertEqual(self.menus.choose(self.db,'방','나','9').execute_argument,'분석 TEST8')
 
     def test_zero_returns_to_root_and_expiry(self):
         self.menus.open('방','나')
@@ -274,6 +292,35 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertEqual(selected['reply'],'마이크론 5일 분석')
             self.assertEqual(history.call_args.args[0].ticker,'MU')
             self.assertFalse(self.post('선택 3').json()['ok'])
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
+
+    def test_inline_ninth_switches_compact_detail_and_back_without_losing_logs(self):
+        def output(command, argument):
+            return ('🔎 메모리7 시세 상세 보기\n9. ↩ 간략보기'
+                    if argument == '메모리7 상세'
+                    else '💾 메모리7 시세 요약\n9. 🔎 상세보기')
+        with patch('app.main.execute_stock_command',side_effect=output) as renderer:
+            brief = self.post('메모리7').json()
+            self.assertTrue(brief['ok'])
+            self.assertTrue(brief['menu_active'])
+            detail = self.post('선택 9').json()
+            self.assertTrue(detail['ok'], detail)
+            self.assertIn('상세 보기',detail['reply'])
+            self.assertEqual(detail['module_source'],'core.market')
+            self.assertTrue(detail['menu_active'])
+            back = self.post('선택 9').json()
+            self.assertTrue(back['ok'], back)
+            self.assertIn('💾 메모리7',back['reply'])
+            self.assertTrue(back['menu_active'])
+            self.assertEqual(renderer.call_count,3)
+        with patch('app.main.fetch_history') as history, patch(
+             'app.main.individual_report',return_value='마이크론 분석 결과'):
+            selected = self.post('선택 3').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,'MU')
+            self.assertEqual(selected['reply'],'마이크론 분석 결과')
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
