@@ -12,6 +12,8 @@
 10. 단위 테스트를 위해 시각·HTTP opener·기준 정규장 시세를 주입한다.
 11. 미국 프리장 초반 1일 차트가 전 거래일만 보유할 수 있으므로 Yahoo 5거래일 1분봉으로 최신 세션 거래를 검색한다.
 12. 5거래일 분봉의 최대 수량과 응답 크기를 제한하고 당일 세션의 검증된 분봉만 추출해 오래된 가격을 재사용하지 않는다.
+13. 장외 분봉이 비어도 Yahoo chart.meta에 명시된 preMarketPrice/postMarketPrice와 세션별 Unix 체결시각을 검증해 별도 보조 시세로 사용한다.
+14. Yahoo 메타데이터는 가격·시각 모두 필요하고 같은 현지 거래일의 실제 프리/애프터 구간일 때만 허용한다.
 """
 from __future__ import annotations
 
@@ -90,7 +92,7 @@ def _session_price(stock, regular, now: datetime, traded: datetime,
 
 
 def parse_yahoo(stock, payload: dict, regular, *, now: datetime) -> tuple[SessionPrice, ...]:
-    """실제 거래량이 있는 같은 날짜의 프리/애프터 1분봉만 채택."""
+    """동일 종목의 1분봉 실제 거래량 우선, 메타 장외 체결시각으로 보완."""
     if stock.currency != 'USD' or stock.market != '미국':
         return ()
     try:
@@ -98,15 +100,18 @@ def parse_yahoo(stock, payload: dict, regular, *, now: datetime) -> tuple[Sessio
         meta = record['meta']
         if meta.get('currency') != 'USD' or str(meta.get('symbol', '')).upper() != stock.ticker.upper():
             return ()
+    except (KeyError, IndexError, TypeError, ValueError):
+        return ()
+    try:
         bars = record['indicators']['quote'][0]
         stamps = record['timestamp']
         closes = bars['close']
         volumes = bars['volume']
         if not (isinstance(stamps, list) and isinstance(closes, list) and isinstance(volumes, list)
                 and len(stamps) == len(closes) == len(volumes) and len(stamps) <= 6000):
-            return ()
+            stamps, closes, volumes = (), (), ()
     except (KeyError, IndexError, TypeError, ValueError):
-        return ()
+        stamps, closes, volumes = (), (), ()
     result = {}
     try:
         zone = ZoneInfo('America/New_York')
@@ -127,6 +132,25 @@ def parse_yahoo(stock, payload: dict, regular, *, now: datetime) -> tuple[Sessio
         value = _session_price(stock, regular, now, traded, float(close), session, 'Yahoo 1분봉')
         if value is not None and (session not in result or traded > result[session].market_time):
             result[session] = value
+    # chart.meta의 장외 필드를 사용하더라도 반드시 가격과 *실제 장외 체결시각*
+    # 두 값이 함께 있고, 새 거래일·ET 세션 검증을 통과해야 한다.
+    for session, price_key, time_key in (
+        ('프리', 'preMarketPrice', 'preMarketTime'),
+        ('애프터', 'postMarketPrice', 'postMarketTime'),
+    ):
+        value = _positive(meta.get(price_key))
+        epoch = meta.get(time_key)
+        if value is None or isinstance(epoch, bool) or not isinstance(epoch, (int, float)):
+            continue
+        if not math.isfinite(epoch):
+            continue
+        try:
+            stamp = datetime.fromtimestamp(epoch, timezone.utc).astimezone(zone)
+        except (OSError, OverflowError, ValueError):
+            continue
+        validated = _session_price(stock, regular, now, stamp, value, session, 'Yahoo 메타')
+        if validated and (session not in result or stamp > result[session].market_time):
+            result[session] = validated
     return tuple(result[name] for name in ('프리', '애프터') if name in result)
 
 
