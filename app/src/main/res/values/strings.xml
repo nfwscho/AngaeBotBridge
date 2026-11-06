@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">앙개봇 Bridge</string>
     <string name="service_name">앙개봇 카카오톡 알림 수신</string>
+    <string name="image_auto_service_description">앙개봇이 생성한 테스트 사진을 지정된 카카오톡 채팅방에 자동 전송하기 위한 화면 접근성 서비스입니다. 사용자가 별도로 켤 때만 동작하며 카카오톡의 사진 공유 화면에서 채팅방 이름을 확인합니다.</string>
 </resources>
