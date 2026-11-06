@@ -1057,7 +1057,8 @@ def _domestic_status_label(item: Quote) -> str:
     server_fresh = (meta.snapshot_time is not None and
                     -30 <= (item.fetched_at - meta.snapshot_time).total_seconds() <= 180)
     if meta.market_session in ('aftermarket', 'after_market'):
-        label = '정규장 기준가(장외거래 시각의 응답)'
+        label = ('정규장 종가 별도 확인' if meta.regular_price is not None
+                 else '장외 최종체결가 · 정규장 종가 미확인')
     elif meta.market_session in ('premarket', 'pre_market'):
         label = '개장 전 정규장 기준가'
     elif status in ('CLOSE', 'CLOSED', 'END'):
@@ -1085,7 +1086,10 @@ def _domestic_status_text(item: Quote) -> str:
     if meta is None:
         return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
     if meta.market_session in ('aftermarket', 'after_market', 'premarket', 'pre_market'):
-        return f'   └ KRX 정규장 가격 · 응답시각 {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
+        if meta.regular_price is not None and meta.regular_time is not None:
+            return (f'   └ 정규장 기준 {meta.regular_time:%m/%d %H:%M} KST '
+                    f'· {meta.regular_source} 확인 · 네이버 장외 응답 {when}')
+        return f'   └ 정규장 종가 미확인 · 네이버 장외 응답 {when} · {meta.provider}'
     return f'   └ KRX {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
 
 
@@ -1124,7 +1128,20 @@ def _latest_market_time(item: Quote) -> datetime:
 def quote_line(item: Quote, *, source_details: bool = True) -> str:
     """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
-    body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    domestic_extra = item.stock.market == '한국' and item.domestic is not None and (
+        item.domestic.market_session in ('aftermarket', 'after_market')
+        and item.domestic.after_market is not None)
+    if domestic_extra and item.domestic.regular_price is None:
+        body = f'{item.stock.name} : 정규장 종가 미확인'
+    else:
+        display_price = (item.domestic.regular_price if domestic_extra else None)
+        display_pct = (item.domestic.regular_percent if domestic_extra else None)
+        display_price = display_price if display_price is not None else item.price
+        display_pct = display_pct if display_pct is not None else item.percent
+        arrow = '▲' if display_pct > 0.00001 else ('▽' if display_pct < -0.00001 else '－')
+        body = f'{item.stock.name} : {_formatted_price(display_price, item.stock.currency)} ({arrow}{abs(display_pct):.2f}%)'
+        if domestic_extra:
+            body += ' [정규·별도 확인]'
     if item.stock.market == '미국' and item.extended:
         body += ' [정규]'
         extra_us = _us_extended_text(item)
@@ -1185,7 +1202,8 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
                 statuses.append(status)
         latest = max(_latest_market_time(q) for q in region_quotes)
         when = latest.strftime('%m/%d %H:%M:%S') if region == '한국' else latest.strftime('%m/%d %H:%M')
-        zone = 'KRX ' if region == '한국' else ('ET ' if region == '미국' else 'JST ')
+        zone = ('KST ' if region == '한국' and any(q.domestic and q.domestic.market_session in ('aftermarket','after_market') for q in region_quotes)
+                else 'KRX ' if region == '한국' else 'ET ' if region == '미국' else 'JST ')
         time_difference = ' (종목별 거래시각 상이)' if len({q.market_time for q in region_quotes}) > 1 else ''
         result.append(f'  {title}: {" / ".join(providers)} · {zone}{when} (최신){time_difference} · {" / ".join(statuses)}')
     return ('시세 출처 · 기준시각:', *result) if result else ()
@@ -1196,20 +1214,27 @@ def compact_quote_line(item: Quote) -> str:
     stock = item.stock
     aliases = {'웨스턴디지털': 'WDC', '웬디': 'WDC', 'SK하이닉스': '하이닉스'}
     name = aliases.get(stock.name, stock.name)
+    domestic_extra = (stock.market == '한국' and item.domestic is not None
+                      and item.domestic.market_session in ('aftermarket', 'after_market')
+                      and item.domestic.after_market is not None)
+    if domestic_extra and item.domestic.regular_price is None:
+        return f'{name} 정규장 종가 미확인\n' + _domestic_after_text(item)
+    show_price = item.domestic.regular_price if domestic_extra else item.price
+    show_pct = item.domestic.regular_percent if domestic_extra else item.percent
     if stock.currency == 'KRW':
-        price = f'{item.price / 10000:.1f}만' if item.price < 1_000_000 else f'{item.price / 10000:,.0f}만'
+        price = f'{show_price / 10000:.1f}만' if show_price < 1_000_000 else f'{show_price / 10000:,.0f}만'
     elif stock.currency == 'JPY':
-        price = f'¥{item.price:,.0f}'
+        price = f'¥{show_price:,.0f}'
     else:
-        price = f'${item.price:,.0f}' if item.price >= 500 else f'${item.price:,.2f}'
-    arrow = '🔺' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '➖')
-    sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
-    line = f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
+        price = f'${show_price:,.0f}' if show_price >= 500 else f'${show_price:,.2f}'
+    arrow = '🔺' if show_pct > 0.00001 else ('▽' if show_pct < -0.00001 else '➖')
+    sign = '+' if show_pct > 0.00001 else ('-' if show_pct < -0.00001 else '')
+    line = f'{name} {price} {arrow} {sign}{abs(show_pct):.2f}%'
     if stock.market == '미국' and item.extended:
         line += ' [정규]'
         line += '\n' + _us_extended_text(item)
     elif stock.market == '한국' and item.domestic is not None and item.domestic.after_market is not None:
-        line += ' [정규]'
+        line += ' [정규·별도 확인]' if domestic_extra else ' [정규]'
         line += '\n' + _domestic_after_text(item)
     return line
 
@@ -1224,7 +1249,9 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
         providers = []
         for q in items:
             if region == '한국':
-                source = '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일') else (q.domestic.provider if q.domestic else '야후')
+                source = ('네이버·장외 통합' if q.domestic and q.domestic.market_session in ('aftermarket', 'after_market')
+                          else '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일')
+                          else (q.domestic.provider if q.domestic else '야후'))
             elif q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가'):
                 source = '나스닥 종가' if q.source.startswith('나스닥') else '네이버 종가'
             elif q.source == '나스닥 웹':
@@ -1242,7 +1269,10 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
             line += ' · 확정 종가'
         if region == '한국' and any(q.domestic and q.domestic.after_market for q in items):
-            line += ' · 정규 기준가/장외 별도'
+            line += (' · 장외 별도/정규 종가 검증'
+                     if all(q.domestic.regular_price is not None
+                            for q in items if q.domestic and q.domestic.after_market)
+                     else ' · 장외 시세/일부 정규 종가 미확인')
         if region == '미국' and any(q.extended for q in items):
             line += ' · 장외 별도·지연 미확인'
         if region == '미국' and any(not q.extended for q in items):
