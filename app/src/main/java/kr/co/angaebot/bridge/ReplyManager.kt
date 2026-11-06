@@ -8,6 +8,7 @@
  * 이미지 시험 확장: 카카오톡 알림이 명시적으로 허용한 이미지 MIME 입력이 있을 때에만
  * 이미지 데이터를 앱 전용 읽기 전용 ContentProvider로 전달한다. 원래 reply()와 텍스트·예외 로그는 그대로 보존한다.
  * 이미지 전송 요청이 수락되어도 카카오톡 대화방의 실제 수신·표시 여부는 S20+로 별도 확인해야 한다.
+ * 접근성 공유 시험에서는 기존 앱 전용 640x360 PNG 생성을 재사용하고 content URI만 제공하며 원래 텍스트 답장 코드는 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -112,6 +113,16 @@ object ReplyManager {
         } catch (e: Exception) {
             ReplyOutcome.Failed("이미지 전송 요청 오류: ${e.javaClass.simpleName} ${e.message}")
         }
+    }
+
+    /** ACTION_SEND 공유 실험용 PNG를 앱 전용 캐시에 생성한다. 외부 사진/파일은 일절 읽지 않는다. */
+    fun prepareShareTestImage(context: Context): Uri {
+        createTestImage(context, "angaebot-test.png", "image/png")
+        return Uri.Builder()
+            .scheme("content")
+            .authority("${context.packageName}.imageprovider")
+            .appendPath("angaebot-test.png")
+            .build()
     }
 
     private fun createTestImage(context: Context, fileName: String, mime: String) {
