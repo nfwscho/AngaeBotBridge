@@ -79,6 +79,7 @@
 71. 간결 시세 출처 행은 활성 프리/애프터 공급자의 실제 출처를 표시해 정규장 Yahoo 공급자와 혼동하지 않는다.
 72. 구형 네이버 본장(15:30 확정)가와 별도 시간외 필드를 받는 경우도 현재 거래시간에는 장외 대표값과 정규장대비 상승률을 표시한다.
 73. 시장별 간략 출처 및 최근 거래시각은 실제 선택된 국내 프리/애프터 체결과 미국 세션 체결 시각을 기준으로 표시한다.
+74. 국내 장외 데이터는 현재 KST 거래일과 체결 날짜가 일치할 때만 대표 가격으로 사용해 이전 거래일 값을 당일 프리/애프터로 오표시하지 않는다.
 """
 from __future__ import annotations
 
@@ -1314,7 +1315,7 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
                 (aft.session == '장후' and (15, 40) <= clock <= (23, 59)) or
                 (aft.session == '장전' and (8, 0) <= clock < (9, 0))
             )
-            if expected == aft.session or (not expected and on_session_day and market_in_session):
+            if on_session_day and (expected == aft.session or market_in_session):
                 label = '애프터' if aft.session == '장후' else '프리'
                 return aft.price, _domestic_session_percent(item), label
     if item.stock.market == '미국' and item.extended:
