@@ -239,7 +239,8 @@ class MenuSelectionAPITests(unittest.TestCase):
         self.assertEqual(self.post('선택 00').json()['module_source'], 'core.menu')
         with patch('app.main.execute_stock_command', side_effect=lambda _cmd, arg:
                    '🔎 메모리7 시세 상세 보기' if arg == '메모리7 상세' else '💾 메모리7 시세 요약') as renderer:
-            self.assertIn('💾 메모리7', self.post('경로 주식 2').json()['reply'])
+            self.assertTrue(self.post('메뉴').json()['menu_active'])
+            self.assertIn('💾 메모리7', self.post('선택 2').json()['reply'])
             detail = self.post('선택 99').json()
             self.assertTrue(detail['ok'], detail)
             self.assertTrue(detail['menu_active'])
