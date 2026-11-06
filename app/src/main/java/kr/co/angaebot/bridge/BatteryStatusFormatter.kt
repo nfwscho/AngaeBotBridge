@@ -13,6 +13,8 @@
  * 11. Android 실제 답장에는 🔋 79%, 충전/완충 중에는 ⚡ 79% 한 줄만 붙여 공간을 절약한다.
  * 12. 기존 footer/append의 상세 충전 상태 문자열과 배터리 오차/20% 저전력 알림은 삭제하지 않고 명시 조회·테스트용으로 보존한다.
  * 13. 알 수 없는 잔량은 추정하지 않으며 배터리 상태 수집/RemoteInput/SQLite/운영 로그·설정·UI는 변경하지 않는다.
+ * 14. 섹터 간략 시세표의 '99. 🔎 상세보기' 뒤에는 현재 배터리 상태를 한 칸 띄워 같은 줄에 표시한다.
+ * 15. 다른 답장/상세 시세/단축명령에서는 기존 배터리 단독 줄을 그대로 유지하며 배터리 정보 수집과 상세 API는 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -50,6 +52,19 @@ object BatteryStatusFormatter {
 
     fun compactAppend(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
         reply.trimEnd('\n') + "\n" + compactFooter(level, scale, state)
+
+    /** 고정 섹터의 간략 시세표에서만 99 상세보기와 배터리를 한 줄에 결합한다.
+     * 상세 모드와 다른 일반 명령, 오류 및 모듈 요청에서는 항상 원래 줄바꿈을 유지한다.
+     */
+    fun appendCompactSectorFooter(reply: String, shortFooter: String): String {
+        val original = reply.trimEnd('\n')
+        return if (original.startsWith("📊 ") &&
+                   original.endsWith("99. 🔎 상세보기")) {
+            original + " " + shortFooter
+        } else {
+            original + "\n" + shortFooter
+        }
+    }
 
     // API 호환성: 기존 상세 표시기를 제거하거나 반환 문자열을 변경하지 않는다.
     fun append(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
