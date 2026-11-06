@@ -186,7 +186,8 @@ class NaverRealtimeTests(unittest.TestCase):
         self.assertIn('2. 마이크론 : 조회 불가',report)
         self.assertIn('📡 11/05 KR',report)
         self.assertNotIn('   └ KRX',report)
-        self.assertIn('5분 내 1~2',report)
+        self.assertNotIn('5분 내 1~2',report)
+        self.assertEqual(report.splitlines()[-1], '99. 🔎 상세보기')
 
 
 if __name__=='__main__': unittest.main()
