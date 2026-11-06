@@ -15,6 +15,7 @@
 13. 네이버 국내 장외 closePrice를 KRX 종가로 표시하지 않고 Yahoo 정규가가 명시 확인된 때만 분리한다.
 14. Yahoo 정규 종가가 차단됐을 때 KRX 당일 일봉만 정규가로 복구하고 어제 일봉은 거절하는 검증을 추가한다.
 15. 네이버 공개 해외 폴링이 빈 응답이면 basic으로 복구하고 403/429일 때 동일 호스트 재시도를 금지한다.
+16. Yahoo 분봉이 없는 경우에도 preMarketPrice/postMarketPrice와 체결시각 검증으로 장외 데이터를 복원한다.
 """
 from __future__ import annotations
 
@@ -104,6 +105,24 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertEqual(parse_yahoo(WATCHLIST[2], old, regular(), now=NOW), ())
         self.assertEqual(parse_yahoo(WATCHLIST[2], yahoo_chart(), regular(),
                                      now=NOW - timedelta(days=1)), ())
+
+    def test_yahoo_session_metadata_prices_require_explicit_trade_time(self):
+        data = {'chart': {'result': [{
+            'meta': {'symbol': 'MU', 'currency': 'USD',
+                     'preMarketPrice': 99.25,
+                     'preMarketTime': int(datetime(2026, 11, 6, 8, 15, tzinfo=ET).timestamp()),
+                     'postMarketPrice': 102.50,
+                     'postMarketTime': int(datetime(2026, 11, 6, 17, 5, tzinfo=ET).timestamp())}
+        }]}}
+        result = parse_yahoo(WATCHLIST[2], data, regular(), now=NOW)
+        self.assertEqual([entry.session for entry in result], ['프리', '애프터'])
+        self.assertEqual([entry.source for entry in result], ['Yahoo 메타', 'Yahoo 메타'])
+        self.assertEqual([entry.price for entry in result], [99.25, 102.50])
+        del data['chart']['result'][0]['meta']['postMarketTime']
+        self.assertEqual([entry.session for entry in parse_yahoo(WATCHLIST[2], data, regular(), now=NOW)], ['프리'])
+        data['chart']['result'][0]['meta']['preMarketTime'] = int(
+            datetime(2026, 11, 5, 8, 15, tzinfo=ET).timestamp())
+        self.assertFalse(parse_yahoo(WATCHLIST[2], data, regular(), now=NOW))
 
     def test_nasdaq_secondary_only_in_explicit_market_session(self):
         record = {
