@@ -157,6 +157,8 @@ class RecordApiTests(unittest.TestCase):
         self.assertTrue(details['ok'], details)
         self.assertIn('중요한 정보', details['reply'])
         self.assertIn('부동산 메뉴', details['reply'])
+        self.assertIn('부동산 최근 메모', self.call('메뉴', '선택 0').json()['reply'])
+        self.assertIn('부동산 메뉴', self.call('메뉴', '선택 0').json()['reply'])
         self.assertIn('메인 메뉴', self.call('메뉴', '선택 0').json()['reply'])
 
     def test_tables_preserved_and_jobs_events_unchanged(self):
