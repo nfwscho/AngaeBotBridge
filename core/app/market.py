@@ -84,6 +84,7 @@
 76. 메모리7 간략 요약은 공급자 설명을 상세보기로 이동하고 시장별 최신 현지시각 한 줄 및 짧은 주의문만 남겨 카카오톡 전체보기 접힘을 방지한다.
 77. 메모리7 본문 9번 상세보기/상세보기 9번 간략보기는 1~8번 기존 종목분석과 5분 세션을 보존한다.
 78. 미국 정규장 도중에는 이전 프리 체결가가 존재해도 현재 대표가격을 프리로 오표시하지 않는다.
+79. 종목별 지연 거래일 꼬리표는 최신 검증 프리/애프터 시각을 기준으로 부착해 장외 당일가를 전일가로 잘못 표시하지 않는다.
 """
 from __future__ import annotations
 
@@ -1468,7 +1469,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
     latest_dates = {}
     for item in quotes:
         if item is not None:
-            day = item.market_time.date()
+            day = _latest_market_time(item).date()
             latest_dates[item.stock.market] = max(day, latest_dates.get(item.stock.market, day))
     for index, (stock, item) in enumerate(zip(WATCHLIST, quotes), start=1):
         if item is None:
@@ -1476,10 +1477,12 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
         else:
             success += 1
             line = quote_line(item, source_details=True) if detailed else compact_quote_line(item)
-            if item.market_time.date() < latest_dates[stock.market]:
-                line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
+            latest_trade = _latest_market_time(item)
+            if latest_trade.date() < latest_dates[stock.market]:
+                line += (' [거래일 ' + latest_trade.strftime('%m/%d') + ']' if detailed
+                         else ' (' + latest_trade.strftime('%m/%d') + ')')
             lines.append(f'{index}. {line}')
-            dates[stock.market] = item.market_time.strftime('%m/%d')
+            dates[stock.market] = latest_trade.strftime('%m/%d')
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
