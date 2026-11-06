@@ -17,6 +17,7 @@
 31. 99 입력은 현재 시세 화면에서만 허용하고 다른 메뉴와 9/10 종목 번호가 충돌하지 않게 검증한다.
 32. 주식 메뉴 7번 AI 주도주는 기존 1~6번 뒤에 추가되고 메모리7 상세보기는 시세표 99로 유지한다.
 33. 고정 섹터 전용 11~19 선택으로 일반 사용자 관심그룹의 종목 10개 제한을 우회할 수 없고 허용된 그룹에서만 선택됨을 확인한다.
+34. 주식 메뉴 1~8 새 순서와 반도체주 19개/99/19번째 ASML 및 기존 미국시총10·메모리7 직접 명령을 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -69,9 +70,10 @@ class MenuSelectionUnitTests(unittest.TestCase):
     def test_menu_and_number_and_expiry(self):
         opened = self.menus.open('방', '나')
         self.assertTrue(opened.menu_active)
-        self.assertIn('1. 최근 사용한 주식 조회', opened.reply)
+        self.assertIn('1. 반도체주 시세', opened.reply)
+        self.assertIn('8. 종목별 분석', opened.reply)
         result = self.menus.choose(self.db, '방','나','2')
-        self.assertEqual(result.execute_argument, '메모리7')
+        self.assertEqual(result.execute_argument, '미국시총10')
         self.assertFalse(result.menu_active)
         with self.assertRaisesRegex(StockQuoteError, '5분'):
             self.menus.choose(self.db,'방','나','2')
@@ -82,7 +84,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
 
     def test_empty_recent_result_zero_returns_to_stock_root(self):
         self.menus.open('방', '나')
-        empty = self.menus.choose(self.db, '방', '나', '1')
+        empty = self.menus.choose(self.db, '방', '나', '6')
         self.assertIn('최근 성공한 주식 조회 명령이 없습니다', empty.reply)
         self.assertTrue(empty.menu_active)
         back = self.menus.choose(self.db, '방', '나', '0')
@@ -103,7 +105,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.record('i','주식','목록')
         self.record('j','계산','123*456')
         self.menus.open('방','나')
-        sub=self.menus.choose(self.db,'방','나','1')
+        sub=self.menus.choose(self.db,'방','나','6')
         self.assertTrue(sub.menu_active)
         self.assertIn('1. 목록',sub.reply)
         self.assertIn('2. 분석 삼성전자',sub.reply)
@@ -121,7 +123,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
             self.menus.choose(self.db,'방','나','10')
         with self.assertRaisesRegex(StockQuoteError, '1~10'):
             self.menus.choose(self.db,'방','나','22')
-        sub=self.menus.choose(self.db,'방','나','6')
+        sub=self.menus.choose(self.db,'방','나','8')
         self.assertTrue(sub.menu_active)
         self.assertIn('마이크론',sub.reply)
         self.assertEqual(self.menus.choose(self.db,'방','나','1').execute_argument,'분석 삼성전자')
@@ -142,7 +144,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
         self.menus.open_quotes('방','나', ten)
         # 11~19 숫자는 고정 섹터에서만 허용, 사용자 일반 그룹 10종목 보호.
-        with self.assertRaisesRegex(StockQuoteError,'1~10'):
+        with self.assertRaisesRegex(StockQuoteError,'없는 번호'):
             self.menus.choose(self.db,'방','나','11')
 
     def test_memo7_inline_nine_toggles_only_in_memo7_selection(self):
@@ -219,7 +221,7 @@ class MenuSelectionAPITests(unittest.TestCase):
         self.assertTrue(first['ok'])
         self.assertTrue(first['menu_active'])
         self.assertIn('최근 사용한',first['reply'])
-        analysis=self.post('선택 6').json()
+        analysis=self.post('선택 8').json()
         self.assertTrue(analysis['menu_active'])
         with patch('app.main.fetch_history') as fetched, patch('app.main.individual_report',return_value='분석 보고서'):
             item=self.post('선택 1').json()
@@ -234,56 +236,61 @@ class MenuSelectionAPITests(unittest.TestCase):
     def test_stock_home_has_only_six_choices_and_inline_99_details(self):
         opened = self.post('메뉴').json()
         self.assertTrue(opened['menu_active'])
-        self.assertIn('6. 종목별 분석', opened['reply'])
-        self.assertNotIn('7. 메모리7 시세 상세 보기', opened['reply'])
-        # 7번은 과거 메모리7 상세 기능이 아니라 새 AI 주도주 시세.
-        with patch('app.main.sector_report', return_value='📊 AI 주도주 시세'):
-            self.assertIn('AI 주도주', self.post('선택 7').json()['reply'])
-        self.assertEqual(self.post('선택 00').json()['module_source'], 'core.menu')
-        with patch('app.main.execute_stock_command', side_effect=lambda _cmd, arg:
-                   '🔎 메모리7 시세 상세 보기' if arg == '메모리7 상세' else '💾 메모리7 시세 요약') as renderer:
-            self.assertTrue(self.post('메뉴').json()['menu_active'])
-            self.assertIn('💾 메모리7', self.post('선택 2').json()['reply'])
+        labels = (
+            '1. 반도체주 시세', '2. 미국 시총10 시세', '3. AI 주도주',
+            '4. 반도체 및 기자재', '5. 데센 및 네트워크',
+            '6. 최근 사용한 주식 조회', '7. 관심종목 목록',
+            '8. 종목별 분석',
+        )
+        for label in labels:
+            self.assertIn(label, opened['reply'])
+        self.assertNotIn('메모리7 시세 상세 보기', opened['reply'])
+        with patch('app.main.sector_report',
+                   side_effect=lambda key, page, *, detailed=False:
+                   '🔎 반도체주 시세 상세 보기' if detailed else '📊 반도체주 시세 (19종목)') as renderer:
+            first = self.post('선택 1').json()
+            self.assertTrue(first['menu_active'])
+            self.assertEqual(first['module_source'], 'core.sector_watchlists')
             detail = self.post('선택 99').json()
-            self.assertTrue(detail['ok'], detail)
             self.assertTrue(detail['menu_active'])
-            self.assertEqual(detail['module_source'], 'core.market')
-            self.assertIn('시세 상세 보기', detail['reply'])
-            self.assertEqual(renderer.call_count, 2)
-            self.assertEqual(renderer.call_args.args, ('주식', '메모리7 상세'))
-            self.assertFalse(self.post('선택 3',room='다른방').json()['ok'])
-            with patch('app.main.fetch_history') as history, patch(
-                 'app.main.individual_report',return_value='마이크론 분석 결과'):
-                selected = self.post('선택 3').json()
-                self.assertTrue(selected['ok'])
-                self.assertEqual(selected['reply'], '마이크론 분석 결과')
-                self.assertEqual(history.call_args.args[0].ticker, 'MU')
+            self.assertIn('상세', detail['reply'])
+            renderer.assert_called_with('chip', 1, detailed=True)
+            self.assertFalse(self.post('선택 1', room='다른방').json()['ok'])
             previous = self.post('선택 0').json()
-            self.assertIn('상세 보기',previous['reply'])
-            back = self.post('선택 0').json()
-            self.assertIn('💾 메모리7',back['reply'])
+            self.assertIn('반도체주 시세', previous['reply'])
+            with patch('app.main.fetch_history') as history, patch(
+                    'app.main.individual_report', return_value='ASML 분석'):
+                item = self.post('선택 19').json()
+                self.assertTrue(item['ok'])
+                self.assertEqual(item['reply'], 'ASML 분석')
+                self.assertEqual(history.call_args.args[0].ticker, 'ASML')
+        self.assertIn('주식 메뉴', self.post('메뉴').json()['reply'])
+        with patch('app.main.group_report', return_value='📊 미국시총10 관심종목 시세 요약') as group:
+            second = self.post('선택 2').json()
+            self.assertTrue(second['ok'], second)
+            self.assertIn('미국시총10', second['reply'])
+            self.assertEqual(len(group.call_args.args[1]), 10)
         with closing(sqlite3.connect(self.dbpath)) as db:
-            self.assertEqual(db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE argument='선택 99' AND ok=1"
-            ).fetchone()[0],1)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
+                             db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
 
     def test_stock_two_99_direct_jump_preserves_logging(self):
-        with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
+        with patch('app.main.sector_report', return_value='🔎 반도체주 시세 상세 보기') as renderer:
             self.sequence += 1
             payload = {
                 'request_id': f'menus_{self.sequence:011d}',
-                'command': '메뉴', 'argument': '경로 주식 2 99',
+                'command': '메뉴', 'argument': '경로 주식 1 99',
                 'room': '방', 'sender': '나',
             }
             response = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
             self.assertTrue(response['ok'], response)
             self.assertTrue(response['menu_active'])
-            self.assertEqual(response['module_source'], 'core.market')
-            self.assertIn('메모리7 시세 상세 보기', response['reply'])
-            renderer.assert_called_once_with('주식', '메모리7 상세')
+            self.assertEqual(response['module_source'], 'core.sector_watchlists')
+            self.assertIn('반도체주 시세 상세 보기', response['reply'])
+            renderer.assert_called_once_with('chip', 1, detailed=True)
             repeated = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
             self.assertTrue(repeated['duplicate'])
-            self.assertEqual(repeated['module_source'], 'core.market')
+            self.assertEqual(repeated['module_source'], 'core.sector_watchlists')
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],1)
@@ -292,7 +299,7 @@ class MenuSelectionAPITests(unittest.TestCase):
         with patch('app.main.fetch_history') as fetched, patch('app.main.individual_report',return_value='마이크론 5일 분석'):
             self.assertTrue(self.post('분석 마이크론').json()['ok'])
             self.assertTrue(self.post('메뉴').json()['ok'])
-            recent=self.post('선택 1').json()
+            recent=self.post('선택 6').json()
             self.assertTrue(recent['menu_active'])
             self.assertIn('분석 마이크론',recent['reply'])
             self.assertFalse(self.post('선택 1',sender='다른사람').json()['ok'])
@@ -306,7 +313,7 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertFalse(self.post('선택 1').json()['ok'])
         with closing(sqlite3.connect(self.dbpath)) as db:
             args=[r[0] for r in db.execute('SELECT argument FROM jobs ORDER BY rowid').fetchall()]
-            self.assertEqual(args[:4], ['분석 마이크론','메뉴','선택 1','선택 1'])
+            self.assertEqual(args[:4], ['분석 마이크론','메뉴','선택 6','선택 1'])
             self.assertEqual(len(args),6)  # 상대방 실패/마지막 닫힌 메뉴 실패 포함, 중복 미기록
 
 
