@@ -20,6 +20,8 @@
 18. 반도체주 고정 목록은 기존 메모리7을 변경하지 않고 한국 2/미국 16/일본 1종목을 정확한 환율·현지시각·통화로 표시한다.
 19. 신규 DRAM은 Cboe BZX 상장 Roundhill Memory ETF, EWY는 NYSE Arca 상장 iShares MSCI South Korea ETF로 USD 시세를 조회한다.
 20. 제공된 예시 가격/등락률은 하드코딩하지 않고 실시간 조회; 개인 그룹/메모리7/미국시총10의 원본 구성과 순서·DB·로그는 보존한다.
+21. 미국 시총10 고정 메뉴는 기존 US_MARKET_CAP_PRESET의 10개 티커·순서·별칭을 재사용하되 운영 DB의 사전 그룹 생성에 의존하지 않는다.
+22. 기존 개인 '미국시총10' 명령·그룹 CRUD는 별개로 보존하고 2번 홈에만 읽기 전용 고정 프리셋을 적용한다.
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ from math import ceil
 from typing import Callable
 
 from .market import Stock, StockQuoteError
-from .watchlists import group_report
+from .watchlists import group_report, US_MARKET_CAP_PRESET
 
 
 PAGE_SIZE = 19
@@ -74,6 +76,11 @@ _SEMI_CHIPS = (
 
 SECTORS: tuple[Sector, ...] = (
     Sector('chip', '반도체주 시세', _SEMI_CHIPS),
+    # 기존 공개 시총10 프리셋 티커·순서를 그대로 활용하되 개인 SQLite
+    # 그룹을 먼저 생성하지 않아도 주식 홈 2번에서 바로 시세가 나오도록 한다.
+    Sector('us10', '미국 시총10 시세',
+           tuple(Stock(name, ticker, 'USD', '미국', _US_TZ)
+                 for ticker, name in US_MARKET_CAP_PRESET)),
     Sector('ai', 'AI 주도주', _stocks((
         ('엔비디아', 'NVDA'), ('애플', 'AAPL'), ('MSFT', 'MSFT'),
         ('구글', 'GOOGL'), ('아마존', 'AMZN'), ('메타', 'META'),
@@ -97,7 +104,7 @@ SECTORS: tuple[Sector, ...] = (
 )
 
 _SECTOR_BY_KEY = {sector.key: sector for sector in SECTORS}
-_REQUEST = re.compile(r'^섹터시세 (chip|ai|semi|dc) ([1-9][0-9]?) (간략|상세)$')
+_REQUEST = re.compile(r'^섹터시세 (chip|us10|ai|semi|dc) ([1-9][0-9]?) (간략|상세)$')
 
 
 def get_sector(key: str) -> Sector:
