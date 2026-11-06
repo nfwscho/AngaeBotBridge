@@ -13,6 +13,7 @@
 11. 카카오톡 좁은 말풍선에서 P/A 한 글자 표시, 8개 종목·9번 상세 메뉴·짧은 현지시각 요약으로 전체보기 접힘을 최소화한다.
 12. 미국 정규장 중 과거 프리 체결은 대표 시세를 덮지 않으며 장외 시간에는 실제 세션의 P/A 가격만 보인다.
 13. 메모리7 간략 보기와 상세 보기 사이에 원본 정규·프리·애프터 데이터, 거래일과 출처가 누락되지 않음을 검증한다.
+14. 모바일 8개 종목 수 검증의 괄호 문법을 수정하고 수량·430자·15줄 검사를 모두 유지한다.
 """
 from __future__ import annotations
 
@@ -170,8 +171,9 @@ class CompactSessionQuoteTests(unittest.TestCase):
         report = memory7_report(fetcher=lambda stock:lookups[stock.ticker], use_cache=False)
         lines = report.splitlines()
         # 한 종목은 한 행, 전체 카카오톡 본문은 대략 400자 이내를 목표로 한다.
-        self.assertEqual(len([line for line in lines if line[:2] in (
-            '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.'))]), 8)
+        self.assertEqual(
+            len([line for line in lines if line[:2] in
+                 ('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.')]), 8)
         self.assertLessEqual(len(report), 430)
         self.assertLessEqual(len(lines), 15)
         self.assertTrue(any(line == '9. 🔎 상세보기' for line in lines))
