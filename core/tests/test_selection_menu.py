@@ -10,6 +10,7 @@
 24. 9를 연속 두 번 눌러 상세↔간략으로 왕복한 후 0은 직전 실제 상세 화면으로 돌아가야 한다.
 25. 00은 중간 단계와 무관하게 홈으로 이동하고 방·발신자별 이력·5분 TTL·jobs/events 로그를 지킨다.
 26. 종목 분석 결과 화면은 기존 내용 그대로 표시하고 0을 누르면 분석을 선택한 직전 목록으로 되돌아간다.
+27. 최근 성공 주식 조회가 없는 화면도 숫자 0으로 주식 메뉴에 복귀하고 00은 홈으로 이동하는지 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -72,6 +73,17 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.now += MENU_TTL_SECONDS
         with self.assertRaisesRegex(StockQuoteError, '5분'):
             self.menus.choose(self.db,'방','나','2')
+
+    def test_empty_recent_result_zero_returns_to_stock_root(self):
+        self.menus.open('방', '나')
+        empty = self.menus.choose(self.db, '방', '나', '1')
+        self.assertIn('최근 성공한 주식 조회 명령이 없습니다', empty.reply)
+        self.assertTrue(empty.menu_active)
+        back = self.menus.choose(self.db, '방', '나', '0')
+        self.assertIn('📊 주식 메뉴', back.reply)
+        self.assertTrue(back.menu_active)
+        home = self.menus.choose(self.db, '방', '나', '00')
+        self.assertIn('앙개봇 메인 메뉴', home.reply)
 
     def test_recent_filter_and_scope(self):
         self.record('a','주식','분석 삼성전자')
