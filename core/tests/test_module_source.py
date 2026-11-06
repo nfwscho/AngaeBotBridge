@@ -8,7 +8,8 @@
 6. 기존 기능과 로그·사용자 데이터·권한·API 토큰/메시지는 그대로 유지한다.
 7. 개인 기록 명령과 목록 응답은 core.records로 표시되며 기존 모듈명은 변경하지 않는다.
 8. 날씨 예보·지역 설정은 core.weather, 날씨 메뉴 진입은 core.menu로 정확히 식별한다.
-9. 주식 메뉴 7번/명령형 상세 시세는 번호 선택·직접 명령 모두 core.market으로 귀속되며 기존 모듈 배정은 유지한다.
+9. 메모리7 99번 상세 시세는 core.market으로 표시하고 모든 관심그룹의 99 상세 시세는 core.watchlists로 표시한다.
+10. 기존 주식 메뉴 1~6번과 다른 모듈 태깅 및 jobs/events/Android 배터리 출력을 보존한다.
 """
 from __future__ import annotations
 
@@ -30,8 +31,10 @@ class ModuleSourceTests(unittest.TestCase):
             ('메뉴','', '메인 메뉴','core.menu'),
             ('메뉴','메모리7', '', 'core.market'),
             ('주식','메모리7 상세', '🔎 메모리7 시세 상세 보기', 'core.market'),
-            ('메뉴','선택 7', '🔎 메모리7 시세 상세 보기', 'core.market'),
-            ('메뉴','경로 주식 7', '🔎 메모리7 시세 상세 보기', 'core.market'),
+            ('메뉴','선택 99', '🔎 메모리7 시세 상세 보기', 'core.market'),
+            ('메뉴','경로 주식 2 99', '🔎 메모리7 시세 상세 보기', 'core.market'),
+            ('메뉴','선택 99', '🔎 반도체 관심종목 시세 상세 보기', 'core.watchlists'),
+            ('주식','상세시세 반도체', '🔎 반도체 관심종목 시세 상세 보기', 'core.watchlists'),
             ('메뉴','분석 MU', '', 'core.history'),
             ('메뉴','설정보기 deployment', '', 'core.ops'),
             ('주식','목록', '', 'core.watchlists'),
