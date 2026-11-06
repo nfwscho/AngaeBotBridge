@@ -27,6 +27,8 @@
 // 26. 기존 단축 투·메/기존 UI·권한·설정·DB·로그·5분 세션 및 카카오톡 응답 흐름을 보존한다.
 // 27. 날씨 조회/지역 설정 단축어는 Android Bridge v0.4.13(versionCode 17)로 배포하며 앱 ID·서명·설정·로그를 유지한다.
 // 28. 부동산 실거래가 단축 조회 v0.4.14(versionCode 18)는 같은 앱 ID·서명·데이터·UI·로그·배터리를 보존한다.
+// 29. 이미지 MIME 진단 및 안전한 테스트 사진 전송 v0.4.15(versionCode 19): 별도 권한 추가 없이 기존 앱 데이터/명령/텍스트 ReplyManager/로그를 보존한다.
+// 30. 카카오톡 이미지 실제 수신은 S20+ 현장 검증에 맡기며 미지원 알림은 기존 텍스트 경로로 안내한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -40,8 +42,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.4.14"
+        versionCode = 19
+        versionName = "0.4.15"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
