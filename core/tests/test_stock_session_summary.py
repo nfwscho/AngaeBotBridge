@@ -101,7 +101,8 @@ class CompactSessionQuoteTests(unittest.TestCase):
         old = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         stale = replace(old, fetched_at=old.fetched_at + timedelta(days=1))
         self.assertNotIn('[애프터]', compact_quote_line(stale))
-        self.assertNotIn('193,800원', compact_quote_line(stale))
+        self.assertIn('18.9만', compact_quote_line(stale))
+        self.assertNotIn('19.4만', compact_quote_line(stale))
         self.assertNotIn('\n', compact_quote_line(stale))
 
     def test_premarket_compares_previous_regular(self):
