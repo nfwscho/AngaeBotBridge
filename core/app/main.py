@@ -84,9 +84,11 @@
 79. 공급자 장애 및 잘못된 지역은 기존 COMMAND_REJECTED와 경고 응답으로 기록하며 가짜 예보를 출력하지 않는다.
 80. 부동산 실거래가: 서울 구·법정동 5자리 매매/전세/월세 조회를 국토부 XML API로 지원한다.
 81. '부 지역 강남구' 조회 지역은 별도 SQLite 테이블에 보존하고 기존 부동산 개인메모 CRUD는 유지한다.
-82. 메뉴 2→3/4/5 실거래 조회와 단축어 부 매매/전세/월세/시세는 DB 쓰기 락 밖에서 수행한다.
+82. 메뉴 2→5/6/7 실거래 조회와 단축어 부 매매/전세/월세/시세는 DB 쓰기 락 밖에서 수행한다.
 83. API 키 미설정·연결 장애·취소 계약은 보수적으로 처리하며 기존 인증·중복 방지·jobs/events 로그·module_source를 보존한다.
 84. Android UI/배터리·주식/날씨/AI 및 기존 SQLite 테이블은 수정/초기화하지 않는다.
+85. v0.7.4 부동산 10개 메뉴의 1·2번 키워드별 개인 기록 및 3·4번 미구현 안내, 5~7 실거래 조회 번호를 지원한다.
+86. 새 메뉴 역시 인증·5분 번호 세션·로그·모듈 푸터를 보존하고 시세 조회는 쓰기 잠금 밖에서 처리한다.
 """
 from __future__ import annotations
 
@@ -120,7 +122,7 @@ from .real_estate import (RealEstateError, init_real_estate_schema, resolve_dist
                           save_district, parse_transaction_query, region_help,
                           transaction_report)
 
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래"} | PERSONAL_COMMANDS
 
 
@@ -228,7 +230,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 read_db, request.room, request.sender, action)
                         stock_reply = transaction_report(kind, district, apartment)
                         selection_menus.open_record_sector(request.room, request.sender, "부동산")
-                        stock_reply += "\n※ 부 3~5 재조회 · 0 이전 · 00 홈"
+                        stock_reply += "\n※ 부 5~7 재조회 · 0 이전 · 00 홈"
                         stock_menu_active = True
                 if request.command == "날씨":
                     action = request.argument.strip()
@@ -290,7 +292,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             read_db, request.room, request.sender, resolved_argument)
                     stock_reply = transaction_report(kind, district, apartment)
                     selection_menus.open_record_sector(request.room, request.sender, "부동산")
-                    stock_reply += "\n※ 부 3~5 재조회 · 0 이전 · 00 홈"
+                    stock_reply += "\n※ 부 5~7 재조회 · 0 이전 · 00 홈"
                     stock_menu_active = True
                 elif request.command == "메뉴" and resolved_argument == "실거래설정 안내":
                     with closing(connect()) as read_db:
