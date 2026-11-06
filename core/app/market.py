@@ -68,6 +68,8 @@
 60. 운영 로그에는 공급자별 조회 실패/조회 성공 진단 코드를 추가하며 기존 US_QUOTE_FAILED 등의 로그를 보존한다.
 61. 장외 미제공·정규장 종가 미확인 시 값을 꾸미지 않고 명시적으로 미확인을 출력한다.
 62. Yahoo 정규 종가 불일치/장애 시 네이버 KRX 당일 일봉 종가를 독립 검증하고 전일 기준가와 비교해 복구한다.
+63. 국내 네이버 root marketSessionType이 프리/애프터인데 overPriceInfo가 없어도 시각·상태 확인된 closePrice는 장외로만 표시한다.
+64. 국내 프리장에서는 직전 정규장 종가의 독립 검증만 허용하고 당일 정규장 값은 아직 없는 것으로 처리한다.
 """
 from __future__ import annotations
 
@@ -685,13 +687,26 @@ def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None,
         raise StockQuoteError('전일가 계산 실패')
     market_status = data.get('marketStatus')
     market_status = market_status.upper() if isinstance(market_status, str) else ''
+    session_name = str(data.get('marketSessionType') or '').lower()
+    after_quote = _naver_after_market(data, stock, now, trade_time, previous)
+    # 네이버 통합 시세가 marketSessionType=afterMarket/preMarket일 때는
+    # closePrice 자체가 해당 장외 세션 가격일 수 있다. overPriceInfo 미제공 시
+    # 본장 종가로 오표시하지 않고 확인 가능한 세션 시각의 장외가로만 인식한다.
+    if after_quote is None and trade_time.weekday() < 5:
+        hhmm = (trade_time.hour, trade_time.minute)
+        if session_name in ('aftermarket', 'after_market') and (15, 40) <= hhmm <= (20, 0):
+            after_quote = AfterMarketQuote(price, pct_value, trade_time, '장후',
+                                           market_status, '거래소 미확인')
+        elif session_name in ('premarket', 'pre_market') and (8, 0) <= hhmm <= (8, 50):
+            after_quote = AfterMarketQuote(price, pct_value, trade_time, '장전',
+                                           market_status, '거래소 미확인')
     meta = DomesticQuoteMetadata(
         provider=provider,
         market_status=market_status,
         delay_minutes=_naver_delay_minutes(data),
         snapshot_time=snapshot_time,
-        after_market=_naver_after_market(data, stock, now, trade_time, previous),
-        market_session=str(data.get('marketSessionType') or '').lower())
+        after_market=after_quote,
+        market_session=session_name)
     return Quote(stock, price, previous, pct_value, trade_time,
                  now.astimezone(timezone(timedelta(hours=9))), meta)
 
@@ -943,12 +958,15 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
             meta = quote.domestic
             # afterMarket 단계의 Naver closePrice는 15:30 KRX 종가가 아닌
             # 시간외 마지막 체결가일 수 있다. 일치하는 시간외 응답을 정규가로 표시 금지.
-            if meta is not None and meta.market_session in ('aftermarket', 'after_market'):
+            if meta is not None and meta.market_session in ('aftermarket', 'after_market',
+                                                             'premarket', 'pre_market'):
+                is_pre = meta.market_session in ('premarket', 'pre_market')
                 try:
                     regular = fetch_yahoo_quote(stock, opener=opener, now=now)
                     local_time = regular.market_time.astimezone(_timezone(stock.timezone_name))
-                    if (local_time.date() == quote.market_time.date()
-                            and (15, 20) <= (local_time.hour, local_time.minute) <= (15, 35)):
+                    date_ok = ((0 < (quote.market_time.date() - local_time.date()).days <= 4)
+                               if is_pre else local_time.date() == quote.market_time.date())
+                    if date_ok and (15, 20) <= (local_time.hour, local_time.minute) <= (15, 35):
                         meta = replace(meta, regular_price=regular.price,
                                        regular_percent=regular.percent,
                                        regular_time=local_time, regular_source='Yahoo Finance')
@@ -957,7 +975,7 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                         _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNVERIFIED ticker=%s reason=market_time',stock.ticker)
                 except StockQuoteError as e:
                     _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNAVAILABLE ticker=%s reason=%s',stock.ticker,e)
-                if meta.regular_price is None:
+                if meta.regular_price is None and not is_pre:
                     # Yahoo 현재가가 장외 세션과 섞인 경우 KRX 당일 일봉의 '종가'를 확인.
                     from .domestic_regular import fetch_daily_regular
                     try:
@@ -1079,7 +1097,7 @@ def _domestic_status_label(item: Quote) -> str:
     freshness = (0 <= delta <= 180)
     server_fresh = (meta.snapshot_time is not None and
                     -30 <= (item.fetched_at - meta.snapshot_time).total_seconds() <= 180)
-    if meta.market_session in ('aftermarket', 'after_market'):
+    if meta.market_session in ('aftermarket', 'after_market','premarket','pre_market'):
         label = ('정규장 종가 별도 확인' if meta.regular_price is not None
                  else '장외 최종체결가 · 정규장 종가 미확인')
     elif meta.market_session in ('premarket', 'pre_market'):
@@ -1152,7 +1170,7 @@ def quote_line(item: Quote, *, source_details: bool = True) -> str:
     """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
     domestic_extra = item.stock.market == '한국' and item.domestic is not None and (
-        item.domestic.market_session in ('aftermarket', 'after_market')
+        item.domestic.market_session in ('aftermarket', 'after_market', 'premarket', 'pre_market')
         and item.domestic.after_market is not None)
     if domestic_extra and item.domestic.regular_price is None:
         body = f'{item.stock.name} : 정규장 종가 미확인'
@@ -1238,7 +1256,8 @@ def compact_quote_line(item: Quote) -> str:
     aliases = {'웨스턴디지털': 'WDC', '웬디': 'WDC', 'SK하이닉스': '하이닉스'}
     name = aliases.get(stock.name, stock.name)
     domestic_extra = (stock.market == '한국' and item.domestic is not None
-                      and item.domestic.market_session in ('aftermarket', 'after_market')
+                      and item.domestic.market_session in ('aftermarket', 'after_market',
+                                                            'premarket', 'pre_market')
                       and item.domestic.after_market is not None)
     if domestic_extra and item.domestic.regular_price is None:
         return f'{name} 정규장 종가 미확인\n' + _domestic_after_text(item)
