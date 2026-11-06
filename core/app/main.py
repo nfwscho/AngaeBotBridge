@@ -97,6 +97,9 @@
 92. 메뉴 선택 00 홈/5분 만료·방/발신자 격리·중복요청·DB 락 외부 시세 조회·로그·Android 출력 기능을 그대로 유지한다.
 93. 메뉴에서 1~8번 종목 분석을 선택한 결과 화면도 0을 눌러 이전 시세/분석 메뉴로 복귀하며 00으로 홈으로 돌아간다.
 94. 부동산 실거래 조회·지역 안내 역시 메뉴 선택 시 직전 부동산 메뉴를 보관하여 0으로 복귀하고 별도의 DB/로그를 추가하지 않는다.
+95. 메모리7 및 모든 사용자 관심그룹(반도체·미국시총10 포함)은 기존 짧은 시세 화면을 기본으로 하고 99번 선택에 한해 현재 그룹의 상세 출처·장외 체결·정규 종가를 재조회한다.
+96. 주식 메뉴의 기존 1~6번을 보존하고 전용 메모리7 상세 7번을 제거하며 99/0/00 선택은 공통 메뉴 상태·로그에서 처리한다.
+97. 99 그룹 상세는 이전 화면이 동일 그룹 시세표일 때만 실행하고 개인 그룹 소유자·조회 권한을 다시 확인하며 DB/인증/Android 하단 정보는 보존한다.
 """
 from __future__ import annotations
 
@@ -403,6 +406,22 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     if selection_menus.open_readonly_result(
                             request.room, request.sender, previous=selection_previous):
                         # 종목 분석 본문과 기존 UI 문자열을 변경하지 않고 0/00 선택만 활성화한다.
+                        stock_menu_active = True
+                elif request.command in {"주식", "메뉴"} and resolved_argument.startswith('상세시세 '):
+                    # 사용자 그룹의 실제 시세표에서 99를 입력한 경우에만 상세조회 허용.
+                    if not selection_restored and not (selection_previous is not None and
+                             selection_previous.origin.startswith('quotes:group:')):
+                        raise StockQuoteError('상세 시세는 관심그룹 간략 화면에서 99를 입력하세요.')
+                    group_name = resolved_argument.split(' ', 1)[1].strip()
+                    with closing(connect()) as read_db:
+                        stocks = load_group(read_db, request.room, request.sender, group_name)
+                    stock_reply = group_report(group_name, stocks, detailed=True)
+                    if stocks:
+                        if not selection_restored:
+                            selection_menus.open_quotes(
+                                request.room, request.sender, stocks,
+                                back=selection_back, previous=selection_previous,
+                                group_name=group_name, group_view='detail')
                         stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
