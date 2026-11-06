@@ -420,6 +420,13 @@ class StockSelectionMenus:
                                      previous=answer.previous)
                 elif arg == '목록':
                     self.open_groups(db, room, sender, previous=answer.previous)
+                elif arg.startswith('상세시세 '):
+                    name = arg.split(' ', 1)[1]
+                    group = load_group(db, room, sender, name)
+                    if not group:
+                        raise StockQuoteError('빈 관심그룹은 상세조회할 수 없습니다.')
+                    self.open_quotes(room, sender, group, back=answer.back,
+                                     previous=answer.previous, group_name=name, group_view='detail')
                 elif is_group_quote_request(arg):
                     group = load_group(db, room, sender, arg)
                     if not group:
