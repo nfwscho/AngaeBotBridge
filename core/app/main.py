@@ -95,6 +95,8 @@
 90. 메뉴 숫자 0은 직전 화면 상태를 선택기에서 복원하고 메모리7 상세→간략, 분석/설정/날씨/기록/그룹의 상위 이동을 유지한다.
 91. 복원된 시세는 기존 시세 조회 함수로 출력만 재생성하며 선택기 화면 스냅샷을 덮어쓰지 않아 연속 0으로 단계별 복귀할 수 있다.
 92. 메뉴 선택 00 홈/5분 만료·방/발신자 격리·중복요청·DB 락 외부 시세 조회·로그·Android 출력 기능을 그대로 유지한다.
+93. 메뉴에서 1~8번 종목 분석을 선택한 결과 화면도 0을 눌러 이전 시세/분석 메뉴로 복귀하며 00으로 홈으로 돌아간다.
+94. 부동산 실거래 조회·지역 안내 역시 메뉴 선택 시 직전 부동산 메뉴를 보관하여 0으로 복귀하고 별도의 DB/로그를 추가하지 않는다.
 """
 from __future__ import annotations
 
@@ -303,13 +305,15 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         kind, district, apartment = parse_transaction_query(
                             read_db, request.room, request.sender, resolved_argument)
                     stock_reply = transaction_report(kind, district, apartment)
-                    selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                    selection_menus.open_record_sector(request.room, request.sender, "부동산",
+                                                      previous=selection_previous)
                     stock_reply += "\n※ 부 3~5 재조회 · 0 이전 · 00 홈"
                     stock_menu_active = True
                 elif request.command == "메뉴" and resolved_argument == "실거래설정 안내":
                     with closing(connect()) as read_db:
                         stock_reply = region_help(read_db, request.room, request.sender)
-                    selection_menus.open_record_sector(request.room, request.sender, "부동산")
+                    selection_menus.open_record_sector(request.room, request.sender, "부동산",
+                                                      previous=selection_previous)
                     stock_menu_active = True
                 elif request.command in {"메뉴", "날씨"} and resolved_argument.startswith("날씨조회 "):
                     with closing(connect()) as read_db:
@@ -395,6 +399,11 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 if stock is None:
                                     raise invalid_name
                             stock_reply = individual_report(fetch_history(stock))
+                    # 이전 번호 선택의 시세/분석 목록을 0으로 복원. 본문/가격은 저장하지 않는다.
+                    if selection_menus.open_readonly_result(
+                            request.room, request.sender, previous=selection_previous):
+                        stock_reply += '\n※ 0 이전 · 00 홈'
+                        stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
                         stocks = load_group(read_db, request.room, request.sender, resolved_argument.strip())
