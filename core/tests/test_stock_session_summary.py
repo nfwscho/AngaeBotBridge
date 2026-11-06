@@ -9,6 +9,7 @@
 7. 상세 보기에서 한국 장후 정규장 대비 및 전일비의 기준을 명시하고 검증된 정규 종가를 제공한다.
 8. 모든 검사는 네트워크, 실제 SQLite, Android Bridge, .env, AI 설정, 운영 로그에 영향을 주지 않는 모의 데이터만 사용한다.
 9. 구형 Naver 정규장 15:30 값과 overMarketPriceInfo를 별도로 제공한 경우에도 현재 장외 세션의 대표값·정규장대비 부호를 검증한다.
+10. 다른 KST 거래일의 장외 데이터를 현재 체결가로 오표시하지 않고 정규장 값으로 복귀한다.
 """
 from __future__ import annotations
 
@@ -30,7 +31,8 @@ ET = ZoneInfo('America/New_York')
 
 
 def korean_after(stock, regular, after, previous, *, known=True, session='장후'):
-    local = datetime(2026, 11, 6, 19, 1, tzinfo=KST)
+    local = (datetime(2026, 11, 6, 19, 1, tzinfo=KST) if session == '장후'
+             else datetime(2026, 11, 6, 8, 25, tzinfo=KST))
     close = datetime(2026, 11, 6, 15, 30, tzinfo=KST)
     prior = datetime(2026, 11, 5, 15, 30, tzinfo=KST)
     after_percent = (after / previous - 1) * 100
@@ -94,6 +96,13 @@ class CompactSessionQuoteTests(unittest.TestCase):
         self.assertNotIn('\n', text)
         self.assertNotIn('▽', text)
         self.assertIn('정규장 기준가 미확인', quote_line(q))
+
+    def test_prior_day_korean_after_does_not_override_current_regular_quote(self):
+        old = korean_after(WATCHLIST[0], 188600, 193800, 201500)
+        stale = replace(old, fetched_at=old.fetched_at + timedelta(days=1))
+        self.assertNotIn('[애프터]', compact_quote_line(stale))
+        self.assertNotIn('193,800원', compact_quote_line(stale))
+        self.assertNotIn('\n', compact_quote_line(stale))
 
     def test_premarket_compares_previous_regular(self):
         q = korean_after(WATCHLIST[0], 188600, 192000, 201500, session='장전')
