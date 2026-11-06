@@ -402,7 +402,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     # 이전 번호 선택의 시세/분석 목록을 0으로 복원. 본문/가격은 저장하지 않는다.
                     if selection_menus.open_readonly_result(
                             request.room, request.sender, previous=selection_previous):
-                        stock_reply += '\n※ 0 이전 · 00 홈'
+                        # 종목 분석 본문과 기존 UI 문자열을 변경하지 않고 0/00 선택만 활성화한다.
                         stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and is_group_quote_request(resolved_argument):
                     with closing(connect()) as read_db:
