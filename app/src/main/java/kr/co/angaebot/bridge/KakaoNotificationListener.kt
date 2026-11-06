@@ -32,6 +32,8 @@
  * 30. '앙개야 모듈' 명시 조회에 한해 동일한 방/발신자의 직전 성공적으로 전송 요청한 답장의 실제 모듈·경로를 출력한다.
  * 31. 모듈 조회만으로 기존 주식 5분 숫자 선택 세션을 닫지 않고 다른 방/발신자에게 이력을 공개하지 않는다.
  * 32. 짧은 🔋/⚡ 잔량만 응답 마지막 한 줄에 표시하고 ACTION_BATTERY_CHANGED 상태 판정/오류·20% 알림을 유지한다.
+ * 33. 고정 섹터 13/19/5종목의 간략보기에서만 99 상세보기와 배터리 잔량을 같은 줄에 합쳐 시각 줄 다음 1줄로 완료한다.
+ * 34. 종목별 1~19 분석, 99 상세, 다른 메뉴/오류/모듈 조회에는 기존 배터리 분리 표기를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -197,7 +199,13 @@ class KakaoNotificationListener : NotificationListenerService() {
             }
             // 실제로 전송할 답장에만 배터리 정보를 추가해 기존 Python/로컬 명령 결과를 수정하지 않는다.
             val replyWithSource = ModuleSourceFormatter.append(response, sourceModule, showDetails = false)
-            val replyWithBattery = BatteryStatusReporter.append(this, replyWithSource)
+            // 고정 주식 섹터 간략 시세만 시각/99+배터리 두 줄로 출력한다.
+            // 상세보기/오류/타 메뉴의 기존 배터리 단독 줄은 변경하지 않는다.
+            val inlineSectorBattery = sourceModule == "core.sector_watchlists" &&
+                response.startsWith("📊 ") &&
+                response.trimEnd().endsWith("99. 🔎 상세보기")
+            val replyWithBattery = BatteryStatusReporter.append(
+                this, replyWithSource, inlineSectorFooter = inlineSectorBattery)
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
             when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {
