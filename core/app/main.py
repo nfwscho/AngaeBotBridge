@@ -100,6 +100,10 @@
 95. 메모리7 및 모든 사용자 관심그룹(반도체·미국시총10 포함)은 기존 짧은 시세 화면을 기본으로 하고 99번 선택에 한해 현재 그룹의 상세 출처·장외 체결·정규 종가를 재조회한다.
 96. 주식 메뉴의 기존 1~6번을 보존하고 전용 메모리7 상세 7번을 제거하며 99/0/00 선택은 공통 메뉴 상태·로그에서 처리한다.
 97. 99 그룹 상세는 이전 화면이 동일 그룹 시세표일 때만 실행하고 개인 그룹 소유자·조회 권한을 다시 확인하며 DB/인증/Android 하단 정보는 보존한다.
+98. 주식 메뉴 7 AI 주도주(13), 8 반도체 및 기자재(19), 9 데센 및 네트워크(5) 고정 읽기 전용 섹터 시세를 제공하며 1~6 기능·위치를 유지한다.
+99. 섹터당 최대 10개 종목을 한 화면에 조회해 카카오톡 전체보기 문제를 줄이고 97 이전 페이지/98 다음 페이지/99 상세를 기존 숫자 메뉴로 처리한다.
+100. 섹터 1~10 종목 분석은 현재 페이지의 실제 티커에 연결하고 0은 이전 시세/페이지, 00은 홈으로 이동하며 5분·인증·jobs/events·배터리/Android 표시를 유지한다.
+101. 섹터는 기존 SQLite stock_groups 및 사용자별 관심그룹 CRUD와 무관한 읽기 전용 목록이며 외부 가격은 각 시세 조회 시 검증된 공급자에서만 가져온다.
 """
 from __future__ import annotations
 
@@ -124,6 +128,7 @@ from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
+from .sector_watchlists import parse_sector_request, get_page as get_sector_page, sector_report
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
                                RecordError, init_records_schema, execute_record_command)
@@ -407,6 +412,19 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                             request.room, request.sender, previous=selection_previous):
                         # 종목 분석 본문과 기존 UI 문자열을 변경하지 않고 0/00 선택만 활성화한다.
                         stock_menu_active = True
+                elif request.command in {"주식", "메뉴"} and resolved_argument.startswith('섹터시세'):
+                    # 고정 섹터는 운영 DB에 저장하지 않고 허용된 키·페이지·보기 모드만 검증한다.
+                    request_sector = parse_sector_request(resolved_argument)
+                    if request_sector is None:
+                        raise StockQuoteError('섹터 시세 명령을 확인하세요.')
+                    key_name, page, detailed = request_sector
+                    stocks = get_sector_page(key_name, page)
+                    stock_reply = sector_report(key_name, page, detailed=detailed)
+                    if not selection_restored:
+                        selection_menus.open_sector_quotes(
+                            request.room, request.sender, key_name, page, detailed,
+                            back=selection_back, previous=selection_previous)
+                    stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and resolved_argument.startswith('상세시세 '):
                     # 사용자 그룹의 실제 시세표에서 99를 입력한 경우에만 상세조회 허용.
                     if not selection_restored and not (selection_previous is not None and
