@@ -49,7 +49,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var logger: LogRepository
-    private var activeJob: ImageJob? = null
+    @Volatile private var activeJob: ImageJob? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -218,7 +218,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
         fun isConnected(): Boolean = connected != null
 
-        fun queueTest(room: String): ImageAutoStart {
+        internal fun queueTest(room: String): ImageAutoStart {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
             return service.beginShare(room)
         }
