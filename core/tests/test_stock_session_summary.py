@@ -79,7 +79,8 @@ class CompactSessionQuoteTests(unittest.TestCase):
     def test_legacy_krx_regular_close_plus_nxt_after_is_positive(self):
         now = datetime(2026, 11, 6, 20, 0, tzinfo=KST)
         close = datetime(2026, 11, 6, 15, 30, tzinfo=KST)
-        aft = AfterMarketQuote(231500, -0.43, now, '장후', 'CLOSE', 'NXT')
+        aft = AfterMarketQuote(231500, (231500 / 231000 - 1) * 100,
+                               now, '장후', 'CLOSE', 'NXT')
         meta = DomesticQuoteMetadata('폴링', 'CLOSE', None, now, aft)
         quote = Quote(WATCHLIST[0], 230000, 231000, -0.43, close, now, domestic=meta)
         rendered = compact_quote_line(quote)
