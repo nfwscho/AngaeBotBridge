@@ -1073,7 +1073,7 @@ def quote_line(item: Quote, *, source_details: bool = True) -> str:
     """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
     body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
-    if item.stock.market == '미국':
+    if item.stock.market == '미국' and item.extended:
         body += ' [정규]'
         extra_us = _us_extended_text(item)
         if extra_us:
@@ -1153,16 +1153,12 @@ def compact_quote_line(item: Quote) -> str:
     arrow = '🔺' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '➖')
     sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
     line = f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
-    if stock.market == '미국':
+    if stock.market == '미국' and item.extended:
         line += ' [정규]'
-        detail = _us_extended_text(item)
-        if detail:
-            line += '\n' + detail
-    elif stock.market == '한국':
+        line += '\n' + _us_extended_text(item)
+    elif stock.market == '한국' and item.domestic is not None and item.domestic.after_market is not None:
         line += ' [정규]'
-        detail = _domestic_after_text(item)
-        if detail:
-            line += '\n' + detail
+        line += '\n' + _domestic_after_text(item)
     return line
 
 
