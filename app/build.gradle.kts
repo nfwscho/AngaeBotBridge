@@ -29,6 +29,8 @@
 // 28. 부동산 실거래가 단축 조회 v0.4.14(versionCode 18)는 같은 앱 ID·서명·데이터·UI·로그·배터리를 보존한다.
 // 29. 이미지 MIME 진단 및 안전한 테스트 사진 전송 v0.4.15(versionCode 19): 별도 권한 추가 없이 기존 앱 데이터/명령/텍스트 ReplyManager/로그를 보존한다.
 // 30. 카카오톡 이미지 실제 수신은 S20+ 현장 검증에 맡기며 미지원 알림은 기존 텍스트 경로로 안내한다.
+// 31. v0.4.16(versionCode 20) 접근성 공유 실험은 별도 사용자 승인/기본 OFF, 일치 방·사진 확인 실패 시 전송 차단을 추가한다.
+// 32. 기존 텍스트 알림 답장·기존 이미지 MIME 진단·전체 DB/메뉴/배터리/Android UI 요소·Core API를 보존한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -42,8 +44,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.4.15"
+        versionCode = 20
+        versionName = "0.4.16"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
