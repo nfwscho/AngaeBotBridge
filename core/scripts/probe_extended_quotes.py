@@ -11,6 +11,7 @@
 9. 응답 가격·개인정보·사용자 토큰을 기록하지 않으며 기존 한국 삼성전자·미국 MU 양쪽 경로 진단을 삭제하지 않는다.
 10. NYSE .N 폴링 응답이 빈 경우 basic .N과 bare 티커만 제한적으로 확인하고 JSON 루트 키·항목 개수만 출력한다.
 11. 나머지 허용 NYSE 종목의 bare-code 공개 폴링이 실제 종목을 반환하는지 역시 가격/토큰 없이 항목 개수와 종목코드만 기록한다.
+12. 일부 NYSE ORCL/ANET/DELL 폴링의 datas=[]인 경우 사용할 수 있는 basic bare-code 응답을 실제 GitHub 네트워크로 확인한다.
 """
 from __future__ import annotations
 
@@ -44,6 +45,9 @@ ENDPOINTS = (
     ('US_DELL_NAQ', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=DELL'),
     ('US_TSM_BASIC', 'https://stock.naver.com/api/securityService/stock/TSM/basic'),
     ('US_GLW_BASIC', 'https://stock.naver.com/api/securityService/stock/GLW/basic'),
+    ('US_ORCL_BASIC', 'https://stock.naver.com/api/securityService/stock/ORCL/basic'),
+    ('US_ANET_BASIC', 'https://stock.naver.com/api/securityService/stock/ANET/basic'),
+    ('US_DELL_BASIC', 'https://stock.naver.com/api/securityService/stock/DELL/basic'),
 )
 
 
