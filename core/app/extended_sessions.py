@@ -10,6 +10,8 @@
 8. 공급자 실패/HTTP 제한은 기존 정규장 시세, DB, 인증, AI, 로그, 관심그룹, Android 배터리/UI에 영향을 주지 않는다.
 9. 자동주문·상시 모니터링·추가 API 키·새 백그라운드 작업은 도입하지 않는다.
 10. 단위 테스트를 위해 시각·HTTP opener·기준 정규장 시세를 주입한다.
+11. 미국 프리장 초반 1일 차트가 전 거래일만 보유할 수 있으므로 Yahoo 5거래일 1분봉으로 최신 세션 거래를 검색한다.
+12. 5거래일 분봉의 최대 수량과 응답 크기를 제한하고 당일 세션의 검증된 분봉만 추출해 오래된 가격을 재사용하지 않는다.
 """
 from __future__ import annotations
 
@@ -101,7 +103,7 @@ def parse_yahoo(stock, payload: dict, regular, *, now: datetime) -> tuple[Sessio
         closes = bars['close']
         volumes = bars['volume']
         if not (isinstance(stamps, list) and isinstance(closes, list) and isinstance(volumes, list)
-                and len(stamps) == len(closes) == len(volumes) and len(stamps) <= 3000):
+                and len(stamps) == len(closes) == len(volumes) and len(stamps) <= 6000):
             return ()
     except (KeyError, IndexError, TypeError, ValueError):
         return ()
@@ -166,7 +168,7 @@ def fetch_yahoo(stock, regular, *, opener, now: datetime, timeout: float,
     from .market import _URLS
     from urllib.parse import quote
     uri = (_URLS[0] + quote(stock.ticker, safe='.') +
-           '?range=1d&interval=1m&includePrePost=true')
+           '?range=5d&interval=1m&includePrePost=true')
     req = Request(uri, headers={'User-Agent': user_agent, 'Accept': 'application/json'},
                   method='GET')
     with opener(req, timeout=timeout) as response:
