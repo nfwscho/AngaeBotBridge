@@ -12,6 +12,8 @@
 10. 구형 97/98 숫자 경로는 한 페이지 섹터에서 거부하며 19개 전부 실제 티커를 선택할 수 있는지 검증한다.
 11. AI·반도체·데센의 간략 종목 목록 직후 정확히 2줄(📡 시각/99 상세)을 확인하고 별도 지연·분석 문구를 출력하지 않는다.
 12. 조회 실패 원인은 새 줄을 추가하지 않고 시각 줄에 합쳐 기존 오류 건수와 조회 불가 표시를 보존한다.
+13. 반도체주 시세는 사용자 지정 19종목(KR 2/JP 1/US 16) 순서와 EWY/DRAM ETF를 정확히 구별해 조회한다.
+14. 주식 홈 1~8 선택 순서와 실제 섹터·미국시총10 연결을 검증하고 기존 메모리7은 직접 명령에서 유지한다.
 """
 from __future__ import annotations
 
@@ -49,8 +51,9 @@ class SectorCatalogTests(unittest.TestCase):
     def test_counts_order_and_verified_tickers(self):
         self.assertEqual(PAGE_SIZE, 19)
         self.assertEqual([(s.key, len(s.stocks)) for s in SECTORS],
-                         [('ai', 13), ('semi', 19), ('dc', 5)])
+                         [('chip', 19), ('ai', 13), ('semi', 19), ('dc', 5)])
         expected = {
+            'chip': ('005930.KS 000660.KS MU SNDK 285A.T WDC STX SKHY EWY DRAM NVDA TSM AMD INTC AVGO MRVL ARM QCOM ASML').split(),
             'ai': ('NVDA AAPL MSFT GOOGL AMZN META TSLA PLTR NOW CRM ORCL IBM SPCX').split(),
             'semi': ('ARM AVGO MRVL QCOM AMD INTC TSM TXN MU SKHY ASML AMAT LRCX KLAC CBRS SIMO SNDK STX WDC').split(),
             'dc': ('LITE ANET VRT DELL GLW').split(),
@@ -58,17 +61,19 @@ class SectorCatalogTests(unittest.TestCase):
         for sector in SECTORS:
             with self.subTest(sector=sector.key):
                 self.assertEqual([s.ticker for s in sector.stocks], expected[sector.key])
-                self.assertTrue(all(s.currency == 'USD' and s.market == '미국'
-                                    for s in sector.stocks))
+                self.assertEqual(len([s for s in sector.stocks if s.market == '한국']), 2 if sector.key == 'chip' else 0)
+                self.assertEqual(len([s for s in sector.stocks if s.market == '일본']), 1 if sector.key == 'chip' else 0)
+                self.assertTrue(all(s.currency == 'USD' for s in sector.stocks if s.market == '미국'))
         self.assertEqual([s.name for s in get_page('ai', 1)][-3:],
                          ['오라클', 'IBM', '스페이스X'])
         self.assertEqual([s.name for s in get_page('semi', 1)][14], '세레브라스')
 
     def test_pages_and_rejected_injected_arguments(self):
-        self.assertEqual([page_count(k) for k in ('ai', 'semi', 'dc')], [1, 1, 1])
+        self.assertEqual([page_count(k) for k in ('chip', 'ai', 'semi', 'dc')], [1, 1, 1, 1])
         self.assertEqual(len(get_page('semi', 1)), 19)
         self.assertEqual(len(get_page('ai', 1)), 13)
         self.assertEqual(len(get_page('dc', 1)), 5)
+        self.assertEqual(len(get_page('chip', 1)), 19)
         for arg in ('섹터시세 ai 0 간략', '섹터시세 ai 2 상세', '섹터시세 ai 3 상세',
                     '섹터시세 ai 1 매수', '섹터시세 ../../x 1 간략',
                     '섹터시세 dc 2 간략', '섹터시세 semi 1 전체'):
@@ -137,16 +142,18 @@ class SectorCatalogTests(unittest.TestCase):
 
     def test_old_menu_choices_and_source_module(self):
         choices = StockSelectionMenus._stock_choices()
-        self.assertEqual(len(choices), 9)
-        self.assertEqual([c.label for c in choices[6:]],
-                         ['AI 주도주 (13종목)', '반도체 및 기자재 (19종목)',
-                          '데센 및 네트워크 (5종목)'])
-        for i, key in enumerate(('ai','semi','dc'),start=7):
+        self.assertEqual(len(choices), 8)
+        self.assertEqual([c.label for c in choices], [
+            '반도체주 시세', '미국 시총10 시세', 'AI 주도주',
+            '반도체 및 기자재', '데센 및 네트워크',
+            '최근 사용한 주식 조회', '관심종목 목록', '종목별 분석',
+        ])
+        for i, key in ((1,'chip'),(3,'ai'),(4,'semi'),(5,'dc')):
             self.assertEqual(choices[i-1].command_argument, sector_argument(key,1,False))
+        self.assertEqual(choices[1].command_argument, '미국시총10')
         tree = StockSelectionMenus.menu_tree()
-        self.assertIn('1-7. AI 주도주 (13종목)',tree)
-        self.assertIn('1-8. 반도체 및 기자재 (19종목)',tree)
-        self.assertIn('1-9. 데센 및 네트워크 (5종목)',tree)
+        for i, choice in enumerate(choices, start=1):
+            self.assertIn(f'1-{i}. {choice.label}', tree)
         self.assertEqual(module_for('메뉴','선택 99','📊 AI 주도주 (13종목)'),
                          'core.sector_watchlists')
 
@@ -162,7 +169,7 @@ class SectorMenuUnitTests(unittest.TestCase):
 
     def test_sector_98_99_97_and_zero_previous_page(self):
         self.menu.open('방','나')
-        first=self.menu.choose(self.db,'방','나','7')
+        first=self.menu.choose(self.db,'방','나','3')
         self.assertEqual(first.execute_argument,sector_argument('ai',1,False))
         self.menu.open_sector_quotes('방','나','ai',1,previous=first.previous)
         self.assertEqual(self.menu.choose(self.db,'방','나','9').execute_argument,'분석 NOW')
@@ -218,8 +225,8 @@ class SectorAPITests(unittest.TestCase):
                    f"📊 {k} {p} {'상세' if detailed else '간략'}"):
             opened=self.post('메뉴').json()
             self.assertTrue(opened['ok'])
-            self.assertIn('7. AI 주도주',opened['reply'])
-            first=self.post('선택 7').json()
+            self.assertIn('3. AI 주도주',opened['reply'])
+            first=self.post('선택 3').json()
             self.assertTrue(first['menu_active'])
             self.assertEqual(first['module_source'],'core.sector_watchlists')
             self.assertEqual(first['reply'],'📊 ai 1 간략')
@@ -237,7 +244,7 @@ class SectorAPITests(unittest.TestCase):
     def test_semiconductor_last_page_and_numeric_stock_analysis(self):
         with patch('app.main.sector_report',return_value='📊 반도체 및 기자재 시세'):
             self.assertTrue(self.post('메뉴').json()['ok'])
-            self.assertTrue(self.post('선택 8').json()['ok'])
+            self.assertTrue(self.post('선택 4').json()['ok'])
             self.assertFalse(self.post('선택 98').json()['ok'])
         with patch('app.main.fetch_history') as history, patch(
                 'app.main.individual_report',return_value='세레브라스 분석'):
@@ -246,29 +253,29 @@ class SectorAPITests(unittest.TestCase):
             self.assertEqual(chosen['reply'],'세레브라스 분석')
             self.assertEqual(history.call_args.args[0].ticker,'CBRS')
         with patch('app.main.sector_report',return_value='📊 반도체 및 기자재 시세'):
-            self.assertTrue(self.post('경로 주식 8').json()['ok'])
+            self.assertTrue(self.post('경로 주식 4').json()['ok'])
         with patch('app.main.fetch_history') as history, patch(
-                'app.main.individual_report',return_value='웬디 분석'):
+                'app.main.individual_report',return_value='WDC 분석'):
             chosen=self.post('선택 19').json()
             self.assertTrue(chosen['ok'],chosen)
             self.assertEqual(history.call_args.args[0].ticker,'WDC')
 
     def test_direct_jump_and_dc_no_next_page(self):
         with patch('app.main.sector_report',return_value='📊 데센 및 네트워크 시세') as renderer:
-            resp=self.post('경로 주식 9').json()
+            resp=self.post('경로 주식 5').json()
             self.assertTrue(resp['ok'])
             renderer.assert_called_once()
             self.assertFalse(self.post('선택 98').json()['ok'])
             self.assertFalse(self.post('선택 97').json()['ok'])
             self.assertTrue(self.post('선택 99').json()['ok'])
         with patch('app.main.sector_report',return_value='🔎 AI 주도주 상세 보기') as renderer:
-            hop=self.post('경로 주식 7 99').json()
+            hop=self.post('경로 주식 3 99').json()
             self.assertTrue(hop['ok'],hop)
             self.assertTrue(renderer.call_args.kwargs.get('detailed'))
             self.assertEqual(renderer.call_args.args[:2],('ai',1))
         with patch('app.main.fetch_history') as history, patch(
                 'app.main.individual_report',return_value='WDC 분석'):
-            chosen=self.post('경로 주식 8 19').json()
+            chosen=self.post('경로 주식 4 19').json()
             self.assertTrue(chosen['ok'],chosen)
             self.assertEqual(history.call_args.args[0].ticker,'WDC')
 
