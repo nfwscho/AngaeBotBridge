@@ -177,7 +177,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
                  ('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.')]), 8)
         self.assertLessEqual(len(report), 430)
         self.assertLessEqual(len(lines), 15)
-        self.assertTrue(any(line == '9. 🔎 상세보기' for line in lines))
+        self.assertTrue(any(line == '99. 🔎 상세보기' for line in lines))
         self.assertEqual(len([line for line in lines if line.startswith('📡 ')]), 1)
         self.assertNotIn('[프리]',report)
         self.assertNotIn('[애프터]',report)
@@ -192,14 +192,14 @@ class CompactSessionQuoteTests(unittest.TestCase):
         self.assertIn('1. 삼성전자 19.4만 🔺+2.76% A', brief)
         self.assertIn('3. 마이크론 $707.11 🔺+7.73% P', brief)
         self.assertNotIn('   └', brief)
-        self.assertIn('9. 🔎 상세보기', brief)
+        self.assertIn('99. 🔎 상세보기', brief)
         long = memory7_report(fetcher=fetcher, use_cache=False, detailed=True)
         self.assertIn('🔎 메모리7 시세 상세 보기', long)
         self.assertIn('1. 삼성전자 : 188,600원', long)
         self.assertIn('   └ 시간외(거래소 미확인) 장후 193,800원', long)
         self.assertIn('   └ 프리 $707.11', long)
         self.assertIn('시세 출처 · 기준시각:', long)
-        self.assertIn('9. ↩ 간략보기', long)
+        self.assertIn('99. ↩ 간략보기', long)
 
     def test_command_dispatch_to_readonly_detailed_view(self):
         with patch('app.market.memory7_report', return_value='detail') as rendering:
