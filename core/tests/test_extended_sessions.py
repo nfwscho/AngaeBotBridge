@@ -14,6 +14,7 @@
 12. 네이버 해외 프리장 결과가 확인되면 Yahoo 추가 조회 없이 해당 체결가를 표시하는 실제 연결을 검증한다.
 13. 네이버 국내 장외 closePrice를 KRX 종가로 표시하지 않고 Yahoo 정규가가 명시 확인된 때만 분리한다.
 14. Yahoo 정규 종가가 차단됐을 때 KRX 당일 일봉만 정규가로 복구하고 어제 일봉은 거절하는 검증을 추가한다.
+15. 네이버 공개 해외 폴링이 빈 응답이면 basic으로 복구하고 403/429일 때 동일 호스트 재시도를 금지한다.
 """
 from __future__ import annotations
 
@@ -215,6 +216,36 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertEqual(fetched.price, 100.0)
         self.assertEqual(fetched.extended[0].session, '프리')
         self.assertIn('프리 $101.50', compact_quote_line(fetched))
+
+    def test_naver_us_basic_fallback_after_empty_polling(self):
+        early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
+        base = Quote(WATCHLIST[2], 100, 98, 2,
+                     datetime(2026, 11, 5, 16, tzinfo=ET), early)
+        payload = {'reutersCode': 'MU.O', 'marketSessionType': 'preMarket',
+                   'closePrice': '101.75', 'localTradedAt': '2026-11-06T04:14:00-05:00'}
+        calls = []
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            return _Response({'datas': []} if 'polling/' in req.full_url else payload)
+        got = fetch_naver_extended(WATCHLIST[2], base, opener=opener, now=early,
+                                   timeout=2.0, max_bytes=180000, user_agent='Test')
+        self.assertEqual([item.price for item in got], [101.75])
+        self.assertEqual(len(calls), 2)
+        self.assertIn('/api/securityService/stock/MU.O/basic', calls[1])
+
+    def test_naver_us_403_respects_rate_limit_and_regular_quote(self):
+        from urllib.error import HTTPError
+        early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
+        base = Quote(WATCHLIST[2], 100, 98, 2,
+                     datetime(2026, 11, 5, 16, tzinfo=ET), early)
+        calls = []
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            raise HTTPError(req.full_url, 403, 'Forbidden', {}, None)
+        with self.assertRaisesRegex(ValueError, 'HTTP 403'):
+            fetch_naver_extended(WATCHLIST[2], base, opener=opener, now=early,
+                                 timeout=2.0, max_bytes=180000, user_agent='Test')
+        self.assertEqual(len(calls), 1)
 
     def test_naver_us_rejects_wrong_or_unverified_inputs(self):
         early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
