@@ -1,14 +1,14 @@
 /*
- * 앙개봇 카카오톡 실제 이미지 자동전송 UI 판단 정책 — 전체 기능/안전성 상세 주석
- * 1. 기존 NotificationListener/RemoteInput 텍스트 자동응답과 독립된 사진 공유 화면 판단만 수행한다.
- * 2. 사용자가 허용한 정확한 채팅방 이름을 UI 텍스트와 일치 비교한다. 부분 일치나 다른 방은 선택하지 않는다.
- * 3. 사진 공유 대상 선택 화면이라는 단서와 유일한 클릭 가능한 방 이름이 함께 확인될 때만 방 선택을 허용한다.
- * 4. 이어지는 확인 단계도 같은 방 이름과 유일한 보내기 버튼, 사진 첨부 화면 단서가 동시에 있어야 클릭을 허용한다.
- * 5. 화면 정보가 누락/중복/모호하거나 잠금 등으로 중단될 때는 아무 버튼도 누르지 않는다.
- * 6. 모든 판단은 순수 Kotlin이며 서버/카카오톡/SQLite/설정/로그/이미지 데이터에 직접 접근하지 않는다.
- * 7. 이 정책의 성공은 접근성 조작 요청 판단일 뿐 실제 카카오톡 전송 성공 증거는 아니다.
+ * 앙개봇 Android 카카오톡 이미지 자동전송 UI 판단 정책 — 전체 기능/안전성
+ * 1. 원래 ACTION_SEND로 앱 전용 PNG를 카카오톡에 공유하는 기능을 보존한다.
+ * 2. 공유 대상 선택에서는 정확한 허용 방 이름 1개와 공유 화면 제목, 클릭 가능한 수신 항목을 확인한다.
+ * 3. 수신 방을 실제로 선택한 후에만 이미지 전송 버튼을 검사하며 요청 전에 모든 검증 정보를 다시 확인한다.
+ * 4. 카카오톡 사진 확인 화면에서 방 이름이 숨겨져도 앞 단계의 정확한 수신 방 선택 기록을 보존한다.
+ * 5. 선택된 방이 보이는 경우 또는 사진 미리보기/미디어 확인 표시가 보이는 경우에만 전송한다.
+ * 6. 이름 중복, 다른 방, 이미지 근거 없음, 버튼 모호함, 단계 미검증, 시간 제한 등은 모두 WAIT로 처리한다.
+ * 7. 기존 텍스트 알림 ReplyManager, Python Core/DB/UI/로그·허용목록은 변경하지 않는다.
+ * 8. 이 순수 Kotlin 정책은 실제 카카오톡 수신을 증명하지 않으며 UI 실기기 검증을 요구한다.
  */
-
 package kr.co.angaebot.bridge
 
 internal enum class ImageUiStage { PICK_ROOM, CONFIRM_IMAGE }
@@ -17,27 +17,34 @@ internal enum class ImageUiAction { WAIT, CLICK_ROOM, CLICK_SEND }
 internal data class ImageUiSnapshot(
     val visibleLabels: List<String>,
     val clickableRoomCount: Int,
-    val clickableSendCount: Int
+    val clickableSendCount: Int,
+    val selectedRoomVerified: Boolean = false,
+    val afterRoomClick: Boolean = false,
+    val largeImagePreviewVisible: Boolean = false,
+    val explicitSendControlVisible: Boolean = false
 )
 
 internal object ImageUiPolicy {
     private val pickerLabels = setOf("채팅방", "대화방", "친구", "공유", "전송 대상", "보낼 대상")
-    private val mediaLabels = setOf("사진", "이미지", "첨부", "사진 전송", "사진 보내기")
-    private val sendLabels = setOf("전송", "보내기", "확인")
+    private val mediaLabels = setOf("사진", "이미지", "첨부", "사진 전송", "사진 보내기", "미리보기", "이미지 미리보기")
+    private val sendLabels = setOf("전송", "전송하기", "보내기", "사진 보내기", "이미지 보내기", "사진 전송", "Send", "Send photo")
 
     fun action(stage: ImageUiStage, exactRoom: String, ui: ImageUiSnapshot): ImageUiAction {
         if (exactRoom.isBlank() || exactRoom.length > 100) return ImageUiAction.WAIT
         val labels = ui.visibleLabels.map { it.trim() }
-        if (labels.count { it == exactRoom } != 1) return ImageUiAction.WAIT
+        val exactRoomCount = labels.count { it == exactRoom }
+        if (exactRoomCount > 1) return ImageUiAction.WAIT
         return when (stage) {
             ImageUiStage.PICK_ROOM ->
-                if (ui.clickableRoomCount == 1 && labels.any { it in pickerLabels })
+                if (exactRoomCount == 1 && ui.clickableRoomCount == 1 && labels.any { it in pickerLabels })
                     ImageUiAction.CLICK_ROOM else ImageUiAction.WAIT
-            ImageUiStage.CONFIRM_IMAGE ->
-                if (ui.clickableSendCount == 1 &&
-                    labels.any { it in mediaLabels } &&
-                    labels.any { it in sendLabels })
-                    ImageUiAction.CLICK_SEND else ImageUiAction.WAIT
+            ImageUiStage.CONFIRM_IMAGE -> {
+                if (!ui.selectedRoomVerified || !ui.afterRoomClick || ui.clickableSendCount != 1) return ImageUiAction.WAIT
+                val sendExplicit = ui.explicitSendControlVisible || labels.any { it in sendLabels }
+                val mediaConfirmed = exactRoomCount == 1 ||
+                    ui.largeImagePreviewVisible || labels.any { it in mediaLabels }
+                if (sendExplicit && mediaConfirmed) ImageUiAction.CLICK_SEND else ImageUiAction.WAIT
+            }
         }
     }
 }
