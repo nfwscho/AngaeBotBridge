@@ -17,6 +17,7 @@
 15. 2026-11-06 KRX 장마감 기준가 누락을 해결하기 위해 삼성전자·SK하이닉스의 일봉 endpoint 응답 형태·거래일·필드명만 일시 진단하고 원문 가격은 기록하지 않는다.
 16. 2026-11-06 공시된 KRX 종가와 검증값 동일 여부만 불리언으로 확인하고 원본 체결가/가격은 GitHub 로그에 남기지 않는다.
 17. 정규장 종가/시간외 최종가 필드 분리를 위해 별도 Naver KRX 종목 상세·일별시세·스냅샷·모바일 기본 API 응답의 최상위 및 중첩 *필드명*만 일시 진단한다.
+18. KRX 정규장 15:30 시세를 확인할 수 있는 공개 5분봉/분봉 엔드포인트 응답의 시계열 구조·행 키만 점검하고 실제 가격은 인쇄하지 않는다.
 """
 from __future__ import annotations
 
@@ -37,6 +38,10 @@ ENDPOINTS = (
     ('KR_HYNIX_SNAPSHOT', 'https://api.stock.naver.com/api/stockSecurity/items/v2/domestic/000660/price-snapshot'),
     ('KR_SAMSUNG_FRONT', 'https://m.stock.naver.com/front-api/stock/domestic/basic?code=005930&endType=stock'),
     ('KR_HYNIX_FRONT', 'https://m.stock.naver.com/front-api/stock/domestic/basic?code=000660&endType=stock'),
+    ('KR_SAMSUNG_MINUTE', 'https://m.stock.naver.com/front-api/chart/domestic/stock/end?code=005930&chartInfoType=item&scriptChartType=candleMinuteFive'),
+    ('KR_HYNIX_MINUTE', 'https://m.stock.naver.com/front-api/chart/domestic/stock/end?code=000660&chartInfoType=item&scriptChartType=candleMinuteFive'),
+    ('KR_SAMSUNG_MIN2', 'https://api.stock.naver.com/chart/domestic/item/005930?periodType=minuteCandle'),
+    ('KR_HYNIX_MIN2', 'https://api.stock.naver.com/chart/domestic/item/000660?periodType=minuteCandle'),
 )
 # 기존 CI에서는 원래 세 개의 진단 요청만 실행한다. 확대 실측은 --full 명령으로
 # 명시적으로 선택한 경우에만 수행해 요청 제한/공급자 부하/CI 지연을 방지한다.
@@ -105,6 +110,18 @@ def main(*, full: bool = False):
                                        if isinstance(extended, dict) and k in extended)
             root_keys = ','.join(list(payload.keys())[:8]) if isinstance(payload, dict) else ''
             item_count = len(rows) if isinstance(rows, list) else 0
+            if label.startswith('KR_') and label.endswith(('_MINUTE','_MIN2')):
+                value = payload.get('result', payload.get('data', payload)) if isinstance(payload, dict) else payload
+                if isinstance(value, dict):
+                    summary = {k: type(v).__name__ for k, v in value.items()}
+                    samples = next((v for v in value.values() if isinstance(v, list)), [])
+                else:
+                    summary = {}
+                    samples = value if isinstance(value, list) else []
+                sample = samples[-1] if samples else None
+                print(f'{label}_STRUCT: payload={type(payload).__name__} '
+                      f'value={type(value).__name__} types={summary} '
+                      f'rows={len(samples)} sample_fields={list(sample.keys()) if isinstance(sample, dict) else type(sample).__name__}')
             if label.startswith('KR_') and label.endswith(('_DETAIL','_SISE','_SNAPSHOT','_FRONT')):
                 # 타사 공개 JSON의 원본 값은 출력하지 않고 필드 이름과
                 # 응답 구조만 확인해 별도 KRX 종가 필드를 찾는다.
@@ -113,7 +130,7 @@ def main(*, full: bool = False):
                 if isinstance(payload, dict):
                     for key, val in list(payload.items())[:15]:
                         if isinstance(val, dict):
-                            nested.append(key + ': ' + ','.join(list(val.keys())[:30]))
+                            nested.append(key + ': ' + ','.join(list(val.keys())[:100]))
                         elif isinstance(val, list):
                             sample = next((x for x in val if isinstance(x, dict)), {})
                             nested.append(key + '[dict]: ' + ','.join(list(sample.keys())[:25]))
