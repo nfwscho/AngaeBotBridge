@@ -1047,7 +1047,8 @@ def _domestic_after_text(item: Quote) -> str:
     arrow = '▲' if aft.percent > 0.00001 else ('▽' if aft.percent < -0.00001 else '－')
     status = '거래 중' if aft.status == 'OPEN' else ('마감' if aft.status == 'CLOSE' else '상태 미확인')
     exchange = 'NXT' if aft.exchange == 'NXT' else '시간외(거래소 미확인)'
-    return (f'   └ {exchange} {aft.session} {_formatted_price(aft.price, item.stock.currency)} '
+    session = '애프터(장후)' if aft.session == '장후' else '프리(장전)'
+    return (f'   └ {exchange} {session} {_formatted_price(aft.price, item.stock.currency)} '
             f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
 
 
@@ -1192,6 +1193,8 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
             line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
             line += ' · 확정 종가'
+        if region == '한국' and any(q.domestic and q.domestic.after_market for q in items):
+            line += ' · 정규 기준가/장외 별도'
         if region == '미국' and any(q.extended for q in items):
             line += ' · 장외 별도·지연 미확인'
         if region == '미국' and any(not q.extended for q in items):
