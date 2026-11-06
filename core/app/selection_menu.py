@@ -54,9 +54,11 @@
 68. 기존 카카오톡 9번은 종목이 9개 이상인 그룹의 9번째 종목 분석에 사용하며 시세 상세 명령과 충돌하지 않는다.
 69. 그룹 상세 조회 명령은 소유 그룹명만 사용하고 0으로 실제 이전 시세표에, 00으로 홈에 복귀하도록 5분 이력·스코프를 유지한다.
 70. 주식 메뉴 7 AI 주도주(13), 8 반도체 및 기자재(19), 9 데센 및 네트워크(5) 고정 읽기 전용 섹터를 기존 1~6번 뒤에 추가한다.
-71. 13·19종목은 10종목 단위 페이지로 나누고 98 다음 페이지/97 이전 페이지/99 상세보기 전환을 별도로 지원한다.
-72. 1~10은 현재 페이지의 정확한 티커 분석, 0은 실제 이전 화면, 00은 홈으로 유지하며 5분·채팅방/발신자 분리·로그를 보존한다.
+71. AI 주도주 13종목, 반도체 및 기자재 19종목, 데센 및 네트워크 5종목 모두 한 화면에 전체를 출력하고 98 다음 버튼은 표시하지 않는다.
+72. 읽기 전용 섹터에서는 1~19번째의 정확한 티커를 분석하고 다른 메뉴의 1~10 제한은 유지하며, 99 상세·0 이전·00 홈·5분·방/발신자 분리·로그를 보존한다.
 73. 섹터 목록은 운영 DB에 등록하지 않는 읽기 전용 상수이며 기존 사용자 그룹 10개×10종목 제한과 CRUD는 유지한다.
+74. 주식 섹터 한 페이지 11~19번은 Android/파이썬 공통 메뉴의 기존 보안 상태 검증 후에만 허용하고 일반 메뉴에는 없는 번호로 거부한다.
+75. 구형 97/98 입력은 하위 호환으로 인식하지만 새 섹터는 모두 한 페이지이므로 앞·뒤 이동 없이 경고하고, 99 상세는 계속 사용한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -285,7 +287,7 @@ class StockSelectionMenus:
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 · 주 7 AI · 주 8 반도체 · 주 9 데센 · 주 분 삼성전자',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
-            '1~10 분석 · 97/98 페이지 · 99 상세 · 0 이전 · 00 홈',
+            '1~19(섹터) 분석 · 99 상세 · 0 이전 · 00 홈',
         ))
 
     @classmethod
@@ -390,15 +392,15 @@ class StockSelectionMenus:
                       root: str, numbers: tuple[str, ...]) -> MenuAnswer:
         """메뉴 점프: 실제 메뉴 정의를 단계별로 따라가며 최종 선택만 실행한다.
 
-        경로 전체는 1~10, 97/98 페이지, 99 상세, 0 이전, 00 홈 중 최대 다섯 단계만 허용한다.
+        경로 전체는 일반 메뉴 1~10/섹터 1~19, 99 상세, 0 이전, 00 홈 중 최대 다섯 단계만 허용한다.
         중간 메모리7/그룹 선택은 실제 시세 HTTP를 중복 호출하지 않고
         기존 정확한 종목 메뉴를 준비한다. 마지막 종목 분석은 main.py가
         기존 인증·dedup·DB 잠금 외부의 조회 루틴으로만 실행한다.
         """
         if not numbers or len(numbers) > 5 or any(
-            re.fullmatch(r'(?:97|98|99|00|10|[0-9])', number) is None for number in numbers
+            re.fullmatch(r'(?:1[1-9]|97|98|99|00|10|[0-9])', number) is None for number in numbers
         ):
-            raise StockQuoteError('메뉴 점프는 1~10·97/98 페이지·99 상세를 최대 5단계로 입력하세요.')
+            raise StockQuoteError('메뉴 점프는 1~19(섹터), 99 상세를 최대 5단계로 입력하세요.')
         if root == '홈':
             answer = self.open_home(room, sender)
         elif root == '주식':
@@ -489,7 +491,7 @@ class StockSelectionMenus:
     def open_sector_quotes(self, room: str, sender: str, key_name: str, page: int,
                            detailed: bool = False, *, back: str = 'menu',
                            previous: 'MenuState | None' = None) -> None:
-        """고정 섹터의 현재 페이지 1~10 분석과 97/98/99 전환만 등록한다."""
+        """고정 섹터의 전체 종목 1~19 분석, 99 상세/간략 및 0 직전 이동을 등록한다."""
         from .sector_watchlists import get_page
         stocks = get_page(key_name, page)
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
@@ -544,8 +546,8 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:97|98|99|00|10|[0-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~10, 섹터 페이지 97/98, 상세 99, 이전 0을 사용하세요.')
+        if re.fullmatch(r'(?:1[1-9]|97|98|99|00|10|[0-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10(섹터 1~19), 상세 99, 이전 0을 사용하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
