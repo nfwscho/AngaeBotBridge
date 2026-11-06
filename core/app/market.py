@@ -80,6 +80,10 @@
 72. 구형 네이버 본장(15:30 확정)가와 별도 시간외 필드를 받는 경우도 현재 거래시간에는 장외 대표값과 정규장대비 상승률을 표시한다.
 73. 시장별 간략 출처 및 최근 거래시각은 실제 선택된 국내 프리/애프터 체결과 미국 세션 체결 시각을 기준으로 표시한다.
 74. 국내 장외 데이터는 현재 KST 거래일과 체결 날짜가 일치할 때만 대표 가격으로 사용해 이전 거래일 값을 당일 프리/애프터로 오표시하지 않는다.
+75. 메모리7과 관심그룹의 한 줄 간략 시세에서 프리·애프터 명칭을 P/A 단일 문자로 표시하여 카카오톡 자동 줄바꿈을 최소화한다.
+76. 메모리7 간략 요약은 공급자 설명을 상세보기로 이동하고 시장별 최신 현지시각 한 줄 및 짧은 주의문만 남겨 카카오톡 전체보기 접힘을 방지한다.
+77. 메모리7 본문 9번 상세보기/상세보기 9번 간략보기는 1~8번 기존 종목분석과 5분 세션을 보존한다.
+78. 미국 정규장 도중에는 이전 프리 체결가가 존재해도 현재 대표가격을 프리로 오표시하지 않는다.
 """
 from __future__ import annotations
 
@@ -1331,15 +1335,13 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
         desired = session_of(et_now)
         if not desired and et_now.weekday() < 5 and et_now.hour >= 20:
             desired = '애프터'
-        verified = [e for e in item.extended
-                    if e.session in ('프리', '애프터')
-                    and e.market_time.date() == et_now.date()]
-        if verified:
-            chosen = max((e for e in verified if e.session == desired), key=lambda e: e.market_time,
-                         default=None)
-            if chosen is None:
+        # 장중(09:30~16:00 ET) 및 장외 이전에는 프리 기록을 대표가격으로 사용하지 않는다.
+        if desired:
+            verified = [e for e in item.extended
+                        if e.session == desired and e.market_time.date() == et_now.date()]
+            if verified:
                 chosen = max(verified, key=lambda e: e.market_time)
-            return chosen.price, chosen.percent, chosen.session
+                return chosen.price, chosen.percent, chosen.session
     return item.price, item.percent, '정규'
 
 
@@ -1359,12 +1361,12 @@ def compact_quote_line(item: Quote) -> str:
     name = aliases.get(stock.name, stock.name)
     value, change, session = _display_session(item)
     price = _compact_price(value, stock.currency, extended=(session != '정규'))
+    suffix = ' P' if session == '프리' else (' A' if session == '애프터' else '')
     if change is None:
         # 정규장 기준가 없이 전일비 하락을 '장후 하락'으로 오표시하지 않는다.
-        return f'{name} {price} [{session}·기준가 미확인]'
+        return f'{name} {price}{suffix} 기준가?'
     arrow = '🔺' if change > 0.00001 else ('▽' if change < -0.00001 else '➖')
     sign = '+' if change > 0.00001 else ('-' if change < -0.00001 else '')
-    suffix = f' [{session}]' if session != '정규' else ''
     return f'{name} {price} {arrow} {sign}{abs(change):.2f}%{suffix}'
 
 
@@ -1423,6 +1425,25 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
     return tuple(lines)
 
 
+def _memory7_brief_clock(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> str:
+    """카카오톡 한 화면용 각국 현지 거래 기준시각. 출처 원문은 상세보기에서만 제공."""
+    regions = (('한국', 'KR'), ('미국', 'US'), ('일본', 'JP'))
+    points = []
+    for country, label in regions:
+        eligible = [item for item in quotes if item is not None and item.stock.market == country]
+        if eligible:
+            latest = max(_latest_market_time(item) for item in eligible)
+            points.append((label, latest.strftime('%m/%d'), latest.strftime('%H:%M')))
+    if not points:
+        return ''
+    days = {day for _label, day, _clock in points}
+    if len(days) == 1:
+        # 대부분의 동시 조회는 날짜가 같으므로 날짜를 한 번만 사용한다.
+        return f'📡 {points[0][1]} ' + ' · '.join(f'{label}{clock}' for label, _, clock in points)
+    # 혼합 거래일의 날짜는 반드시 국가마다 표기한다(하루 차이를 현재가로 오인하지 않음).
+    return '📡 ' + ' · '.join(f'{label}{day} {clock}' for label, day, clock in points)
+
+
 def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
                    use_cache: bool = True, detailed: bool = False) -> str:
     """기본 종목당 1행, 상세 메뉴는 정규/프리/애프터 가격·시각·출처·등락기준 표시."""
@@ -1462,16 +1483,23 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
-    lines.append('')
-    lines.extend(market_source_summary(quotes) if detailed else compact_source_summary(quotes))
     if detailed:
+        lines.append('')
+        lines.extend(market_source_summary(quotes))
         lines.append('※ 장외 등락 기준: 프리=직전 정규장 종가 대비 / 애프터=당일 정규장 종가 대비')
         lines.append('※ 한국 장외 전일비는 별도 표기되며 정규장 대비 상승률과 다를 수 있습니다.')
+    else:
+        # 원래 3개 시장의 장문 출처는 상세보기에서 보존하고 기본 화면은 1행 시각 요약만 남긴다.
+        lines.append('')
+        line = _memory7_brief_clock(quotes)
+        if line:
+            lines.append(line)
     if success < len(WATCHLIST):
-        lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
-    lines.append('※ 무료·지연 가능·실시간 아님')
-    lines.append('※ 5분 내 1~8: 종목 분석')
-    lines.append('※ 주 2: 간략 시세로 돌아가기' if detailed else '※ 주 7: 메모리7 시세 상세 보기')
+        lines.append((f'※ {len(WATCHLIST)-success}종목 조회 실패'
+                      if not detailed else f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.'))
+    lines.append('※ 무료·지연 가능·실시간 아님' if detailed else '※ 무료·지연·실시간 아님')
+    lines.append('※ 5분 내 1~8: 종목 분석' if detailed else '※ 1~8 분석(5분)')
+    lines.append('9. ↩ 간략보기' if detailed else '9. 🔎 상세보기')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
