@@ -13,6 +13,8 @@
 11. 모든 공급자 조회는 고정 HTTPS 호스트·짧은 타임아웃·응답 크기 제한을 사용하고 수집 결과를 DB/운영 로그에 저장하지 않는다.
 12. 기존 인증/메모리7/관심종목 그룹/AI OFF/Android Bridge/배터리/원본 로그·에러 복구 경로를 변경하지 않는다.
 13. 동일 네이버 호스트에서 HTTP 403/429가 확인되면 즉시 중단해 과도한 재시도·휴대폰 응답 지연을 방지한다.
+14. 폴링 응답의 알려진 data/result 중첩 래퍼를 최대 32개 노드까지만 탐색해 실제 체결 객체를 확인한다.
+15. DNS/타임아웃처럼 호스트 전체 연결이 어려운 경우에는 두 번째 API를 시도하지 않는다.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import re
 from datetime import datetime
 from urllib.parse import quote as urlquote
 from urllib.request import Request
+from urllib.error import URLError
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .extended_sessions import SessionPrice, _session_price
@@ -86,24 +89,26 @@ def _records(payload: dict, expected: str):
     """기본 시세와 폴링 데이터 구조 모두 지원하되 신원 필드의 일치를 필수로 한다."""
     if not isinstance(payload, dict):
         return ()
+    queue = [payload]
     candidates = []
-    for key in ('datas', 'data', 'items', 'result'):
-        value = payload.get(key)
-        if isinstance(value, list):
-            candidates.extend(item for item in value if isinstance(item, dict))
-        elif isinstance(value, dict):
-            if expected in value and isinstance(value[expected], dict):
-                candidates.append(value[expected])
-            else:
-                candidates.append(value)
-    candidates.append(payload)
-    result = []
-    for item in candidates:
+    visited = 0
+    while queue and visited < 32:
+        item = queue.pop(0)
+        visited += 1
+        if isinstance(item, list):
+            queue.extend(value for value in item[:30] if isinstance(value, (list, dict)))
+            continue
+        if not isinstance(item, dict):
+            continue
         identifiers = [item.get(k) for k in ('reutersCode', 'symbolCode', 'stockCode', 'itemCode', 'ticker')]
         provided = [str(v).upper() for v in identifiers if isinstance(v, str) and v]
-        if provided and all(v in (expected, expected.split('.')[0]) for v in provided):
-            result.append(item)
-    return tuple(result)
+        if provided and all(value in (expected, expected.split('.')[0]) for value in provided):
+            candidates.append(item)
+        for key in ('datas', 'data', 'items', 'result', expected):
+            value = item.get(key)
+            if isinstance(value, (list, dict)):
+                queue.append(value)
+    return tuple(candidates)
 
 
 def parse_naver_extended(stock, payload: dict, regular, *, now: datetime) -> tuple[SessionPrice, ...]:
@@ -167,8 +172,8 @@ def fetch_naver_extended(stock, regular, *, opener, now: datetime,
                 return result
         except (OSError, TimeoutError, ValueError) as e:
             errors.append(type(e).__name__ + (f' HTTP {e.code}' if hasattr(e, 'code') else ''))
-            if getattr(e, 'code', None) in (403, 429):
-                break  # 권한 거부·요청 제한 시 동일 호스트에 다시 요청하지 않는다.
+            if getattr(e, 'code', None) in (403, 429) or isinstance(e, (TimeoutError, URLError)):
+                break  # 권한 거부·요청 제한·네트워크 장애 시 동일 호스트에 다시 요청하지 않는다.
     if errors:
         raise ValueError('네이버 해외 공개 API 조회 실패: ' + ', '.join(errors))
     return ()
