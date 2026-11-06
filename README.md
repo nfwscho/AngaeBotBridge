@@ -49,7 +49,17 @@ cd D:\\stockproj\\AngaeBotBridge
 .\\deploy-angaebot.ps1 -Branch "feature/real-estate-transactions-20261106" -InstallAndroid
 ```
 
-해당 브랜치의 GitHub Actions 전체 성공을 확인한 뒤 사용하세요. **실제 S20+에서 실행하는 배포 명령이며 여기에서 원격 단말기를 조작하지 않습니다.** 기존 .env·DB·로그 및 Android Bridge의 사용자 설정을 보존합니다.
+해당 브랜치의 GitHub Actions 전체 성공을 확인한 뒤 사용하세요. **실제 S20+에서 실행하는 배포 명령이며 여기에서 원격 단말기를 조작하지 않습니다.** 기존 DB·로그 및 Android Bridge의 사용자 설정을 보존합니다.
+
+**Windows `.env` 자동 동기화(기본 ON):** 배포할 때 Windows 프로젝트의 `core\.env`를 우선 확인하고, 없으면 프로젝트 최상위 `.env`를 찾습니다. 발견된 파일을 SSH/SCP로 비공개 전송하고 S20+ `core/.env`에 **변수 단위로 병합**합니다. `MOLIT_API_KEY` 등 Windows 설정은 추가/갱신하며, **S20+ 기존 `ANGAE_TOKEN`은 절대 덮어쓰지 않으며** S20+에만 있는 설정·주석도 유지합니다. 기존 설정은 배포 중 비공개 권한으로 백업하며, 실패하면 이전 설정과 Python 모듈을 복구합니다. 성공 후 임시 전송본과 백업 파일을 삭제합니다. 발급 키 및 `.env` 내용은 GitHub에 저장하지 않고 콘솔에도 출력하지 않습니다.
+
+**키 추가 방법:** Windows `D:\stockproj\AngaeBotBridge\core\.env` 파일에 `MOLIT_API_KEY=발급된_서비스키`를 저장한 뒤 배포하면 별도의 인증키 설정 명령 없이 S20+에 자동 반영됩니다. 기존 S20+ `ANGAE_TOKEN`을 Windows에서 동일하게 맞출 필요는 없습니다. Windows 파일이 없으면 기존 S20+ 설정을 그대로 사용합니다. 자동 동기화를 하지 않으려면 `-SkipEnvSync` 옵션을 추가하세요.
+
+```powershell
+cd D:\stockproj\AngaeBotBridge
+.\deploy-angaebot.ps1 -Branch "feature/real-estate-transactions-20261106" -InstallAndroid
+# .env 동기화를 원하지 않을 때만: 위 명령에 -SkipEnvSync 추가
+```
 
 ---
 
