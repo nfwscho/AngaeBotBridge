@@ -35,7 +35,7 @@ class MenuTreeUnitTests(unittest.TestCase):
         for i, choice in enumerate(StockSelectionMenus._settings_choices(), 1):
             self.assertIn(f"10-{i}. {choice.label}", tree)
         for i, choice in enumerate(StockSelectionMenus._analysis_choices(), 1):
-            self.assertIn(f"1-6-{i}. {choice.label}", tree)
+            self.assertIn(f"1-8-{i}. {choice.label}", tree)
         for category in CONTENT_ITEMS:
             root = next(i for i, item in enumerate(StockSelectionMenus._home_choices(), 1)
                         if item.page == 'category:' + category)
@@ -49,9 +49,9 @@ class MenuTreeUnitTests(unittest.TestCase):
         self.assertIn("2-1. 최근 메모 목록", tree)
         self.assertIn("3-1. 최근 메모 목록", tree)
         self.assertIn("9-2. 다가오는 일정", tree)
-        self.assertIn("1-1. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
-        self.assertIn("1-5. 관심종목 목록 [본인 관심그룹 목록]", tree)
-        self.assertIn("1-2. 메모리7 현재 시세 [조회 후 종목 선택]", tree)
+        self.assertIn("1-6. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
+        self.assertIn("1-7. 관심종목 목록 [본인 관심그룹 목록]", tree)
+        self.assertIn("1-1. 반도체주 시세 [조회 후 종목 선택]", tree)
         self.assertIn("설 7", tree)
         self.assertNotIn("X-AngaeBot-Token", tree)
 
