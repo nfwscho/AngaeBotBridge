@@ -18,6 +18,7 @@
 16. 2026-11-06 공시된 KRX 종가와 검증값 동일 여부만 불리언으로 확인하고 원본 체결가/가격은 GitHub 로그에 남기지 않는다.
 17. 정규장 종가/시간외 최종가 필드 분리를 위해 별도 Naver KRX 종목 상세·일별시세·스냅샷·모바일 기본 API 응답의 최상위 및 중첩 *필드명*만 일시 진단한다.
 18. KRX 정규장 15:30 시세를 확인할 수 있는 공개 5분봉/분봉 엔드포인트 응답의 시계열 구조·행 키만 점검하고 실제 가격은 인쇄하지 않는다.
+19. 네이버 레거시 SERVICE_ITEM 폴링에서 15:30 현재가 필드 nv가 공식 정규종가와 일치하는지 참/거짓만 점검하고 NXT 시간외 필드와 별도 여부를 검증한다.
 """
 from __future__ import annotations
 
@@ -42,6 +43,8 @@ ENDPOINTS = (
     ('KR_HYNIX_MINUTE', 'https://m.stock.naver.com/front-api/chart/domestic/stock/end?code=000660&chartInfoType=item&scriptChartType=candleMinuteFive'),
     ('KR_SAMSUNG_MIN2', 'https://api.stock.naver.com/chart/domestic/item/005930?periodType=minuteCandle'),
     ('KR_HYNIX_MIN2', 'https://api.stock.naver.com/chart/domestic/item/000660?periodType=minuteCandle'),
+    ('KR_SAMSUNG_LEGACY', 'https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:005930'),
+    ('KR_HYNIX_LEGACY', 'https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:000660'),
 )
 # 기존 CI에서는 원래 세 개의 진단 요청만 실행한다. 확대 실측은 --full 명령으로
 # 명시적으로 선택한 경우에만 수행해 요청 제한/공급자 부하/CI 지연을 방지한다.
@@ -110,6 +113,19 @@ def main(*, full: bool = False):
                                        if isinstance(extended, dict) and k in extended)
             root_keys = ','.join(list(payload.keys())[:8]) if isinstance(payload, dict) else ''
             item_count = len(rows) if isinstance(rows, list) else 0
+            if label.endswith('_LEGACY') and isinstance(payload, dict):
+                areas = payload.get('result', {}).get('areas', [])
+                row = next((r for area in areas if isinstance(area, dict)
+                            for r in area.get('datas', []) if isinstance(r, dict)), {})
+                try:
+                    last_price = float(str(row.get('nv','')).replace(',', ''))
+                except (ValueError, TypeError):
+                    last_price = None
+                expected = {'KR_SAMSUNG_LEGACY':188700,'KR_HYNIX_LEGACY':1132000}[label]
+                print(f'{label}_FIELDS: keys={list(row.keys())[:50]} '
+                      f'cd={row.get("cd")} '
+                      f'regular_close_match={last_price==expected} '
+                      f'market_status={row.get("ms")} over_field={isinstance(row.get("nxtOverMarketPriceInfo"),dict)}')
             if label.startswith('KR_') and label.endswith(('_MINUTE','_MIN2')):
                 value = payload.get('result', payload.get('data', payload)) if isinstance(payload, dict) else payload
                 if isinstance(value, dict):
