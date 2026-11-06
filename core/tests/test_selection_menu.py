@@ -5,6 +5,7 @@
 19. '주 7'에 대응하는 메뉴 경로 주식 7의 직접 실행·정확한 모듈 표기·기존 jobs/events 로그를 검증한다.
 20. 메모리7 결과 화면에서 숫자 9로 간략↔상세 전환하며 원래 1~8 종목 분석·5분 메뉴·인증·중복방지를 유지한다.
 21. 사용자 관심그룹 10종목 번호와 메모리7 전용 숫자 9가 섞이지 않게 검증한다.
+22. 주식 메뉴 경로 2→9를 따라가도 중간에 중복 시세 조회를 하지 않고 마지막 상세보기만 한 번 실행한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -324,6 +325,21 @@ class MenuSelectionAPITests(unittest.TestCase):
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
+
+    def test_direct_jump_stock_two_nine_opens_details_once(self):
+        self.sequence += 1
+        payload = {
+            'request_id': f'menus_{self.sequence:011d}',
+            'command': '메뉴',
+            'argument': '경로 주식 2 9',
+            'room': '방', 'sender': '나',
+        }
+        with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
+            response = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
+            self.assertTrue(response['ok'], response)
+            self.assertEqual(response['module_source'], 'core.market')
+            self.assertTrue(response['menu_active'])
+            renderer.assert_called_once_with('주식','메모리7 상세')
 
     def test_root_menu_memo7_quote_then_eighth_analysis(self):
         with patch('app.main.execute_stock_command',return_value='💾 메모리7 시세 요약'):
