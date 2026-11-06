@@ -14,6 +14,9 @@
 12. 5거래일 분봉의 최대 수량과 응답 크기를 제한하고 당일 세션의 검증된 분봉만 추출해 오래된 가격을 재사용하지 않는다.
 13. 장외 분봉이 비어도 Yahoo chart.meta에 명시된 preMarketPrice/postMarketPrice와 세션별 Unix 체결시각을 검증해 별도 보조 시세로 사용한다.
 14. Yahoo 메타데이터는 가격·시각 모두 필요하고 같은 현지 거래일의 실제 프리/애프터 구간일 때만 허용한다.
+15. 나스닥 보조 장외 데이터는 정규 시세 primaryData의 등락률 필드가 누락돼도 *기존 검증된 정규장 Quote*를 기준으로 독립 수집한다.
+16. 기존 정규 시세 fetch_nasdaq_quote의 가격·등락률 엄격 검증은 변경하지 않고 별도 제한된 Nasdaq secondaryData에서 거래소·시간·USD·세션만 검증한다.
+17. NYSE/나스닥 장외 모두 고정 URL·동일 티커·인증 없는 공개 시세·제한된 응답 크기·타임아웃을 사용하며 로그·DB·캐시·UI·메뉴는 유지한다.
 """
 from __future__ import annotations
 
@@ -166,6 +169,9 @@ def parse_nasdaq(stock, data: dict, regular, *, now: datetime) -> tuple[SessionP
     secondary = data.get('secondaryData')
     if not session or not isinstance(secondary, dict):
         return ()
+    # NYSE/나스닥 모두 USD 상장 종목만 요청한다. 불일치 시 보조 시세를 거부.
+    if secondary.get('currency') not in (None, '', 'USD'):
+        return ()
     raw = secondary.get('lastSalePrice')
     if isinstance(raw, str):
         raw = raw.strip().replace('$', '').replace(',', '')
@@ -184,6 +190,34 @@ def parse_nasdaq(stock, data: dict, regular, *, now: datetime) -> tuple[SessionP
         return ()
     value = _session_price(stock, regular, now, traded, price, session, '나스닥 웹')
     return (value,) if value is not None else ()
+
+
+def fetch_nasdaq_extended(stock, regular, *, opener, now: datetime, timeout: float,
+                          max_bytes: int, user_agent: str) -> tuple[SessionPrice, ...]:
+    """기존 정규 Quote는 유지하고 Nasdaq secondaryData의 프리/애프터만 조회.
+
+    정규 quote.primaryData의 가격·변동률이 미제공이어도 검증된 secondaryData를
+    버리지 않기 위한 별도 읽기 전용 경로. 공개 데이터를 임의 생성하지 않는다.
+    """
+    from .market import _NASDAQ_QUOTE, _US_TICKER_RE
+    if (stock.market != '미국' or stock.currency != 'USD'
+            or not _US_TICKER_RE.fullmatch(stock.ticker)):
+        return ()
+    uri = _NASDAQ_QUOTE.format(ticker=stock.ticker)
+    req = Request(uri, headers={
+        'User-Agent': user_agent, 'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://www.nasdaq.com', 'Referer': 'https://www.nasdaq.com/',
+    }, method='GET')
+    with opener(req, timeout=timeout) as response:
+        raw = response.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ValueError('미국 나스닥 장외 응답 크기 제한')
+    payload = json.loads(raw)
+    data = payload.get('data') if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return ()
+    return parse_nasdaq(stock, data, regular, now=now)
 
 
 def fetch_yahoo(stock, regular, *, opener, now: datetime, timeout: float,
