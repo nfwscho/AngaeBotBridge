@@ -95,6 +95,10 @@
 87. 네이버 미국 장외 코드는 나스닥은 .O, NYSE는 검증된 bare 티커로 요청하며 불완전한 정규 시세를 프리 가격으로 오사용하지 않는다.
 88. 네이버·Yahoo 장외 데이터가 비어 있어도 Nasdaq secondaryData는 정규 primaryData 변동률 정보와 분리하여 검증된 정규 Quote 기준으로 재조회할 수 있다.
 89. 미국 NYSE·Nasdaq 프리/애프터 체결은 실제 당일 체결시각과 통화·티커·세션을 검증한 경우만 적용하며 기존 오류 로그와 인증·DB·메뉴는 유지한다.
+90. 금요일 한국 장후 20:00 이후 자정·토·일에도 마지막 한국 거래일의 15:30 정규종가를 기준으로 A 등락률을 복구한다.
+91. 기존 네이버 국내 afterMarket 검증·전일 종가·야후·KRX 일봉 보조 경로·메모리7/그룹 한 줄 UI·로그·선택 상태를 유지한다.
+92. 다음 평일 08:00부터는 전 거래일 장후 체결을 현재 시장의 A 대표가격으로 표시하지 않는 보수적인 만료 규칙을 적용한다.
+93. 별도 정규장 종가 출처가 실패하면 상승/하락률을 만들어내지 않으며 장외 실체결 A 여부와 기준가 미확인을 명확히 표시한다.
 """
 from __future__ import annotations
 
@@ -1015,6 +1019,13 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                                            regular_time=reg_time, regular_source=reg_source)
                             _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=NaverDaily',
                                              stock.ticker)
+                        else:
+                            # 자료를 받았지만 거래일/종가를 검증하지 못한 경우를
+                            # 연결 실패와 구분해 운영 로그에서 원인 추적한다.
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAILY_UNVERIFIED ticker=%s after_day=%s',
+                                             stock.ticker,
+                                             meta.after_market.market_time.date()
+                                             if meta.after_market is not None else 'none')
                     except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
                         _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAILY_UNAVAILABLE ticker=%s reason=%s',
                                          stock.ticker, type(e).__name__)
@@ -1340,7 +1351,10 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
                 (aft.session == '장후' and (15, 40) <= clock <= (23, 59)) or
                 (aft.session == '장전' and (8, 0) <= clock < (9, 0))
             )
-            if on_session_day and (expected == aft.session or market_in_session):
+            from .domestic_regular import last_after_displayable
+            latest_after = (aft.session == '장후' and
+                            last_after_displayable(aft, now=item.fetched_at))
+            if (on_session_day or latest_after) and (expected == aft.session or market_in_session):
                 label = '애프터' if aft.session == '장후' else '프리'
                 return aft.price, _domestic_session_percent(item), label
             # 이전 거래일 통합 응답 closePrice가 여전히 장외 가격인 경우,
