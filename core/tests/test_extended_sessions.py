@@ -9,6 +9,10 @@
 7. 한국 장외 응답을 KRX 본장 실시간으로 오인하지 않으며 거래소 미확인은 그대로 노출한다.
 8. 메모리7·관심그룹 목록의 세션별 가격, 기존 번호/요약/로그 구조 보존을 확인한다.
 9. 추가 네트워크 호출 없이 시각과 응답을 주입해 실행한다.
+10. 미국 네이버 해외 폴링과 basic 응답의 .O 티커·USD·프리/애프터 세션·날짜·시각 검증을 추가한다.
+11. Yahoo/나스닥 기존 복구 테스트는 네이버 경로를 모의 비활성화하고 원래 호출 흐름을 검증한다.
+12. 네이버 해외 프리장 결과가 확인되면 Yahoo 추가 조회 없이 해당 체결가를 표시하는 실제 연결을 검증한다.
+13. 네이버 국내 장외 closePrice를 KRX 종가로 표시하지 않고 Yahoo 정규가가 명시 확인된 때만 분리한다.
 """
 from __future__ import annotations
 
@@ -16,9 +20,11 @@ import json
 import unittest
 from datetime import datetime, timezone, timedelta
 from io import BytesIO
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from app.extended_sessions import parse_yahoo, parse_nasdaq, session_of
+from app.extended_naver import parse_naver_extended, fetch_naver_extended
 from app.market import (Quote, WATCHLIST, fetch_quote, parse_chart, parse_naver_quote,
                         parse_nasdaq_quote, compact_quote_line, quote_line, memory7_report)
 
@@ -124,7 +130,8 @@ class ExtendedSessionTests(unittest.TestCase):
         def opener(req, timeout):
             calls.append(req.full_url)
             return _Response(yahoo_chart() if 'interval=1m' in req.full_url else daily)
-        fetched = fetch_quote(WATCHLIST[2], opener=opener, now=NOW)
+        with patch('app.extended_naver.fetch_naver_extended', return_value=()):
+            fetched = fetch_quote(WATCHLIST[2], opener=opener, now=NOW)
         self.assertEqual(fetched.price, 100.0)
         self.assertEqual([x.session for x in fetched.extended], ['프리', '애프터'])
         self.assertEqual(len(calls), 2)
@@ -158,11 +165,102 @@ class ExtendedSessionTests(unittest.TestCase):
             if 'interval=1m' in req.full_url:
                 return _Response(intraday)
             return _Response(daily)
-        quote = fetch_quote(WATCHLIST[2], opener=opener, now=NOW)
+        with patch('app.extended_naver.fetch_naver_extended', return_value=()):
+            quote = fetch_quote(WATCHLIST[2], opener=opener, now=NOW)
         self.assertEqual([x.session for x in quote.extended], ['프리', '애프터'])
         self.assertEqual(quote.extended[1].source, '나스닥 웹')
         self.assertAlmostEqual(quote.extended[1].price, 101.50)
         self.assertEqual(len(calls), 3)
+
+    def test_naver_us_premarket_session_from_polled_payload(self):
+        early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
+        previous = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
+        base = Quote(WATCHLIST[2], 100.0, 98.0, 2.04, previous, early)
+        stamp = datetime(2026, 11, 6, 4, 12, tzinfo=ET).isoformat()
+        raw = {'pollingInterval': 7000, 'datas': [{
+            'reutersCode': 'MU.O', 'currencyType': {'name': 'USD'},
+            'marketSessionType': 'preMarket', 'closePrice': '101.50', 'localTradedAt': stamp,
+            'overMarketPriceInfo': {'tradingSessionType': 'PRE_MARKET',
+                                    'overPrice': '101.50', 'localTradedAt': stamp}
+        }]}
+        found = parse_naver_extended(WATCHLIST[2], raw, base, now=early)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].session, '프리')
+        self.assertEqual(found[0].source, '네이버 해외')
+        self.assertAlmostEqual(found[0].price, 101.50)
+        self.assertAlmostEqual(found[0].percent, 1.5)
+        self.assertEqual(parse_naver_extended(WATCHLIST[3], raw, base, now=early), ())
+        broken = json.loads(json.dumps(raw))
+        broken['datas'][0]['localTradedAt'] = '2026-11-05T16:00:00-05:00'
+        broken['datas'][0]['overMarketPriceInfo']['localTradedAt'] = broken['datas'][0]['localTradedAt']
+        self.assertFalse(parse_naver_extended(WATCHLIST[2], broken, base, now=early))
+
+    def test_naver_us_premarket_fetch_prevents_yahoo_after_failure(self):
+        early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
+        previous = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
+        daily = {'chart': {'result': [{'meta': {
+            'symbol': 'MU', 'currency': 'USD', 'regularMarketPrice': 100.0,
+            'regularMarketTime': int(previous.timestamp()), 'previousClose': 98.0}}]}}
+        payload = {'datas': [{'reutersCode':'MU.O', 'marketSessionType': 'preMarket',
+                             'closePrice':'101.50', 'localTradedAt': '2026-11-06T04:12:00-05:00',
+                             'currencyType': {'name': 'USD'}}]}
+        urls = []
+        def opener(req, timeout):
+            urls.append(req.full_url)
+            return _Response(payload if 'stock.naver.com' in req.full_url else daily)
+        fetched = fetch_quote(WATCHLIST[2], opener=opener, now=early)
+        self.assertEqual(len(urls), 2)
+        self.assertIn('reutersCodes=MU.O', urls[1])
+        self.assertEqual(fetched.price, 100.0)
+        self.assertEqual(fetched.extended[0].session, '프리')
+        self.assertIn('프리 $101.50', compact_quote_line(fetched))
+
+    def test_naver_us_rejects_wrong_or_unverified_inputs(self):
+        early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
+        reg = Quote(WATCHLIST[2], 100, 98, 2, datetime(2026, 11, 5, 16, tzinfo=ET), early)
+        item = {'reutersCode':'MU.O', 'marketSessionType':'preMarket',
+                'closePrice':'101.50', 'localTradedAt':'2026-11-06T04:13:00-05:00'}
+        for mutate in ({'reutersCode':'AAPL.O'},
+                       {'currency':'KRW'}, {'closePrice':'0'},
+                       {'localTradedAt':'2026-11-06T15:00:00-05:00'},
+                       {'localTradedAt':'2026-11-06T09:31:00-05:00'}):
+            with self.subTest(mutate=mutate):
+                self.assertEqual(parse_naver_extended(WATCHLIST[2], {'datas':[item | mutate]},
+                                                      reg, now=early), ())
+        self.assertEqual(parse_naver_extended(WATCHLIST[2], {'datas':[{
+            k:v for k,v in item.items() if k != 'marketSessionType'}]}, reg, now=early), ())
+
+    def test_naver_domestic_after_price_never_assumed_regular_close(self):
+        korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
+        base = {'datas': [naver_after_payload()], 'time': '20261106172656'}
+        calls = []
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            if 'polling.finance' in req.full_url:
+                return _Response(base)
+            raise OSError('Yahoo not available')
+        from app.market import StockQuoteError
+        quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
+        self.assertIn('정규장 종가 미확인', compact_quote_line(quote))
+        self.assertIn('190,000원', compact_quote_line(quote))
+        self.assertNotIn('[정규]', compact_quote_line(quote))
+        self.assertTrue(any('yahoo' in url for url in calls))
+
+    def test_naver_domestic_regular_verified_from_separate_yahoo(self):
+        korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
+        base = {'datas': [naver_after_payload()], 'time': '20261106172656'}
+        market_close = datetime(2026, 11, 6, 15, 30, tzinfo=timezone(timedelta(hours=9)))
+        daily = {'chart': {'result': [{'meta': {
+            'symbol': '005930.KS', 'currency': 'KRW', 'regularMarketPrice': 188600,
+            'regularMarketTime': int(market_close.timestamp()), 'previousClose': 201500}}]}}
+        def opener(req, timeout):
+            return _Response(base if 'polling.finance' in req.full_url else daily)
+        quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
+        self.assertEqual(quote.domestic.regular_price, 188600)
+        body = compact_quote_line(quote)
+        self.assertIn('18.9만', body)
+        self.assertIn('190,000원', body)
+        self.assertIn('[정규·별도 확인]', body)
 
     def test_korean_after_time_is_not_regular_trade_time(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
