@@ -594,9 +594,9 @@ def _naver_after_market(data: dict, stock: Stock, now: datetime, regular_time: d
     # localTradedAt은 정규장 체결시각이 아니라 장외 응답 갱신시각일 수 있다.
     # 따라서 두 타임스탬프의 선후 관계가 아닌 실제 장외 시간대·날짜를 확인한다.
     hhmm = (at.hour, at.minute)
-    if period == 'AFTER_MARKET' and not (15, 30) <= hhmm <= (20, 0):
+    if period == 'AFTER_MARKET' and not (15, 40) <= hhmm <= (20, 0):
         return None
-    if period in ('BEFORE_MARKET', 'PRE_MARKET') and not (8, 0) <= hhmm < (9, 0):
+    if period in ('BEFORE_MARKET', 'PRE_MARKET') and not (8, 0) <= hhmm <= (8, 50):
         return None
     pct = (price / previous_close - 1) * 100
     if not math.isfinite(pct) or not -99.9 < pct < 1000:
