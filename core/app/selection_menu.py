@@ -49,6 +49,10 @@
 63. 종목 분석 등 메뉴에서 선택한 읽기 전용 결과 화면도 가격/본문을 세션에 저장하지 않고 직전 메뉴로 돌아갈 수 있는 0번 전용 상태만 유지한다.
 64. 뒤로가기로 복원된 날씨/기록/설정 화면은 기존 정적 안내문까지 동일하게 재구성하며 개인정보 및 상세 결과 본문을 이력에 저장하지 않는다.
 65. 직접 경로의 관심그룹 조회와 최근 조회 내역이 비어 있는 경우에도 직전 메뉴로 복귀할 수 있는 0번 상태를 유지한다.
+66. 주식 메뉴 7번 메모리7 상세보기를 제거하고 기존 1~6번 구성과 위치·명령·로그는 보존한다.
+67. 메모리7·반도체·미국시총10·모든 사용자 그룹 시세에서 종목 분석은 1~10번, 상세/간략 전환은 독립 99번으로만 선택한다.
+68. 기존 카카오톡 9번은 종목이 9개 이상인 그룹의 9번째 종목 분석에 사용하며 시세 상세 명령과 충돌하지 않는다.
+69. 그룹 상세 조회 명령은 소유 그룹명만 사용하고 0으로 실제 이전 시세표에, 00으로 홈에 복귀하도록 5분 이력·스코프를 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -202,7 +206,6 @@ class StockSelectionMenus:
             MenuChoice('미국시총10 시세', command_argument='미국시총10'),
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
-            MenuChoice('메모리7 시세 상세 보기', command_argument='메모리7 상세'),
         )
 
     @staticmethod
@@ -273,7 +276,7 @@ class StockSelectionMenus:
             '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
-            '주 2 간략 · 주 7 상세 · 시세표 9 상세/간략 · 주 분 삼성전자 분석',
+            '주 2 시세 · 주 3 반도체 · 시세표 99 상세/간략 · 주 분 삼성전자',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
             '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
@@ -380,15 +383,15 @@ class StockSelectionMenus:
                       root: str, numbers: tuple[str, ...]) -> MenuAnswer:
         """메뉴 점프: 실제 메뉴 정의를 단계별로 따라가며 최종 선택만 실행한다.
 
-        경로 전체는 1~10, 0, 00 중 최대 다섯 단계만 허용한다.
+        경로 전체는 1~10, 99, 0, 00 중 최대 다섯 단계만 허용한다.
         중간 메모리7/그룹 선택은 실제 시세 HTTP를 중복 호출하지 않고
         기존 정확한 종목 메뉴를 준비한다. 마지막 종목 분석은 main.py가
         기존 인증·dedup·DB 잠금 외부의 조회 루틴으로만 실행한다.
         """
         if not numbers or len(numbers) > 5 or any(
-            re.fullmatch(r'(?:00|10|[0-9])', number) is None for number in numbers
+            re.fullmatch(r'(?:99|00|10|[0-9])', number) is None for number in numbers
         ):
-            raise StockQuoteError('메뉴 점프는 번호 1~10을 공백으로 최대 5개 입력하세요.')
+            raise StockQuoteError('메뉴 점프는 번호 1~10 또는 시세 상세 99를 공백으로 최대 5개 입력하세요.')
         if root == '홈':
             answer = self.open_home(room, sender)
         elif root == '주식':
@@ -507,8 +510,8 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:00|10|[0-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
+        if re.fullmatch(r'(?:99|00|10|[0-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10, 시세 상세보기 99 중 선택하세요. 이전 메뉴는 0입니다.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
