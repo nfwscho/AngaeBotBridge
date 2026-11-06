@@ -17,6 +17,7 @@
 15. 네이버 공개 해외 폴링이 빈 응답이면 basic으로 복구하고 403/429일 때 동일 호스트 재시도를 금지한다.
 16. Yahoo 분봉이 없는 경우에도 preMarketPrice/postMarketPrice와 체결시각 검증으로 장외 데이터를 복원한다.
 17. 한국 Naver 루트 closePrice만 있는 프리/애프터 세션을 본장 종가로 오인하지 않고 별도 체결가로 표시한다.
+18. 미국 네이버 루트 closePrice와 검증된 overPrice가 다를 때 명시적 장외 가격을 우선 사용한다.
 """
 from __future__ import annotations
 
@@ -212,6 +213,10 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertAlmostEqual(found[0].price, 101.50)
         self.assertAlmostEqual(found[0].percent, 1.5)
         self.assertEqual(parse_naver_extended(WATCHLIST[3], raw, base, now=early), ())
+        raw['datas'][0]['closePrice'] = '100.00'  # 루트 가격이 본장 종가일 수 있다.
+        raw['datas'][0]['localTradedAt'] = datetime(2026, 11, 6, 4, 14, tzinfo=ET).isoformat()
+        verified = parse_naver_extended(WATCHLIST[2], raw, base, now=early)
+        self.assertEqual(verified[0].price, 101.50)  # 명시적 overPrice 우선
         broken = json.loads(json.dumps(raw))
         broken['datas'][0]['localTradedAt'] = '2026-11-05T16:00:00-05:00'
         broken['datas'][0]['overMarketPriceInfo']['localTradedAt'] = broken['datas'][0]['localTradedAt']
