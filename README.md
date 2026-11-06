@@ -26,6 +26,22 @@
 
 **최초 설정:** [국토부 아파트 매매 API](https://www.data.go.kr/data/15126469/openapi.do) 및 [아파트 전월세 API](https://www.data.go.kr/data/15126474/openapi.do)를 공공데이터포털에서 활용 신청/승인받고, S20+ Termux의 기존 `core/.env` 파일에 `MOLIT_API_KEY=발급받은_키`를 추가합니다. 인코딩/디코딩 키 모두 지원합니다. `.env`는 GitHub에 올리지 마세요. 키가 없으면 시세를 추측하는 대신 설정 안내를 표시합니다. API 최초 승인/연동과 공급자 최신 데이터에 따라 결과가 달라질 수 있습니다.
 
+### 국토부 API 키 비공개 등록 (1회)
+
+공개 GitHub 저장소에는 **발급된 서비스키를 절대 커밋하지 않습니다.** `.gitignore`에서 실제 `.env`는 이미 제외되어 있습니다. S20+에 SSH 접속 가능한 Windows PowerShell에서 아래 명령을 실행하세요.
+
+```powershell
+cd D:\stockproj\AngaeBotBridge
+git fetch origin
+git switch feature/real-estate-transactions-20261106
+git pull --ff-only
+.\scripts\configure-real-estate-key.ps1
+```
+
+화면에 `Paste MOLIT API key (hidden input)`이 나타나면 받은 키를 붙여넣고 Enter를 누릅니다. 키는 출력/로그/명령행에 포함하지 않고 SSH 표준입력으로만 전달합니다. 기존 `core/.env`에 키 항목만 원자적으로 수정한 후 기존 Python Core 서비스만 재시작합니다. 개인 메모·DB·다른 환경변수·Android 설정·로그는 변경하지 않습니다.
+
+이미 등록한 키를 변경할 때도 동일한 명령을 사용합니다. 서비스 재시작 없이 저장하려면 `-SkipRestart` 옵션을 붙입니다. 원격 SSH 연결이 없으면 도구가 대신 등록해 줄 수 없으므로 S20+의 기존 `core/.env`에 `MOLIT_API_KEY=...`을 직접 추가하고 기존 Core 서비스를 재시작해야 합니다.
+
 ### 실기기 검증 배포
 
 ```powershell
