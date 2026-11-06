@@ -46,7 +46,7 @@ class MenuTreeUnitTests(unittest.TestCase):
         tree = StockSelectionMenus.menu_tree()
         self.assertIn("10-7. 전체 메뉴 트리", tree)
         self.assertIn("10-8. 도움말", tree)
-        self.assertIn("2-1. 최근 메모 목록", tree)
+        self.assertIn("2-8. 최근 메모 목록", tree)
         self.assertIn("3-1. 최근 메모 목록", tree)
         self.assertIn("9-2. 다가오는 일정", tree)
         self.assertIn("1-1. 최근 사용한 주식 조회 [본인 최근 조회 목록]", tree)
