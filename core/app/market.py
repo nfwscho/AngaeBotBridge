@@ -1302,7 +1302,7 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
                     else '장전' if period in ('premarket', 'pre_market', 'beforemarket', 'before_market')
                     else '')
         if aft is not None:
-            local = item.fetched_at.astimezone(_timezone(stock.timezone_name))
+            local = item.fetched_at.astimezone(_timezone(item.stock.timezone_name))
             clock = (local.hour, local.minute)
             on_session_day = local.weekday() < 5 and aft.market_time.date() == local.date()
             market_in_session = (
