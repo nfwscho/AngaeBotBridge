@@ -25,6 +25,8 @@
 23. 2026-11-06 미국 프리장 시각에서 SPCX/LLY 프리 체결이 있으면 정규장만 표시하지 않고 P를 노출한다.
 24. Yahoo 정규장 차트 403으로 Nasdaq 정규가를 사용했어도 Yahoo 장외 1분봉이 정상이라면 검증 후 프리 가격을 복구한다.
 25. 티커 오염·프리 체결시각 불일치·미지원 심볼에는 P를 만들지 않으며 기존 무료 공급자 장애/정규가 폴백을 보존한다.
+26. 실제 네이버 NYSE 폴링은 .N으로 빈 응답, 접미사 없는 LLY/TSM/NOW로 정상 데이터를 제공하므로 Reuters 공식 RIC와 조회 코드를 구분한다.
+27. NYSE bare 티커 역시 허용된 상장목록에서만 요청하고 다른 코드·전일/미래 체결을 거절하는 검증은 그대로 유지한다.
 """
 from __future__ import annotations
 
@@ -303,14 +305,14 @@ class ExtendedSessionTests(unittest.TestCase):
         spcx = Stock('스페이스X', 'SPCX', 'USD', '미국', 'America/New_York')
         lly = Stock('일라이릴리', 'LLY', 'USD', '미국', 'America/New_York')
         self.assertEqual(reuters_code(spcx), 'SPCX.O')
-        self.assertEqual(reuters_code(lly), 'LLY.N')
+        self.assertEqual(reuters_code(lly), 'LLY')
         self.assertEqual(reuters_code(Stock('미상', 'TESTX', 'USD', '미국',
                                           'America/New_York')), '')
         now = datetime(2026, 11, 6, 8, 19, tzinfo=ET)
         close = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
         for stock, ric, previous, price, time_text in (
             (spcx, 'SPCX.O', 123.62, 128.90, '2026-11-06T04:30:00-05:00'),
-            (lly, 'LLY.N', 1364.73, 1346.00, '2026-11-06T06:30:00-05:00'),
+            (lly, 'LLY', 1364.73, 1346.00, '2026-11-06T06:30:00-05:00'),
         ):
             with self.subTest(stock=stock.ticker):
                 regular = Quote(stock, previous, previous + 12,
@@ -330,7 +332,7 @@ class ExtendedSessionTests(unittest.TestCase):
                 rendered = compact_quote_line(replace(regular, extended=result))
                 self.assertIn(' P', rendered)
                 self.assertIn(stock.name, rendered)
-                body['datas'][0]['reutersCode'] = ('LLY.O' if ric.endswith('.N')
+                body['datas'][0]['reutersCode'] = ('LLY.N' if ric == 'LLY'
                                                   else 'SPCX.N')
                 self.assertFalse(parse_naver_extended(stock, body, regular, now=now))
 
@@ -372,7 +374,7 @@ class ExtendedSessionTests(unittest.TestCase):
         close = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
         regular = Quote(lly, 1364.73, 1417.99, -3.76, close, now)
         urls = []
-        payload = {'datas': [{'reutersCode':'LLY.N','marketSessionType':'preMarket',
+        payload = {'datas': [{'reutersCode':'LLY','marketSessionType':'preMarket',
                               'currencyType': {'name':'USD'},
                               'closePrice':'1346.00',
                               'localTradedAt':'2026-11-06T06:30:00-05:00'}]}
@@ -382,11 +384,11 @@ class ExtendedSessionTests(unittest.TestCase):
         found = fetch_naver_extended(lly, regular, opener=opener, now=now,
                                      timeout=1.8, max_bytes=180000, user_agent='Test')
         self.assertEqual(len(urls), 1)
-        self.assertIn('reutersCodes=LLY.N', urls[0])
+        self.assertIn('reutersCodes=LLY', urls[0])
         self.assertAlmostEqual(found[0].percent,(1346 / 1364.73 - 1)*100)
         from dataclasses import replace
         self.assertIn('일라이릴리 $1,346', compact_quote_line(replace(regular,extended=found)))
-        invalid = {'datas': [{'reutersCode':'LLY.N','marketSessionType':'preMarket',
+        invalid = {'datas': [{'reutersCode':'LLY','marketSessionType':'preMarket',
                               'closePrice':'1346.00',
                               'localTradedAt':'2026-11-05T06:30:00-05:00'}]}
         self.assertFalse(parse_naver_extended(lly,invalid,regular,now=now))
