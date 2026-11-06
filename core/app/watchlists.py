@@ -36,6 +36,9 @@
 32. 모든 관심종목 그룹 시세(반도체·미국시총10·사용자 그룹)는 기본 한 종목 한 줄에 국가별 시각 요약만 보이며 99번 상세보기로 정규장·프리·애프터·공급자 원문을 조회한다.
 33. 상세 시세는 종목 1~10 선택 번호와 기존 시장별 시각·장외 출처·지연 경고를 보존하고 0 또는 99로 간략보기로 돌아간다.
 34. 기존 조회/조회실패/그룹 CRUD/SQLite/jobs/events/Android 로그·배터리/AI OFF와 5분 선택 상태를 보존한다.
+35. 개인 반도체 및 미국시총10과 기타 사용자 관심그룹의 간략보기에서 ※ 지연·분석 안내 두 줄을 제거하고 마지막에는 기준시각·99 상세보기만 유지한다.
+36. Android의 99+🔋/⚡ 한 줄 표시와 연계되도록 간략 마지막 선택 문구는 그대로 두고 원래 상세보기의 출처·시간·면책·분석 안내는 유지한다.
+37. 일부 시세 공급자 실패의 상태 정보는 시각 줄에 합쳐 로그/개별 조회 불가/실패 개수를 보존한다.
 """
 from __future__ import annotations
 
@@ -219,11 +222,21 @@ def group_report(name: str, stocks: tuple[Stock, ...], *, fetcher: Callable[[Sto
         compact_clock = _memory7_brief_clock(quotes)
         if compact_clock:
             lines.append(compact_clock)
-    if failed:
-        lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
-    lines.append("※ 무료·지연 가능·실시간 아님" if detailed else "※ 무료·지연·실시간 아님")
-    lines.append(f"※ 5분 내 1~{len(stocks)}: 종목 분석" if detailed else f"※ 5분 내 1~{len(stocks)}: 분석")
-    lines.append("99. ↩ 간략보기" if detailed else "99. 🔎 상세보기")
+    if detailed:
+        # 상세 시세에서 기존 거래 지연·분석 안내·조회 실패 정보를 완전히 보존한다.
+        if failed:
+            lines.append(f"※ {failed}종목 조회 실패 · 임의 수치 보충 없음")
+        lines.append("※ 무료·지연 가능·실시간 아님")
+        lines.append(f"※ 5분 내 1~{len(stocks)}: 종목 분석")
+        lines.append("99. ↩ 간략보기")
+    else:
+        # 간략 시세는 마지막 두 줄만 사용한다: 시각 / 99 상세보기.
+        # 실패 종목 수는 시각에 병기하고 개별 '조회 불가' 행도 보존한다.
+        if not any(line.startswith('📡 ') for line in lines):
+            lines.append('📡 기준시각 미확인')
+        if failed:
+            lines[-1] += f" · {failed}종목 조회 실패"
+        lines.append("99. 🔎 상세보기")
     return "\n".join(lines)
 
 
