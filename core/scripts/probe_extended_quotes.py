@@ -13,6 +13,7 @@
 11. 나머지 허용 NYSE 종목의 bare-code 공개 폴링이 실제 종목을 반환하는지 역시 가격/토큰 없이 항목 개수와 종목코드만 기록한다.
 12. 일부 NYSE ORCL/ANET/DELL 폴링의 datas=[]인 경우 사용할 수 있는 basic bare-code 응답을 실제 GitHub 네트워크로 확인한다.
 13. 네이버 NYSE 조회가 차단된 ORCL/ANET/DELL의 나스닥 웹 공개 secondaryData·marketStatus 구조를 가격·개인정보 없이 확인한다.
+14. 기본 CI는 기존 한국 005930·미국 MU 폴링/기본 3개 진단만 실행하고 --full 명시 시에만 종목별 상세 진단을 추가해 불필요한 요청과 CI 지연을 줄인다.
 """
 from __future__ import annotations
 
@@ -23,6 +24,10 @@ ENDPOINTS = (
     ('KR_SAMSUNG', 'https://polling.finance.naver.com/api/realtime/domestic/stock/005930'),
     ('US_MU_POLL', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=MU.O'),
     ('US_MU_BASIC', 'https://stock.naver.com/api/securityService/stock/MU.O/basic'),
+)
+# 기존 CI에서는 원래 세 개의 진단 요청만 실행한다. 확대 실측은 --full 명령으로
+# 명시적으로 선택한 경우에만 수행해 요청 제한/공급자 부하/CI 지연을 방지한다.
+_FULL_ENDPOINTS = (
     ('US_ARM_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=ARM.O'),
     ('US_MRVL_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=MRVL.O'),
     ('US_QCOM_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=QCOM.O'),
@@ -52,8 +57,8 @@ ENDPOINTS = (
 )
 
 
-def main():
-    for label, url in ENDPOINTS:
+def main(*, full: bool = False):
+    for label, url in (ENDPOINTS + _FULL_ENDPOINTS if full else ENDPOINTS):
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (compatible; AngaeBotBridge/StockDiagnostics)',
                        'Accept': 'application/json',
@@ -95,7 +100,7 @@ def main():
 
     # 기존 네이버 비차단 진단에 더해 미국 거래소 공개 응답의 세션 구조만 확인.
     # 가격이나 사용자 데이터는 출력하지 않는다.
-    for ticker in ('ORCL', 'ANET', 'DELL'):
+    for ticker in (('ORCL', 'ANET', 'DELL') if full else ()):
         uri = f'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stocks'
         try:
             headers = {
@@ -123,4 +128,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    main(full='--full' in sys.argv[1:])
