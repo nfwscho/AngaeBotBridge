@@ -13,6 +13,7 @@
 11. Yahoo/나스닥 기존 복구 테스트는 네이버 경로를 모의 비활성화하고 원래 호출 흐름을 검증한다.
 12. 네이버 해외 프리장 결과가 확인되면 Yahoo 추가 조회 없이 해당 체결가를 표시하는 실제 연결을 검증한다.
 13. 네이버 국내 장외 closePrice를 KRX 종가로 표시하지 않고 Yahoo 정규가가 명시 확인된 때만 분리한다.
+14. Yahoo 정규 종가가 차단됐을 때 KRX 당일 일봉만 정규가로 복구하고 어제 일봉은 거절하는 검증을 추가한다.
 """
 from __future__ import annotations
 
@@ -245,6 +246,32 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertIn('190,000원', compact_quote_line(quote))
         self.assertNotIn('[정규]', compact_quote_line(quote))
         self.assertTrue(any('yahoo' in url for url in calls))
+
+    def test_naver_domestic_daily_candle_fallback_is_separate(self):
+        korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
+        base = {'datas': [naver_after_payload()], 'time': '20261106172656'}
+        candle = {'priceInfos': [
+            {'localDate':'20261105','closePrice':201500},
+            {'localDate':'20261106','closePrice':188600}
+        ]}
+        calls = []
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            if 'polling.finance' in req.full_url:
+                return _Response(base)
+            if 'chart/domestic/item/005930' in req.full_url:
+                return _Response(candle)
+            raise OSError('blocked')
+        quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
+        self.assertEqual(quote.domestic.regular_price, 188600)
+        self.assertEqual(quote.domestic.regular_source, '네이버 KRX 일봉')
+        self.assertIn('[정규·별도 확인]', compact_quote_line(quote))
+        self.assertIn('190,000원', compact_quote_line(quote))
+        self.assertTrue(any('chart/domestic/item/005930' in url for url in calls))
+        from app.domestic_regular import parse_daily_regular
+        self.assertIsNone(parse_daily_regular(
+            WATCHLIST[0], {'priceInfos':[{'localDate':'20261105','closePrice':201500}]},
+            quote, now=korean_now))
 
     def test_naver_domestic_regular_verified_from_separate_yahoo(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
