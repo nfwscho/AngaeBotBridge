@@ -18,6 +18,7 @@
 16. Yahoo 분봉이 없는 경우에도 preMarketPrice/postMarketPrice와 체결시각 검증으로 장외 데이터를 복원한다.
 17. 한국 Naver 루트 closePrice만 있는 프리/애프터 세션을 본장 종가로 오인하지 않고 별도 체결가로 표시한다.
 18. 미국 네이버 루트 closePrice와 검증된 overPrice가 다를 때 명시적 장외 가격을 우선 사용한다.
+19. 메모리7 기본 1행 대표세션과 7번 상세 다중행, 장외 정규장대비 비교기준을 각각 검사한다.
 """
 from __future__ import annotations
 
@@ -160,10 +161,13 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn('includePrePost=true', calls[1])
         rendered = compact_quote_line(fetched)
-        self.assertIn('[정규]', rendered)
-        self.assertIn('프리 $99.00', rendered)
-        self.assertIn('애프터 $101.00', rendered)
-        self.assertIn('ET', quote_line(fetched))
+        self.assertEqual(rendered, '마이크론 $101.00 🔺 +1.00% [애프터]')
+        self.assertNotIn('\n', rendered)
+        detail = quote_line(fetched)
+        self.assertIn('[정규]', detail)
+        self.assertIn('프리 $99.00', detail)
+        self.assertIn('애프터 $101.00', detail)
+        self.assertIn('ET', detail)
 
     def test_nasdaq_fills_current_after_when_yahoo_only_has_pre(self):
         r = regular()
@@ -240,7 +244,9 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertIn('reutersCodes=MU.O', urls[1])
         self.assertEqual(fetched.price, 100.0)
         self.assertEqual(fetched.extended[0].session, '프리')
-        self.assertIn('프리 $101.50', compact_quote_line(fetched))
+        self.assertIn('마이크론 $101.50', compact_quote_line(fetched))
+        self.assertIn('[프리]', compact_quote_line(fetched))
+        self.assertNotIn('\n', compact_quote_line(fetched))
 
     def test_naver_us_basic_fallback_after_empty_polling(self):
         early = datetime(2026, 11, 6, 4, 15, tzinfo=ET)
@@ -298,9 +304,10 @@ class ExtendedSessionTests(unittest.TestCase):
             raise OSError('Yahoo not available')
         from app.market import StockQuoteError
         quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
-        self.assertIn('정규장 종가 미확인', compact_quote_line(quote))
-        self.assertIn('190,000원', compact_quote_line(quote))
-        self.assertNotIn('[정규]', compact_quote_line(quote))
+        self.assertIn('[애프터·기준가 미확인]', compact_quote_line(quote))
+        self.assertIn('19.0만', compact_quote_line(quote))
+        self.assertIn('190,000원', quote_line(quote))
+        self.assertNotIn('\n', compact_quote_line(quote))
         self.assertTrue(any('yahoo' in url for url in calls))
 
     def test_naver_domestic_daily_candle_fallback_is_separate(self):
@@ -321,8 +328,10 @@ class ExtendedSessionTests(unittest.TestCase):
         quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
         self.assertEqual(quote.domestic.regular_price, 188600)
         self.assertEqual(quote.domestic.regular_source, '네이버 KRX 일봉')
-        self.assertIn('[정규·별도 확인]', compact_quote_line(quote))
-        self.assertIn('190,000원', compact_quote_line(quote))
+        self.assertIn('[애프터]', compact_quote_line(quote))
+        self.assertIn('19.0만', compact_quote_line(quote))
+        self.assertIn('190,000원', quote_line(quote))
+        self.assertNotIn('\n', compact_quote_line(quote))
         self.assertTrue(any('chart/domestic/item/005930' in url for url in calls))
         from app.domestic_regular import parse_daily_regular
         self.assertIsNone(parse_daily_regular(
@@ -341,9 +350,11 @@ class ExtendedSessionTests(unittest.TestCase):
         quote = fetch_quote(WATCHLIST[0], opener=opener, now=korean_now)
         self.assertEqual(quote.domestic.regular_price, 188600)
         body = compact_quote_line(quote)
-        self.assertIn('18.9만', body)
-        self.assertIn('190,000원', body)
-        self.assertIn('[정규·별도 확인]', body)
+        self.assertIn('19.0만', body)
+        self.assertIn('[애프터]', body)
+        self.assertIn('188,600원', quote_line(quote))
+        self.assertIn('190,000원', quote_line(quote))
+        self.assertNotIn('\n', body)
 
     def test_korean_session_close_price_without_overmarket_field(self):
         tz = timezone(timedelta(hours=9))
@@ -359,9 +370,10 @@ class ExtendedSessionTests(unittest.TestCase):
                 quote = parse_naver_quote(WATCHLIST[0], raw, now=now)
                 self.assertIsNotNone(quote.domestic.after_market)
                 self.assertEqual(quote.domestic.after_market.session, display)
-                self.assertIn('정규장 종가 미확인', compact_quote_line(quote))
-                self.assertIn('193,500원', compact_quote_line(quote))
-                self.assertNotIn('[정규]', compact_quote_line(quote))
+                self.assertIn('기준가 미확인', compact_quote_line(quote))
+                self.assertIn('19.4만', compact_quote_line(quote))
+                self.assertIn('193,500원', quote_line(quote))
+                self.assertNotIn('\n', compact_quote_line(quote))
 
     def test_korean_after_time_is_not_regular_trade_time(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
@@ -370,9 +382,9 @@ class ExtendedSessionTests(unittest.TestCase):
                               provider='폴링', snapshot_time=korean_now)
         self.assertIsNotNone(q.domestic.after_market)
         self.assertEqual(q.domestic.after_market.price, 190000)
-        self.assertIn('장외', compact_quote_line(q) if '장외' in compact_quote_line(q)
-                      else quote_line(q))
-        self.assertIn('거래소 미확인', compact_quote_line(q))
+        self.assertIn('장외', quote_line(q))
+        self.assertIn('거래소 미확인', quote_line(q))
+        self.assertNotIn('\n', compact_quote_line(q))
         from app.market import _domestic_status_label
         self.assertNotIn('네이버 실시간표시', _domestic_status_label(q))
 
@@ -385,8 +397,11 @@ class ExtendedSessionTests(unittest.TestCase):
             return replace(value, extended=extended) if stock.ticker == 'MU' else value
         report = memory7_report(fetcher=supplier, use_cache=False)
         self.assertIn('3. 마이크론', report)
-        self.assertIn('   └ 애프터 $101.00', report)
+        self.assertIn('3. 마이크론 $101.00', report)
+        self.assertNotIn('   └ ', report)
         self.assertIn('8. WDC', report)
+        detail = memory7_report(fetcher=supplier, use_cache=False, detailed=True)
+        self.assertIn('   └ 애프터 $101.00', detail)
 
 
 if __name__ == '__main__':
