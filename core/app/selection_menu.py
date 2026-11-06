@@ -35,6 +35,9 @@
 49. 주식 메뉴 1~6번 위치·동작은 그대로 보존하고 7번 '메모리7 시세 상세 보기'를 읽기 전용 명령으로 추가한다.
 50. 2번 간략 목록은 프리/애프터 대표값만 한 행에 보여주며 7번은 정규/장외 가격·등락기준·출처·시각을 각각 표시한다.
 51. 두 시세 화면 모두 1~8 번호 분석/0 이전/00 홈/5분 만료/방·발신자 격리 및 기존 로그를 그대로 재사용한다.
+52. 메모리7 간략 결과 화면의 9번은 상세보기, 상세 결과 화면의 9번은 간략보기로 전환한다.
+53. 메모리7 원래 1~8 종목 분석 선택은 유지하고 9번 전환은 메모리7 전용 세션에만 삽입하여 그룹 1~10 번호와 충돌하지 않는다.
+54. 주식 메인 메뉴 기존 1~7번·0/00·방/발신자·5분 제한과 단축명령·도움말을 그대로 보존한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -362,9 +365,10 @@ class StockSelectionMenus:
             if answer.execute_argument:
                 arg = answer.execute_argument.strip()
                 from .watchlists import is_group_quote_request, load_group
-                if arg == '메모리7':
+                if arg in ('메모리7', '메모리7 상세'):
                     from .market import WATCHLIST
-                    self.open_quotes(room, sender, WATCHLIST, back=answer.back)
+                    self.open_quotes(room, sender, WATCHLIST, back=answer.back,
+                                     memory7_view='detail' if arg == '메모리7 상세' else 'compact')
                 elif arg == '목록':
                     self.open_groups(db, room, sender)
                 elif is_group_quote_request(arg):
@@ -386,15 +390,25 @@ class StockSelectionMenus:
         self._save(key, choices, back=back)
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
-    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *, back: str = 'menu') -> None:
-        """현재 시세표 번호와 정확히 같은 순서로 종목분석 선택 목록을 5분간 보관한다."""
+    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *,
+                    back: str = 'menu', memory7_view: str = '') -> None:
+        """시세표 번호/종목 분석 5분 보관. 메모리7 전용 9번만 간략↔상세 전환."""
         key = self._key(room, sender)
         if not stocks or len(stocks) > 10:
             raise StockQuoteError('선택 가능한 시세 종목 수는 1~10개여야 합니다.')
+        if memory7_view not in ('', 'compact', 'detail'):
+            raise StockQuoteError('지원되지 않는 시세 보기 모드입니다.')
+        if memory7_view and (len(stocks) != len(WATCHLIST) or
+                             tuple(s.ticker for s in stocks) != tuple(s.ticker for s in WATCHLIST)):
+            raise StockQuoteError('9번 상세 전환은 메모리7 시세에서만 사용할 수 있습니다.')
         # 별칭이나 표시 이름이 중복돼도 고정된 허용 티커로만 분석한다.
         # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
                         for stock in stocks)
+        if memory7_view == 'compact':
+            choices += (MenuChoice('🔎 상세보기', command_argument='메모리7 상세'),)
+        elif memory7_view == 'detail':
+            choices += (MenuChoice('↩ 간략보기', command_argument='메모리7'),)
         self._save(key, choices, back=back)
 
     def open_groups(self, db: sqlite3.Connection, room: str, sender: str) -> None:
