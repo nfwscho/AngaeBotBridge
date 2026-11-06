@@ -4,15 +4,17 @@
 2. 공식 확인된 현재 상장 미국 종목코드(2026-11-06 기준)를 명시하며 세레브라스 CBRS, 스페이스X SPCX, 서비스나우 NOW, TI TXN을 정확히 연결한다.
 3. 기존 주식 시세 엔진 market.fetch_quote 및 watchlists.group_report를 재사용해 정규장과 검증된 프리/애프터 P/A 가격을 조회한다.
 4. 사용자 제공 수치·등락률은 예시로만 취급하고 실행 시 항상 공급자로부터 새 시세를 조회하며 불확실한 가격을 만들어내지 않는다.
-5. 각 섹터는 최대 10종목씩 페이지로 나눠 휴대폰 카카오톡의 전체보기 접힘과 번호 1~10 분석 충돌을 줄인다.
-6. 98은 다음 페이지, 97은 이전 페이지, 99는 해당 페이지의 정규장·장외 상세보기 전환, 0은 직전 실제 화면, 00은 홈이다.
+5. AI 주도주 13종목, 반도체 및 기자재 19종목, 데센 및 네트워크 5종목을 각각 하나의 간략 메시지에 전부 출력한다.
+6. 1~19는 화면에 표시된 번호의 정확한 종목 분석, 99는 전체 섹터 상세/간략 전환, 0은 직전 화면, 00은 홈이다.
 7. 섹터는 읽기 전용 상수이며 기존 사용자별 stock_groups·stock_items CRUD/그룹 최대 10개/그룹당 10종목 제한을 변경하지 않는다.
-8. 하위 분석은 페이지마다 표시된 1~10번을 사용하고 코드·순서·원본 사용자 그룹·최근조회·메모리7 시세/로그와 충돌하지 않는다.
+8. 1~19 분석은 기존 다른 메뉴의 1~10과 섞이지 않도록 해당 섹터 세션에만 허용하며 기존 사용자 관심그룹·최근조회·메모리7/로그와 충돌하지 않는다.
 9. 섹터명·페이지·보기 모드를 엄격히 검증해 임의 URL, SQL, 명령 실행이나 다른 사용자의 자료 조회를 허용하지 않는다.
 10. 지연/무료 공급자, 실패시 조회 불가, 한국·미국·일본 장 구분, 인증·방/발신자·5분 유효시간 및 기존 DB·환경설정·Android 배터리를 보존한다.
 11. 단위 테스트에서 fetcher를 주입할 수 있어 인터넷과 실제 단말 없이 동일 시세·출력·페이지 번호를 검증한다.
-12. 19종목을 한번에 호출하지 않고 페이지당 최대 10개를 병렬 조회하여 기존 응답 시간 제한과 제공자 호출 부담을 보존한다.
+12. 기존 5-worker 동시 조회 한도를 재사용해 19종목을 한 번에 표시하며 개별 실패종목의 조회 불가·기존 시세 제공자 차단을 보존한다.
 13. 긴 회사명으로 인한 카카오톡 자동 줄바꿈을 최소화하기 위해 사용자가 제시한 MSFT 표기를 그대로 유지한다.
+14. 간략보기는 19행·짧은 현지시각·지연 경고·99 상세만 출력해 Android의 기본 짧은 배터리 푸터와 함께 한 메시지로 읽기 쉽게 한다.
+15. 상세보기는 종가·장외·공급자 시간 등 기존 긴 상세 원문을 그대로 보존하고 별도 페이지로 나누지 않는다.
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ from .market import Stock, StockQuoteError
 from .watchlists import group_report
 
 
-PAGE_SIZE = 10
+PAGE_SIZE = 19
 _US_TZ = 'America/New_York'
 
 
@@ -116,16 +118,27 @@ def sector_report(key: str, page: int = 1, *, detailed: bool = False,
     pages = page_count(key)
     start = (page - 1) * PAGE_SIZE + 1
     stop = start + len(subset) - 1
-    label = f'{sector.title} ({page}/{pages} · {start}~{stop}/{len(sector.stocks)})'
+    # 모든 섹터를 1쪽에 표시한다. 원본 그룹 조회 병렬성/가격 검증은 재사용.
+    label = sector.title
     report = group_report(label, subset, fetcher=fetcher, detailed=detailed)
     lines = report.splitlines()
-    # 공통 그룹의 99 상세 버튼을 유지하고 그 앞에 이동 페이지 번호를 배치한다.
     if not lines or not lines[-1].startswith('99. '):
-        raise StockQuoteError('시세 그룹 페이지 응답 형식이 변경되었습니다.')
-    selector = lines.pop()
-    if page > 1:
-        lines.append('97. ◀ 이전 10종목')
-    if page < pages:
-        lines.append(f'98. ▶ 다음 {len(get_page(key,page+1))}종목')
-    lines.append(selector)
-    return '\n'.join(lines)
+        raise StockQuoteError('시세 그룹 응답 형식이 변경되었습니다.')
+    lines[0] = (f'🔎 {sector.title} 상세 ({len(subset)}종목)' if detailed
+                else f'📊 {sector.title} ({len(subset)}종목)')
+    if detailed:
+        # 상세화면은 현재가/정규/프리·애프터/일별 출처 원문을 보존한다.
+        lines[-2] = f'※ 5분 내 1~{len(subset)}: 분석'
+        return '\n'.join(lines)
+    # 간략은 19개의 개별 행을 보존하면서 긴 공통 안내만 압축한다.
+    # 공통 renderer의 가격/오류 검증/짧은 시장시계와 99 메뉴는 유지한다.
+    rows = lines[1:1 + len(subset)]
+    clock = next((line for line in lines[1 + len(subset):] if line.startswith('📡 ')), '')
+    failed = [line for line in lines if line.startswith('※ ') and '조회 실패' in line]
+    compact = [lines[0], *rows, '']
+    if clock:
+        compact.append(clock)
+    compact.extend(failed)
+    compact.append(f'※ 지연·비실시간 · 1~{len(subset)} 분석')
+    compact.append(lines[-1])
+    return '\n'.join(compact)
