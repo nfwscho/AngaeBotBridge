@@ -92,6 +92,9 @@
 84. 정규장 데이터가 Yahoo 외 Nasdaq/일봉 보조 공급자로 복구된 종목도 프리·애프터 거래시간에는 Yahoo 검증 분봉 조회를 추가 시도한다.
 85. 어떤 공급자도 검증된 장외 체결을 제공하지 않으면 P/A 및 시간외 가격을 임의 생성하지 않고 원래 정규장 가격과 오류 로그를 유지한다.
 86. 각 공급자별 조회 시간·응답 크기·인증·기존 DB/메뉴/로그·5분 그룹선택·Android Bridge 출력은 변경하지 않는다.
+87. 네이버 미국 장외 코드는 나스닥은 .O, NYSE는 검증된 bare 티커로 요청하며 불완전한 정규 시세를 프리 가격으로 오사용하지 않는다.
+88. 네이버·Yahoo 장외 데이터가 비어 있어도 Nasdaq secondaryData는 정규 primaryData 변동률 정보와 분리하여 검증된 정규 Quote 기준으로 재조회할 수 있다.
+89. 미국 NYSE·Nasdaq 프리/애프터 체결은 실제 당일 체결시각과 통화·티커·세션을 검증한 경우만 적용하며 기존 오류 로그와 인증·DB·메뉴는 유지한다.
 """
 from __future__ import annotations
 
@@ -1077,11 +1080,19 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                             _MARKET_LOG.info('US_EXTENDED_YAHOO_FAILED ticker=%s reason=%s',
                                              stock.ticker, type(e).__name__)
                     if desired and not any(p.session == desired for p in extra) and supplier != 'Nasdaq info':
+                        # Nasdaq 정규장 primaryData가 불완전하더라도 장외 secondaryData는
+                        # 유효할 수 있다. 이미 검증된 정규 Quote를 기준으로 독립 검증한다.
                         try:
-                            secondary = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
+                            from .extended_sessions import fetch_nasdaq_extended
+                            secondary = fetch_nasdaq_extended(
+                                stock, quote, opener=opener, now=now_us,
+                                timeout=min(FETCH_TIMEOUT, 2.0),
+                                max_bytes=MAX_RESPONSE_BYTES,
+                                user_agent=_YAHOO_USER_AGENT)
                             extra += tuple(p for p in secondary if p.session not in {v.session for v in extra})
-                        except StockQuoteError as e:
-                            _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s', stock.ticker, e)
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s',
+                                             stock.ticker, type(e).__name__)
                     if extra:
                         quote = replace(quote, extended=tuple(
                             next(p for p in extra if p.session == label)
