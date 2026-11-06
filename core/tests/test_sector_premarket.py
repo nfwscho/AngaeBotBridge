@@ -13,6 +13,7 @@
 11. 정규 Reuters RIC .N과 공급자 특화 조회 코드가 다름을 엄격히 테스트하고 임의 코드의 확장을 금지한다.
 12. NYSE ORCL/ANET/DELL 공개 폴링 datas=[]에서 기본 API bare 코드로 실거래가를 복구하고 1차 실패/2차 성공·P 표시를 검증한다.
 13. NYSE 3종목 네이버·Yahoo 장외가 미제공이고 Nasdaq primaryData가 불완전해도 independent secondaryData의 실제 당일 프리 체결가와 USD를 검증해 P를 보완한다.
+14. Nasdaq secondaryData의 STOCKS 자산유형·실제 종목코드·USD·당일 프리 시간 검증을 유지하며 외화/다른 티커/펀드/이전 거래일은 보수적으로 거절한다.
 """
 from __future__ import annotations
 
@@ -215,6 +216,30 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
                 self.assertAlmostEqual(quote.extended[0].percent, 3.75)
                 self.assertIn('🔺+3.75% P', compact_quote_line(quote))
                 self.assertTrue(any('api.nasdaq.com' in u for u in urls))
+
+    def test_nasdaq_secondary_rejects_wrong_class_symbol_currency_and_trade_date(self):
+        from app.extended_sessions import parse_nasdaq
+        stock = next(s for group in SECTORS for s in group.stocks
+                     if s.ticker == 'ANET')
+        regular = Quote(stock, 100, 105, -4.76, PREVIOUS_CLOSE, NOW)
+        good = {'symbol': 'ANET', 'assetClass': 'STOCKS',
+                'marketStatus': 'Pre-Market',
+                'secondaryData': {
+                    'lastSalePrice': '$103.75', 'currency': 'USD',
+                    'lastTradeTimestamp': 'Nov 06, 2026 09:03 AM ET',
+                }}
+        self.assertEqual(len(parse_nasdaq(stock, good, regular, now=NOW)), 1)
+        cases = (
+            {'symbol': 'NVDA'},
+            {'assetClass': 'FUNDS'},
+            {'marketStatus': 'Closed'},
+            {'secondaryData': good['secondaryData'] | {'currency': 'EUR'}},
+            {'secondaryData': good['secondaryData'] |
+                              {'lastTradeTimestamp': 'Nov 05, 2026 09:03 AM ET'}},
+        )
+        for mutation in cases:
+            with self.subTest(change=mutation):
+                self.assertFalse(parse_nasdaq(stock, good | mutation, regular, now=NOW))
 
     def test_naver_403_preserves_regular_quote_and_yahoo_backup(self):
         stock = next(s for g in SECTORS for s in g.stocks if s.ticker == 'GLW')
