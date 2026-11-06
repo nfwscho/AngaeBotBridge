@@ -61,6 +61,12 @@
 53. 한국 KRX 장외 중 OPEN 응답을 KRX 본장 실시간으로 잘못 표기하지 않고 거래소 미확인 시 추정하지 않는다.
 54. 메모리7/관심그룹 간결 목록과 단일 종목 상세에 프리·정규·애프터 시세를 명시한다.
 55. 기존 DB·명령·UI·AI OFF·Android 배터리·인증·기존 운영 로그/시세 출처 표기를 유지한다.
+56. 2026-11-06 한국 네이버 afterMarket closePrice가 시간외 체결가로 바뀌는 경우를 확인하고 정규장 종가로 오표기하지 않는다.
+57. 한국 시간외 구간에서는 별도 Yahoo 정규장 종가를 시각·거래일 검증해 성공한 경우에만 정규 기준가로 표시한다.
+58. 미국 장외는 네이버 해외 폴링/기본시세를 추가 조회하고 Yahoo 분봉·Nasdaq 공개 시세를 종전 장애 보조로 유지한다.
+59. 미국 나스닥 SKHY ADR을 확인된 종목으로 허용하며 임의 거래소 심볼은 자동으로 추측하지 않는다.
+60. 운영 로그에는 공급자별 조회 실패/조회 성공 진단 코드를 추가하며 기존 US_QUOTE_FAILED 등의 로그를 보존한다.
+61. 장외 미제공·정규장 종가 미확인 시 값을 꾸미지 않고 명시적으로 미확인을 출력한다.
 """
 from __future__ import annotations
 
@@ -110,7 +116,7 @@ _NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stock
 _NASDAQ_DAILY = 'https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&limit=10'
 _NAVER_US_DAILY = 'https://api.stock.naver.com/chart/foreign/item/{reuters}?periodType=dayCandle'
 # 개별 티커의 상장 거래소를 추측하지 않는다. 확인 가능한 나스닥 상장 종목만 해외 차트에 연결한다.
-_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
+_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SKHY','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
 _US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
 _MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
@@ -141,6 +147,10 @@ class DomesticQuoteMetadata:
     snapshot_time: datetime | None
     after_market: AfterMarketQuote | None = None
     market_session: str = ''
+    regular_price: float | None = None
+    regular_percent: float | None = None
+    regular_time: datetime | None = None
+    regular_source: str = ''
 
 
 @dataclass(frozen=True)
@@ -928,7 +938,26 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
     """한국: 네이버 2개 → Yahoo / 일본: Yahoo → Yahoo Japan / 미국: 기존 Yahoo 2개."""
     if stock.market == '한국':
         try:
-            return fetch_naver_quote(stock, opener=opener, now=now)
+            quote = fetch_naver_quote(stock, opener=opener, now=now)
+            meta = quote.domestic
+            # afterMarket 단계의 Naver closePrice는 15:30 KRX 종가가 아닌
+            # 시간외 마지막 체결가일 수 있다. 일치하는 시간외 응답을 정규가로 표시 금지.
+            if meta is not None and meta.market_session in ('aftermarket', 'after_market'):
+                try:
+                    regular = fetch_yahoo_quote(stock, opener=opener, now=now)
+                    local_time = regular.market_time.astimezone(_timezone(stock.timezone_name))
+                    if (local_time.date() == quote.market_time.date()
+                            and (15, 20) <= (local_time.hour, local_time.minute) <= (15, 35)):
+                        meta = replace(meta, regular_price=regular.price,
+                                       regular_percent=regular.percent,
+                                       regular_time=local_time, regular_source='Yahoo Finance')
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=Yahoo',stock.ticker)
+                    else:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNVERIFIED ticker=%s reason=market_time',stock.ticker)
+                except StockQuoteError as e:
+                    _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNAVAILABLE ticker=%s reason=%s',stock.ticker,e)
+                quote = replace(quote, domestic=meta)
+            return quote
         except StockQuoteError:
             # 네이버 장애 시 기존 Yahoo 가격을 표시하되 실시간 인증 정보가 없음을 명시.
             quote = fetch_yahoo_quote(stock, opener=opener, now=now)
@@ -952,35 +981,49 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                                  ('Naver overseas daily',fetch_naver_us_daily_quote)):
             try:
                 quote=lookup(stock,opener=opener,now=now)
-                if supplier == 'Yahoo':
-                    from .extended_sessions import fetch_yahoo, should_fetch
-                    if should_fetch(stock, now_us):
-                        extra = ()
+                from .extended_sessions import fetch_yahoo, session_of, should_fetch
+                if should_fetch(stock, now_us):
+                    from .extended_naver import fetch_naver_extended
+                    extra = tuple(quote.extended)
+                    us_now_local = now_us.astimezone(_timezone(stock.timezone_name))
+                    desired = session_of(us_now_local)
+                    if not desired and us_now_local.hour >= 20:
+                        desired = '애프터'
+                    if desired and not any(p.session == desired for p in extra):
                         try:
-                            extra = fetch_yahoo(stock, quote, opener=opener, now=now_us,
-                                                timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
-                                                user_agent=_YAHOO_USER_AGENT)
+                            from_naver = fetch_naver_extended(
+                                stock, quote, opener=opener, now=now_us,
+                                timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
+                                user_agent=_YAHOO_USER_AGENT)
+                            extra += tuple(p for p in from_naver if p.session not in {v.session for v in extra})
+                            if from_naver:
+                                _MARKET_LOG.info('US_EXTENDED_NAVER_OK ticker=%s sessions=%s',
+                                                 stock.ticker, ','.join(p.session for p in from_naver))
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_NAVER_FAILED ticker=%s reason=%s',
+                                             stock.ticker, type(e).__name__)
+                    if desired and not any(p.session == desired for p in extra) and supplier == 'Yahoo':
+                        try:
+                            from_yahoo = fetch_yahoo(stock, quote, opener=opener, now=now_us,
+                                                     timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
+                                                     user_agent=_YAHOO_USER_AGENT)
+                            extra += tuple(p for p in from_yahoo if p.session not in {v.session for v in extra})
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
                             _MARKET_LOG.info('US_EXTENDED_YAHOO_FAILED ticker=%s reason=%s',
                                              stock.ticker, type(e).__name__)
-                        # Yahoo가 오전 프리만 제공하고 현재 애프터 체결을 누락할 수도 있다.
-                        # 현재 세션의 거래값이 확인되지 않은 경우에만 Nasdaq 보조 세션을 병합한다.
-                        from .extended_sessions import session_of
-                        us_now_local = now_us.astimezone(_timezone(stock.timezone_name))
-                        desired = session_of(us_now_local)
-                        if not desired and us_now_local.hour >= 20:
-                            desired = '애프터'
-                        if desired and not any(q.session == desired for q in extra):
-                            try:
-                                # 나스닥 정규 가격으로 덮지 않고 동일 세션의 검증된 장외 체결만 병합.
-                                secondary = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
-                                extra = tuple(extra) + tuple(q for q in secondary
-                                                             if q.session not in {x.session for x in extra})
-                            except StockQuoteError as e:
-                                _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s',
-                                                 stock.ticker, e)
-                        if extra:
-                            quote = replace(quote, extended=extra)
+                    if desired and not any(p.session == desired for p in extra) and supplier != 'Nasdaq info':
+                        try:
+                            secondary = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
+                            extra += tuple(p for p in secondary if p.session not in {v.session for v in extra})
+                        except StockQuoteError as e:
+                            _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s', stock.ticker, e)
+                    if extra:
+                        quote = replace(quote, extended=tuple(
+                            next(p for p in extra if p.session == label)
+                            for label in ('프리', '애프터') if any(p.session == label for p in extra)))
+                    elif desired:
+                        _MARKET_LOG.info('US_EXTENDED_NO_TRADE ticker=%s requested=%s',
+                                         stock.ticker, desired)
                 if errors:
                     # 기존 오류 로그를 유지하면서 어떤 대체 제공처에서 복구됐는지도 식별한다.
                     _MARKET_LOG.info('US_QUOTE_FALLBACK_OK ticker=%s source=%s previous=%s',
