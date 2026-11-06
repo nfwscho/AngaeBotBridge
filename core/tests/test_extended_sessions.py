@@ -16,6 +16,7 @@
 14. Yahoo 정규 종가가 차단됐을 때 KRX 당일 일봉만 정규가로 복구하고 어제 일봉은 거절하는 검증을 추가한다.
 15. 네이버 공개 해외 폴링이 빈 응답이면 basic으로 복구하고 403/429일 때 동일 호스트 재시도를 금지한다.
 16. Yahoo 분봉이 없는 경우에도 preMarketPrice/postMarketPrice와 체결시각 검증으로 장외 데이터를 복원한다.
+17. 한국 Naver 루트 closePrice만 있는 프리/애프터 세션을 본장 종가로 오인하지 않고 별도 체결가로 표시한다.
 """
 from __future__ import annotations
 
@@ -338,6 +339,24 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertIn('18.9만', body)
         self.assertIn('190,000원', body)
         self.assertIn('[정규·별도 확인]', body)
+
+    def test_korean_session_close_price_without_overmarket_field(self):
+        tz = timezone(timedelta(hours=9))
+        for session, hour, minute, display in (('afterMarket', 18, 10, '장후'),
+                                               ('preMarket', 8, 25, '장전')):
+            with self.subTest(session=session):
+                now = datetime(2026, 11, 6, hour, minute, tzinfo=tz)
+                raw = {'itemCode': '005930', 'closePrice': '193,500',
+                       'fluctuationsRatio': '-3.97',
+                       'compareToPreviousPrice': {'name': 'FALLING'},
+                       'marketStatus': 'OPEN', 'marketSessionType': session,
+                       'localTradedAt': now.isoformat()}
+                quote = parse_naver_quote(WATCHLIST[0], raw, now=now)
+                self.assertIsNotNone(quote.domestic.after_market)
+                self.assertEqual(quote.domestic.after_market.session, display)
+                self.assertIn('정규장 종가 미확인', compact_quote_line(quote))
+                self.assertIn('193,500원', compact_quote_line(quote))
+                self.assertNotIn('[정규]', compact_quote_line(quote))
 
     def test_korean_after_time_is_not_regular_trade_time(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
