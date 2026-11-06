@@ -11,6 +11,8 @@
 25. 00은 중간 단계와 무관하게 홈으로 이동하고 방·발신자별 이력·5분 TTL·jobs/events 로그를 지킨다.
 26. 종목 분석 결과 화면은 기존 내용 그대로 표시하고 0을 누르면 분석을 선택한 직전 목록으로 되돌아간다.
 27. 최근 성공 주식 조회가 없는 화면도 숫자 0으로 주식 메뉴에 복귀하고 00은 홈으로 이동하는지 검증한다.
+28. 주식 홈 7번 상세 메뉴 제거, 메모리7 및 그룹 99 상세보기와 0 이전·00 홈을 검증한다.
+29. 10종목 그룹의 9/10번째 종목 분석과 99 상세 전환이 각각 독립 선택인 것을 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -139,19 +141,25 @@ class MenuSelectionUnitTests(unittest.TestCase):
 
     def test_memo7_inline_nine_toggles_only_in_memo7_selection(self):
         self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='compact')
-        ninth = self.menus.choose(self.db,'방','나','9')
-        self.assertEqual(ninth.execute_argument, '메모리7 상세')
-        self.assertFalse(ninth.menu_active)
+        special = self.menus.choose(self.db,'방','나','99')
+        self.assertEqual(special.execute_argument, '메모리7 상세')
+        self.assertFalse(special.menu_active)
         self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='detail')
-        self.assertEqual(self.menus.choose(self.db,'방','나','9').execute_argument,'메모리7')
+        self.assertEqual(self.menus.choose(self.db,'방','나','99').execute_argument,'메모리7')
         self.menus.open_quotes('방', '나', WATCHLIST, memory7_view='compact')
         self.assertEqual(self.menus.choose(self.db,'방','나','1').execute_argument,'분석 005930.KS')
         ten = tuple(Stock('그룹',f'TEST{i}', 'USD', '미국', 'America/New_York')
                     for i in range(10))
         with self.assertRaisesRegex(StockQuoteError,'메모리7'):
             self.menus.open_quotes('방','나', ten, memory7_view='compact')
-        self.menus.open_quotes('방','나', ten)
+        self.menus.open_quotes('방','나', ten, group_name='십종목')
         self.assertEqual(self.menus.choose(self.db,'방','나','9').execute_argument,'분석 TEST8')
+        self.menus.open_quotes('방','나', ten, group_name='십종목')
+        self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
+        self.menus.open_quotes('방','나', ten, group_name='십종목')
+        self.assertEqual(self.menus.choose(self.db,'방','나','99').execute_argument,'상세시세 십종목')
+        self.menus.open_quotes('방','나', ten, group_name='십종목', group_view='detail')
+        self.assertEqual(self.menus.choose(self.db,'방','나','99').execute_argument,'십종목')
 
     def test_zero_returns_to_root_and_expiry(self):
         self.menus.open('방','나')
@@ -217,48 +225,48 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
 
-    def test_seventh_stock_menu_detail_uses_legacy_auth_logs_and_analysis_choices(self):
+    def test_stock_home_has_only_six_choices_and_inline_99_details(self):
         opened = self.post('메뉴').json()
         self.assertTrue(opened['menu_active'])
         self.assertIn('6. 종목별 분석', opened['reply'])
-        self.assertIn('7. 메모리7 시세 상세 보기', opened['reply'])
-        with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
-            detail = self.post('선택 7').json()
-            self.assertTrue(detail['ok'])
+        self.assertNotIn('7. 메모리7 시세 상세 보기', opened['reply'])
+        self.assertFalse(self.post('선택 7').json()['ok'])  # 7번은 삭제
+        with patch('app.main.execute_stock_command', side_effect=lambda _cmd, arg:
+                   '🔎 메모리7 시세 상세 보기' if arg == '메모리7 상세' else '💾 메모리7 시세 요약') as renderer:
+            self.assertIn('💾 메모리7', self.post('선택 2').json()['reply'])
+            detail = self.post('선택 99').json()
+            self.assertTrue(detail['ok'], detail)
             self.assertTrue(detail['menu_active'])
-            self.assertIn('시세 상세 보기', detail['reply'])
             self.assertEqual(detail['module_source'], 'core.market')
-            renderer.assert_called_once_with('주식', '메모리7 상세')
-        # 상세 결과의 1~8번은 기존 종목 분석 선택 범위를 그대로 유지한다.
-        self.assertFalse(self.post('선택 3',room='다른방').json()['ok'])
-        with patch('app.main.fetch_history') as history, patch(
-             'app.main.individual_report',return_value='마이크론 분석 결과'):
-            selected = self.post('선택 3').json()
-            self.assertTrue(selected['ok'])
-            self.assertEqual(selected['reply'], '마이크론 분석 결과')
-            self.assertEqual(history.call_args.args[0].ticker, 'MU')
-        # 메뉴 7번 재진입 후 0(뒤로가기)도 종전 주식 메뉴로 복귀.
-        self.assertTrue(self.post('메뉴').json()['ok'])
-        with patch('app.main.execute_stock_command', return_value='상세 재조회'):
-            self.assertTrue(self.post('선택 7').json()['ok'])
-        previous = self.post('선택 0').json()
-        self.assertTrue(previous['menu_active'])
-        self.assertIn('📊 주식 메뉴',previous['reply'])
+            self.assertIn('시세 상세 보기', detail['reply'])
+            self.assertEqual(renderer.call_count, 2)
+            self.assertEqual(renderer.call_args.args, ('주식', '메모리7 상세'))
+            self.assertFalse(self.post('선택 3',room='다른방').json()['ok'])
+            with patch('app.main.fetch_history') as history, patch(
+                 'app.main.individual_report',return_value='마이크론 분석 결과'):
+                selected = self.post('선택 3').json()
+                self.assertTrue(selected['ok'])
+                self.assertEqual(selected['reply'], '마이크론 분석 결과')
+                self.assertEqual(history.call_args.args[0].ticker, 'MU')
+            previous = self.post('선택 0').json()
+            self.assertIn('상세 보기',previous['reply'])
+            back = self.post('선택 0').json()
+            self.assertIn('💾 메모리7',back['reply'])
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE argument='선택 7' AND ok=1"
-            ).fetchone()[0],2)
+                "SELECT COUNT(*) FROM jobs WHERE argument='선택 99' AND ok=1"
+            ).fetchone()[0],1)
 
-    def test_seventh_stock_menu_direct_jump_preserves_logging(self):
+    def test_stock_two_99_direct_jump_preserves_logging(self):
         with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
             self.sequence += 1
             payload = {
                 'request_id': f'menus_{self.sequence:011d}',
-                'command': '메뉴', 'argument': '경로 주식 7',
+                'command': '메뉴', 'argument': '경로 주식 2 99',
                 'room': '방', 'sender': '나',
             }
             response = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
-            self.assertTrue(response['ok'])
+            self.assertTrue(response['ok'], response)
             self.assertTrue(response['menu_active'])
             self.assertEqual(response['module_source'], 'core.market')
             self.assertIn('메모리7 시세 상세 보기', response['reply'])
@@ -332,16 +340,16 @@ class MenuSelectionAPITests(unittest.TestCase):
 
     def test_zero_returns_actual_previous_memo7_view_level_by_level(self):
         def render(_command, argument):
-            return ('🔎 메모리7 시세 상세 보기\\n9. ↩ 간략보기'
+            return ('🔎 메모리7 시세 상세 보기\\n99. ↩ 간략보기'
                     if argument == '메모리7 상세' else
-                    '💾 메모리7 시세 요약\\n9. 🔎 상세보기')
+                    '💾 메모리7 시세 요약\\n99. 🔎 상세보기')
         with patch('app.main.execute_stock_command', side_effect=render) as quote:
             opened = self.post('메뉴').json()
             self.assertIn('주식 메뉴', opened['reply'])
             brief = self.post('선택 2').json()
             self.assertIn('시세 요약', brief['reply'])
             self.assertTrue(brief['menu_active'])
-            detail = self.post('선택 9').json()
+            detail = self.post('선택 99').json()
             self.assertIn('상세 보기', detail['reply'])
             self.assertTrue(detail['menu_active'])
             self.assertFalse(self.post('선택 0', sender='다른사람').json()['ok'])
@@ -362,31 +370,31 @@ class MenuSelectionAPITests(unittest.TestCase):
                    else '💾 메모리7 시세 요약'):
             self.assertTrue(self.post('메뉴').json()['menu_active'])
             self.assertTrue(self.post('선택 2').json()['menu_active'])
-            self.assertIn('상세 보기', self.post('선택 9').json()['reply'])
-            self.assertIn('시세 요약', self.post('선택 9').json()['reply'])
+            self.assertIn('상세 보기', self.post('선택 99').json()['reply'])
+            self.assertIn('시세 요약', self.post('선택 99').json()['reply'])
             back = self.post('선택 0').json()
             self.assertIn('상세 보기', back['reply'])
             self.assertTrue(back['menu_active'])
             home = self.post('선택 00').json()
             self.assertIn('메인 메뉴', home['reply'])
             self.assertTrue(home['menu_active'])
-            self.assertFalse(self.post('선택 9', sender='다른사람').json()['ok'])
+            self.assertFalse(self.post('선택 99', sender='다른사람').json()['ok'])
 
     def test_inline_ninth_switches_compact_detail_and_back_without_losing_logs(self):
         def output(command, argument):
-            return ('🔎 메모리7 시세 상세 보기\n9. ↩ 간략보기'
+            return ('🔎 메모리7 시세 상세 보기\n99. ↩ 간략보기'
                     if argument == '메모리7 상세'
-                    else '💾 메모리7 시세 요약\n9. 🔎 상세보기')
+                    else '💾 메모리7 시세 요약\n99. 🔎 상세보기')
         with patch('app.main.execute_stock_command',side_effect=output) as renderer:
             brief = self.post('메모리7').json()
             self.assertTrue(brief['ok'])
             self.assertTrue(brief['menu_active'])
-            detail = self.post('선택 9').json()
+            detail = self.post('선택 99').json()
             self.assertTrue(detail['ok'], detail)
             self.assertIn('상세 보기',detail['reply'])
             self.assertEqual(detail['module_source'],'core.market')
             self.assertTrue(detail['menu_active'])
-            back = self.post('선택 9').json()
+            back = self.post('선택 99').json()
             self.assertTrue(back['ok'], back)
             self.assertIn('💾 메모리7',back['reply'])
             self.assertTrue(back['menu_active'])
@@ -406,7 +414,7 @@ class MenuSelectionAPITests(unittest.TestCase):
         payload = {
             'request_id': f'menus_{self.sequence:011d}',
             'command': '메뉴',
-            'argument': '경로 주식 2 9',
+            'argument': '경로 주식 2 99',
             'room': '방', 'sender': '나',
         }
         with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
