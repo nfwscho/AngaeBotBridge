@@ -57,9 +57,9 @@ class BatteryStatusFormatterTest {
     }
 
     @Test fun stockCompactFooterOnSameLineOnly() {
-        val summary = "📊 반도체 및 기자재 (19종목)\n19. WDC \\$259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기"
+        val summary = "📊 반도체 및 기자재 (19종목)\n19. WDC USD 259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기"
         val merged = BatteryStatusFormatter.appendCompactSectorFooter(summary, "⚡ 100%")
-        assertEquals("📊 반도체 및 기자재 (19종목)\n19. WDC \\$259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기 ⚡ 100%", merged)
+        assertEquals("📊 반도체 및 기자재 (19종목)\n19. WDC USD 259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기 ⚡ 100%", merged)
         assertEquals(4, merged.lines().size)
         assertEquals("99. 🔎 상세보기 ⚡ 100%", merged.lines().last())
         val details = "🔎 반도체 및 기자재 상세 (19종목)\n99. ↩ 간략보기"
