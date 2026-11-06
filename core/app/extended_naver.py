@@ -16,6 +16,10 @@
 14. 폴링 응답의 알려진 data/result 중첩 래퍼를 최대 32개 노드까지만 탐색해 실제 체결 객체를 확인한다.
 15. DNS/타임아웃처럼 호스트 전체 연결이 어려운 경우에는 두 번째 API를 시도하지 않는다.
 16. 동일 응답에서 명시적인 overMarketPriceInfo가 확인되면 루트 closePrice로 덮어써서 본장·장외를 혼동하지 않는다.
+17. 공식 나스닥 상장 SPCX(스페이스X) 신규 티커를 공개 네이버 해외 프리·애프터 조회 허용종목에 추가한다.
+18. NYSE 상장 LLY(일라이릴리)는 공식 Reuters RIC LLY.N만 허용하여 나스닥 .O를 임의 적용하거나 다른 종목을 혼동하지 않는다.
+19. SPCX.O/LLY.N 모두 네이버 응답의 종목코드·현지 거래시각·명시적 세션 검증을 통과할 때만 프리·애프터 대표값으로 채택한다.
+20. 지원 목록 외 종목·불확실한 코드·누락된 시간외 체결은 기존 정규장 시세 유지, 오류 로그/DB/Android/인증은 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -35,17 +39,21 @@ from .extended_sessions import SessionPrice, _session_price
 _NAVER_NASDAQ = frozenset({
     'MU', 'SKHY', 'SNDK', 'STX', 'WDC', 'NVDA', 'AAPL', 'MSFT',
     'GOOG', 'GOOGL', 'AMZN', 'META', 'AVGO', 'AMD', 'INTC',
-    'ADBE', 'COST', 'NFLX', 'TSLA',
+    'ADBE', 'COST', 'NFLX', 'TSLA', 'SPCX',
 })
+# 검증된 뉴욕증권거래소 종목. 임의의 미확인 ticker.N을 생성하지 않는다.
+_NAVER_NYSE = {'LLY': 'LLY.N'}
 _POLLING = 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes='
 _BASIC = 'https://stock.naver.com/api/securityService/stock/{reuters}/basic'
 _NUMBER_RE = re.compile(r'^[+]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$')
 
 
 def reuters_code(stock) -> str:
-    if stock.market != '미국' or stock.currency != 'USD' or stock.ticker not in _NAVER_NASDAQ:
+    if stock.market != '미국' or stock.currency != 'USD':
         return ''
-    return stock.ticker + '.O'
+    if stock.ticker in _NAVER_NASDAQ:
+        return stock.ticker + '.O'
+    return _NAVER_NYSE.get(stock.ticker, '')
 
 
 def _price(value) -> float | None:
