@@ -33,6 +33,8 @@
 // 32. 기존 텍스트 알림 답장·기존 이미지 MIME 진단·전체 DB/메뉴/배터리/Android UI 요소·Core API를 보존한다.
 // 33. v0.4.17(versionCode 21)은 확인된 대상 방의 사진 보내기 버튼까지 자동 클릭하고 화면 차이 대기 로깅을 추가한다.
 // 34. 기존 설치 데이터/알림·접근성 권한/메뉴/로그/토큰/배터리/API를 보존하며 잠긴 화면에선 전송하지 않는다.
+// 35. v0.4.18(versionCode 22)은 인증 불필요 잠금/꺼진 화면의 Android 공식 화면 깨우기와 잠금 정책 테스트를 추가한다.
+// 36. 인증 필요한 PIN/패턴/비밀번호는 우회하지 않으며 기존 설치 DB/.env/텍스트 알림/UI·로그/배터리를 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -46,8 +48,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.4.17"
+        versionCode = 22
+        versionName = "0.4.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
