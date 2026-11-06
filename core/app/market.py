@@ -1498,7 +1498,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
         lines.append((f'※ {len(WATCHLIST)-success}종목 조회 실패'
                       if not detailed else f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.'))
     lines.append('※ 무료·지연 가능·실시간 아님' if detailed else '※ 무료·지연·실시간 아님')
-    lines.append('※ 5분 내 1~8: 종목 분석' if detailed else '※ 1~8 분석(5분)')
+    lines.append('※ 5분 내 1~8: 종목 분석' if detailed else '※ 5분 내 1~8: 분석')
     lines.append('9. ↩ 간략보기' if detailed else '9. 🔎 상세보기')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote and not detailed:
