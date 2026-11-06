@@ -14,6 +14,7 @@
 12. 미국 정규장 중 과거 프리 체결은 대표 시세를 덮지 않으며 장외 시간에는 실제 세션의 P/A 가격만 보인다.
 13. 메모리7 간략 보기와 상세 보기 사이에 원본 정규·프리·애프터 데이터, 거래일과 출처가 누락되지 않음을 검증한다.
 14. 모바일 8개 종목 수 검증의 괄호 문법을 수정하고 수량·430자·15줄 검사를 모두 유지한다.
+15. 상승·하락 화살표 뒤의 공백을 제거한 간략 시세 문자열을 비교하고 P/A 한 글자 표기를 유지한다.
 """
 from __future__ import annotations
 
@@ -65,7 +66,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
     def test_samsung_after_rises_versus_today_regular_even_if_yesterday_negative(self):
         q = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         text = compact_quote_line(q)
-        self.assertEqual(text, '삼성전자 19.4만 🔺 +2.76% A')
+        self.assertEqual(text, '삼성전자 19.4만 🔺+2.76% A')
         self.assertNotIn('\n', text)
         self.assertNotIn('▽', text)
         self.assertAlmostEqual(q.percent, (193800 / 201500 - 1) * 100)
@@ -77,7 +78,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
 
     def test_hynix_after_rises_relative_to_regular(self):
         q = korean_after(WATCHLIST[1], 1130000, 1180000, 1264000)
-        self.assertEqual(compact_quote_line(q), '하이닉스 118만 🔺 +4.42% A')
+        self.assertEqual(compact_quote_line(q), '하이닉스 118만 🔺+4.42% A')
         self.assertNotIn('\n', compact_quote_line(q))
 
     def test_legacy_krx_regular_close_plus_nxt_after_is_positive(self):
@@ -88,7 +89,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
         meta = DomesticQuoteMetadata('폴링', 'CLOSE', None, now, aft)
         quote = Quote(WATCHLIST[0], 230000, 231000, -0.43, close, now, domestic=meta)
         rendered = compact_quote_line(quote)
-        self.assertEqual(rendered, '삼성전자 23.1만 🔺 +0.65% A')
+        self.assertEqual(rendered, '삼성전자 23.1만 🔺+0.65% A')
         self.assertNotIn('\n', rendered)
         self.assertIn('NXT 장후 231,500원', quote_line(quote))
         self.assertIn('▲0.65% 정규장 대비', quote_line(quote))
@@ -112,11 +113,11 @@ class CompactSessionQuoteTests(unittest.TestCase):
 
     def test_premarket_compares_previous_regular(self):
         q = korean_after(WATCHLIST[0], 188600, 192000, 201500, session='장전')
-        self.assertEqual(compact_quote_line(q), '삼성전자 19.2만 🔺 +1.80% P')
+        self.assertEqual(compact_quote_line(q), '삼성전자 19.2만 🔺+1.80% P')
 
     def test_us_premarket_one_line_and_exact_price(self):
         q = us_sessions()
-        self.assertEqual(compact_quote_line(q), '마이크론 $707.11 🔺 +7.73% P')
+        self.assertEqual(compact_quote_line(q), '마이크론 $707.11 🔺+7.73% P')
         self.assertNotIn('\n', compact_quote_line(q))
         self.assertIn('프리 $707.11', quote_line(q))
         self.assertEqual(q.price, 656.0)
@@ -128,15 +129,15 @@ class CompactSessionQuoteTests(unittest.TestCase):
                     market_time=datetime(2026, 11, 6, 15, 59, tzinfo=ET),
                     extended=(*q.extended, SessionPrice('애프터', 669.50, 2.06,
                                                         after - timedelta(minutes=5), 'Yahoo 분봉')))
-        self.assertEqual(compact_quote_line(q), '마이크론 $669.50 🔺 +2.06% A')
+        self.assertEqual(compact_quote_line(q), '마이크론 $669.50 🔺+2.06% A')
 
     def test_group_quote_one_line_per_item_and_ids_unchanged(self):
         kr = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         us = us_sessions()
         report = group_report('반도체', (WATCHLIST[0], WATCHLIST[2]),
                               fetcher=lambda stock: kr if stock.ticker == WATCHLIST[0].ticker else us)
-        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% A', report)
-        self.assertIn('2. 마이크론 $707.11 🔺 +7.73% P', report)
+        self.assertIn('1. 삼성전자 19.4만 🔺+2.76% A', report)
+        self.assertIn('2. 마이크론 $707.11 🔺+7.73% P', report)
         self.assertNotIn('   └ ', report)
         self.assertIn('※ 5분 내 1~2', report)
 
@@ -146,7 +147,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
         quote = replace(quote, fetched_at=midday,
                         market_time=midday - timedelta(minutes=2))
         rendered = compact_quote_line(quote)
-        self.assertEqual(rendered, '마이크론 $656 ▽ -17.46%')
+        self.assertEqual(rendered, '마이크론 $656 ▽-17.46%')
         self.assertNotIn(' P', rendered)
         self.assertNotIn(' A', rendered)
 
@@ -188,8 +189,8 @@ class CompactSessionQuoteTests(unittest.TestCase):
         }
         fetcher = lambda stock: quotes.get(stock.ticker)
         brief = memory7_report(fetcher=fetcher, use_cache=False)
-        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% A', brief)
-        self.assertIn('3. 마이크론 $707.11 🔺 +7.73% P', brief)
+        self.assertIn('1. 삼성전자 19.4만 🔺+2.76% A', brief)
+        self.assertIn('3. 마이크론 $707.11 🔺+7.73% P', brief)
         self.assertNotIn('   └', brief)
         self.assertIn('9. 🔎 상세보기', brief)
         long = memory7_report(fetcher=fetcher, use_cache=False, detailed=True)
