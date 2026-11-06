@@ -135,6 +135,35 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertIn('애프터 $101.00', rendered)
         self.assertIn('ET', quote_line(fetched))
 
+    def test_nasdaq_fills_current_after_when_yahoo_only_has_pre(self):
+        r = regular()
+        daily = {'chart': {'result': [{'meta': {
+            'symbol': 'MU', 'currency': 'USD', 'regularMarketPrice': r.price,
+            'regularMarketTime': int(REG.timestamp()), 'previousClose': 98.0}}]}}
+        intraday = yahoo_chart(volume=100)
+        intraday['chart']['result'][0]['indicators']['quote'][0]['volume'] = [100, 100, 0]
+        nasdaq = {'data': {
+            'symbol': 'MU', 'assetClass': 'STOCKS', 'marketStatus': 'After-Hours',
+            'primaryData': {'lastSalePrice': '$100.00', 'netChange': '$2.00',
+                            'percentageChange': '2.04%',
+                            'lastTradeTimestamp': 'Nov 06, 2026 03:59 PM ET'},
+            'secondaryData': {'lastSalePrice': '$101.50',
+                              'lastTradeTimestamp': 'Nov 06, 2026 05:04 PM ET'}
+        }}
+        calls = []
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            if 'api.nasdaq.com' in req.full_url:
+                return _Response(nasdaq)
+            if 'interval=1m' in req.full_url:
+                return _Response(intraday)
+            return _Response(daily)
+        quote = fetch_quote(WATCHLIST[2], opener=opener, now=NOW)
+        self.assertEqual([x.session for x in quote.extended], ['프리', '애프터'])
+        self.assertEqual(quote.extended[1].source, '나스닥 웹')
+        self.assertAlmostEqual(quote.extended[1].price, 101.50)
+        self.assertEqual(len(calls), 3)
+
     def test_korean_after_time_is_not_regular_trade_time(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
         stock = WATCHLIST[0]
