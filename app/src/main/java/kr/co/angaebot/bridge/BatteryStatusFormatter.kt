@@ -10,6 +10,9 @@
  * 8. 숫자, 상태, 긴 원문 등을 외부 전송하지 않으며 기존 허용 채팅방/발신자 외에는 응답하지 않는다.
  * 9. 새 앱 권한이나 별도 네트워크 호출 없이 Android 기기의 현재 배터리 정보만 활용한다.
  * 10. 순수 Kotlin 코드이므로 단위 테스트로 응답 본문 보존, 퍼센트, 경고 경계를 검증한다.
+ * 11. Android 실제 답장에는 🔋 79%, 충전/완충 중에는 ⚡ 79% 한 줄만 붙여 공간을 절약한다.
+ * 12. 기존 footer/append의 상세 충전 상태 문자열과 배터리 오차/20% 저전력 알림은 삭제하지 않고 명시 조회·테스트용으로 보존한다.
+ * 13. 알 수 없는 잔량은 추정하지 않으며 배터리 상태 수집/RemoteInput/SQLite/운영 로그·설정·UI는 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -34,6 +37,21 @@ object BatteryStatusFormatter {
         return "🔋 S20+ 배터리 ${percent}% · $status$warning"
     }
 
+    /** 자동응답의 한 줄 기본 배터리 표시. 충전/완충 상태는 ⚡로 구분. */
+    fun compactFooter(level: Int, scale: Int, state: BatteryChargeState): String {
+        if (level < 0 || scale <= 0 || level > scale) return "🔋 확인 불가"
+        val percent = ((level.toLong() * 100L + scale / 2L) / scale.toLong()).toInt()
+        val icon = if (state == BatteryChargeState.CHARGING || state == BatteryChargeState.FULL) "⚡" else "🔋"
+        val warning = if (percent <= 20 && state !in setOf(BatteryChargeState.CHARGING, BatteryChargeState.FULL)) {
+            " ⚠️"
+        } else ""
+        return "$icon $percent%$warning"
+    }
+
+    fun compactAppend(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
+        reply.trimEnd('\n') + "\n" + compactFooter(level, scale, state)
+
+    // API 호환성: 기존 상세 표시기를 제거하거나 반환 문자열을 변경하지 않는다.
     fun append(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
         reply + "\n" + footer(level, scale, state)
 }
