@@ -15,6 +15,7 @@
 13. 동일 네이버 호스트에서 HTTP 403/429가 확인되면 즉시 중단해 과도한 재시도·휴대폰 응답 지연을 방지한다.
 14. 폴링 응답의 알려진 data/result 중첩 래퍼를 최대 32개 노드까지만 탐색해 실제 체결 객체를 확인한다.
 15. DNS/타임아웃처럼 호스트 전체 연결이 어려운 경우에는 두 번째 API를 시도하지 않는다.
+16. 동일 응답에서 명시적인 overMarketPriceInfo가 확인되면 루트 closePrice로 덮어써서 본장·장외를 혼동하지 않는다.
 """
 from __future__ import annotations
 
@@ -134,11 +135,14 @@ def parse_naver_extended(stock, payload: dict, regular, *, now: datetime) -> tup
             if isinstance(value, dict):
                 period = _session(value.get('tradingSessionType') or value.get('marketSessionType')) or default
                 if period:
-                    candidates.append((period, value, ('overPrice', 'closePrice', 'lastPrice', 'price')))
+                    candidates.append((period, value, ('overPrice', 'closePrice', 'lastPrice', 'price'), True))
         period = _session(item.get('marketSessionType') or item.get('tradingSessionType'))
         if period:
-            candidates.append((period, item, ('closePrice', 'lastPrice', 'price')))
-        for session, value, keys in candidates:
+            candidates.append((period, item, ('closePrice', 'lastPrice', 'price'), False))
+        verified_explicit = set()
+        for session, value, keys, explicit in candidates:
+            if not explicit and session in verified_explicit:
+                continue  # 명시적인 장외 거래가 확인됐으면 루트(정규가 가능)로 대체 금지
             raw_price = next((_price(value[k]) for k in keys if _price(value.get(k)) is not None), None)
             if raw_price is None:
                 continue
@@ -146,8 +150,11 @@ def parse_naver_extended(stock, payload: dict, regular, *, now: datetime) -> tup
             if traded is None:
                 continue
             verified = _session_price(stock, regular, now, traded, raw_price, session, '네이버 해외')
-            if verified and (session not in result or traded > result[session].market_time):
-                result[session] = verified
+            if verified is not None:
+                if explicit:
+                    verified_explicit.add(session)
+                if session not in result or traded > result[session].market_time:
+                    result[session] = verified
     return tuple(result[key] for key in ('프리', '애프터') if key in result)
 
 
