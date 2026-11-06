@@ -13,6 +13,8 @@
 27. 최근 성공 주식 조회가 없는 화면도 숫자 0으로 주식 메뉴에 복귀하고 00은 홈으로 이동하는지 검증한다.
 28. 주식 홈 7번 상세 메뉴 제거, 메모리7 및 그룹 99 상세보기와 0 이전·00 홈을 검증한다.
 29. 10종목 그룹의 9/10번째 종목 분석과 99 상세 전환이 각각 독립 선택인 것을 검증한다.
+30. 사용자 관심그룹 상세·0 간략 복귀·99 왕복·메뉴 경로 주식 3 99·채팅방 격리·기존 작업 로그를 검증한다.
+31. 99 입력은 현재 시세 화면에서만 허용하고 다른 메뉴와 9/10 종목 번호가 충돌하지 않게 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -450,6 +452,74 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertTrue(selected['ok'])
             self.assertEqual(history.call_args.args[0].ticker,'LLY')
             self.assertEqual(selected['reply'],'일라이릴리 분석')
+
+    def test_all_group_quotes_99_detail_and_0_back_without_number_collisions(self):
+        from app.watchlists import US_MARKET_CAP_PRESET
+        self.assertTrue(self.post('그룹생성 십종목').json()['ok'])
+        for ticker, alias in US_MARKET_CAP_PRESET:
+            self.assertTrue(self.post(f'추가 십종목 {ticker} {alias}').json()['ok'])
+        def render(name, stocks, *, detailed=False):
+            self.assertEqual(name,'십종목')
+            self.assertEqual(len(stocks),10)
+            return ('🔎 십종목 관심종목 시세 상세 보기' if detailed
+                    else '📊 십종목 관심종목 시세 요약')
+        with patch('app.main.group_report',side_effect=render) as calls:
+            compact=self.post('십종목').json()
+            self.assertTrue(compact['menu_active'])
+            self.assertIn('시세 요약',compact['reply'])
+            detail=self.post('선택 99').json()
+            self.assertTrue(detail['ok'],detail)
+            self.assertTrue(detail['menu_active'])
+            self.assertIn('시세 상세 보기',detail['reply'])
+            self.assertEqual(detail['module_source'],'core.watchlists')
+            self.assertFalse(self.post('선택 99',sender='다른사람').json()['ok'])
+            previous=self.post('선택 0').json()
+            self.assertIn('시세 요약',previous['reply'])
+            self.assertTrue(previous['menu_active'])
+            self.assertEqual(calls.call_count,3)
+            detailed_again=self.post('선택 99').json()
+            self.assertIn('시세 상세 보기',detailed_again['reply'])
+            compact_again=self.post('선택 99').json()
+            self.assertIn('시세 요약',compact_again['reply'])
+            self.assertTrue(compact_again['menu_active'])
+        with patch('app.main.fetch_history') as history, patch(
+            'app.main.individual_report',return_value='9번째 종목 분석'):
+            selected=self.post('선택 9').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,US_MARKET_CAP_PRESET[8][0])
+            self.assertEqual(selected['reply'],'9번째 종목 분석')
+        with patch('app.main.group_report',return_value='📊 십종목 관심종목 시세 요약'):
+            self.assertTrue(self.post('십종목').json()['menu_active'])
+        with patch('app.main.fetch_history') as history, patch(
+            'app.main.individual_report',return_value='10번째 종목 분석'):
+            selected=self.post('선택 10').json()
+            self.assertTrue(selected['ok'])
+            self.assertEqual(history.call_args.args[0].ticker,US_MARKET_CAP_PRESET[9][0])
+            self.assertEqual(selected['reply'],'10번째 종목 분석')
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
+                             db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
+
+    def test_group_99_jump_and_error_on_non_quote_menu(self):
+        self.assertTrue(self.post('그룹생성 반도체').json()['ok'])
+        self.assertTrue(self.post('추가 반도체 MU 마이크론').json()['ok'])
+        self.assertTrue(self.post('메뉴').json()['menu_active'])
+        self.assertFalse(self.post('선택 99').json()['ok'])
+        with patch('app.main.group_report',
+                   return_value='🔎 반도체 관심종목 시세 상세 보기') as render:
+            self.sequence += 1
+            payload = {
+                'request_id': f'menus_{self.sequence:011d}',
+                'command': '메뉴','argument':'경로 주식 3 99',
+                'room':'방','sender':'나',
+            }
+            response=self.client.post('/v1/commands',headers=self.headers,json=payload).json()
+            self.assertTrue(response['ok'],response)
+            self.assertTrue(response['menu_active'])
+            self.assertIn('시세 상세 보기',response['reply'])
+            render.assert_called_once()
+            self.assertTrue(render.call_args.kwargs.get('detailed'))
+        self.assertFalse(self.post('상세시세 가짜그룹').json()['ok'])
 
     def test_legacy_memory7_command_opens_numeric_selection(self):
         request = {'request_id':'legacy_memory7_000123', 'command':'메모리7',
