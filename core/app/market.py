@@ -77,6 +77,7 @@
 69. 상세보기(주식 메뉴 7번·메모리7 상세)는 기존 원본 Quote/시각·공급자·정규장/장외 가격을 여러 줄로 보여주고 간략 화면에는 반복하지 않는다.
 70. 기존 1~8 번호 분석/메뉴/사용자 그룹/30초 기본 캐시 및 로그·DB·Android 하단 기능모듈·배터리·AI OFF를 보존한다.
 71. 간결 시세 출처 행은 활성 프리/애프터 공급자의 실제 출처를 표시해 정규장 Yahoo 공급자와 혼동하지 않는다.
+72. 구형 네이버 본장(15:30 확정)가와 별도 시간외 필드를 받는 경우도 현재 거래시간에는 장외 대표값과 정규장대비 상승률을 표시한다.
 """
 from __future__ import annotations
 
@@ -1267,15 +1268,27 @@ def _domestic_session_percent(item: Quote) -> float | None:
     """장외 거래 당일 정규장(프리는 직전 정규장) 종가 대비. 기준가 미확인 시 None."""
     meta = item.domestic
     aft = meta.after_market if meta else None
-    if aft is None or meta.regular_price is None or meta.regular_price <= 0:
+    if aft is None:
         return None
-    if meta.regular_time is None:
+    reference = meta.regular_price
+    reference_time = meta.regular_time
+    if reference is None and meta.market_session not in (
+        'aftermarket', 'after_market', 'premarket', 'pre_market',
+        'beforemarket', 'before_market'
+    ):
+        # 구형 Naver 본장 응답 + 별도 overMarketPriceInfo:
+        # 실제 KRX 마감시각의 기준가격이므로 이 값만 비교 기준으로 허용한다.
+        local = item.market_time.astimezone(_timezone(item.stock.timezone_name))
+        if (15, 20) <= (local.hour, local.minute) <= (15, 35):
+            reference = item.price
+            reference_time = local
+    if reference is None or reference <= 0 or reference_time is None:
         return None
-    if aft.session == '장후' and meta.regular_time.date() != aft.market_time.date():
+    if aft.session == '장후' and reference_time.date() != aft.market_time.date():
         return None
-    if aft.session == '장전' and not (0 < (aft.market_time.date() - meta.regular_time.date()).days <= 4):
+    if aft.session == '장전' and not (0 < (aft.market_time.date() - reference_time.date()).days <= 4):
         return None
-    percent = (aft.price / meta.regular_price - 1.0) * 100.0
+    percent = (aft.price / reference - 1.0) * 100.0
     return percent if math.isfinite(percent) and -99.9 < percent < 1000 else None
 
 
@@ -1288,9 +1301,17 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
         expected = ('장후' if period in ('aftermarket', 'after_market')
                     else '장전' if period in ('premarket', 'pre_market', 'beforemarket', 'before_market')
                     else '')
-        if aft is not None and expected == aft.session:
-            label = '애프터' if aft.session == '장후' else '프리'
-            return aft.price, _domestic_session_percent(item), label
+        if aft is not None:
+            local = item.fetched_at.astimezone(_timezone(stock.timezone_name))
+            clock = (local.hour, local.minute)
+            on_session_day = local.weekday() < 5 and aft.market_time.date() == local.date()
+            market_in_session = (
+                (aft.session == '장후' and (15, 40) <= clock <= (23, 59)) or
+                (aft.session == '장전' and (8, 0) <= clock < (9, 0))
+            )
+            if expected == aft.session or (not expected and on_session_day and market_in_session):
+                label = '애프터' if aft.session == '장후' else '프리'
+                return aft.price, _domestic_session_percent(item), label
     if item.stock.market == '미국' and item.extended:
         from .extended_sessions import session_of
         # 공급자의 검증된 장외체결 중 현재 현지 세션을 우선.
