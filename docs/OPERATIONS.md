@@ -2,17 +2,19 @@
 
 > 운영 기준은 이 파일에만 기록합니다. 과거 서비스 구축 문서의 전문은 아래에 보존합니다.
 
-## 이미지 전송 시험 (기능 브랜치 feature/image-send-20261107)
+## 이미지 파일 말풍선 자동전송 실험 — S20+ 실기기 검증 필요 (feature/image-send-20261107)
 
-- 목적: 카카오톡 **사진 자체**를 자동 전송할 수 있는지 Android 알림 `RemoteInput` 공식 데이터 MIME 지원 여부를 실기기에서 먼저 확인한다. 이미지 링크 전송과 구별한다.
-- 조건: Galaxy S20+의 앙개봇 Android Bridge 0.4.15 설치, 알림 접근 허용, 카카오톡 알림에서 같은 방과 발신자에 대해 기존 자동응답이 정상 작동해야 한다. 기존 방/발신자 허용목록·호출어·ON/OFF는 그대로 적용된다.
-- 테스트: 허용된 1:1 채팅방에서 `앙개야 이미지 테스트` 입력. 앱 캐시에 자체 생성한 640×360 샘플 PNG/JPEG 이외의 사진은 사용하지 않는다.
-- 카카오톡이 알림의 `RemoteInput.allowedDataTypes`에 `image/png`, `image/jpeg` 또는 `image/*`를 제공한 경우에만 첨부된 파일의 `content://` URI를 알림 답장 액션에 전달한다. 다른 앱 내부 API나 접근성 제어는 사용하지 않는다.
-- 이미지 입력이 **없으면** 채팅방에 `이미지 직접 전송 미지원` 텍스트만 보내며 기존 텍스트 자동응답은 그대로 작동한다. 이 상태에서는 카카오톡 앱이 직접 사진 자동전송을 지원하는 것으로 판단할 수 없다.
-- 로그: 기존 `RECEIVE`, `COMMAND`, `REPLY_ATTEMPT`, `REPLY_REQUESTED`, `REPLY_UNAVAILABLE`, `REPLY_FAILED`를 유지하고 `IMAGE_REPLY_SUPPORTED`, `IMAGE_REPLY_UNAVAILABLE`, `IMAGE_REPLY_REQUESTED`, `IMAGE_REPLY_FAILED`를 보조로 기록한다. `IMAGE_REPLY_REQUESTED`는 Android `PendingIntent.send` 요청 성공일 뿐 실제 카카오톡 수신 보장이 아니다.
-- 검증: 카카오톡에서 **사진 말풍선이 실제로 나타났는지**와 Android Bridge 로그를 비교한다. 개발 PC/CI에서는 카카오톡 실전송을 검증할 수 없다. 1:1 채팅 성공 후 오픈채팅방도 별도로 확인한다.
-- 기능 브랜치 배포: `cd D:\stockproj\AngaeBotBridge` 이후 `.\deploy-angaebot.ps1 -Branch "feature/image-send-20261107" -InstallAndroid`. Core .env·DB·기존 로그·Android 앱 데이터는 보존한다.
-- 기존 주식·날씨·부동산·메모·금융·AI·배터리·로그/메뉴 등 모든 기능은 변경하지 않는다. 실기기 검증 전 main 병합 금지.
+- 1차 `앙개야 이미지 테스트`: 기존 카카오톡 알림 답장(RemoteInput)에서 이미지 첨부 MIME을 검사. 미지원인 경우 텍스트 경고만 보내며 기존 텍스트 기능을 보존. **S20+에서 이미지 MIME 미지원이 실제 확인됨**.
+- 2차 `앙개야 이미지 자동시험`: Android Bridge v0.4.16의 별도 접근성 공유 화면 자동화 실험. 별도 사용자 승인이 필요하며 기본 OFF. 현재는 앱 자체 생성 640×360 PNG만 대상으로 하고 임의 이미지/주식 차트 생성 및 외부 미디어 다운로드는 지원하지 않음.
+- 화면 잠금이 해제되어 있어야 함. Android 백그라운드 Activity 실행 제한 및 카카오톡 공유 UI의 OS/버전별 차이 때문에 성공이 보장되지 않음.
+- Android 관리 화면 `②-B 이미지 사진 자동전송 실험`에서 스위치 ON → 저장 → `이미지 자동전송 접근성 권한 설정 열기` → `앙개봇 이미지 공유 실험` 활성화. 기존 `②` 자동응답과 허용 방/발신자 설정도 ON/정확 일치해야 함.
+- 카카오톡 알림에서 요청된 정확한 방 이름이 공유 UI에 1개만 있고 `채팅방/공유` 화면 단서가 있을 때만 클릭. 다음 화면에도 같은 방 이름/사진 첨부 단서/단일 전송 버튼이 모두 있어야 클릭. 조건 누락 시 최대 15초 후 안전하게 중단. 좌표 클릭, 루트 접근, 화면 캡처/OCR, 무관한 화면 텍스트 저장 금지.
+- 기존 SQLite RECEIVE/COMMAND/REPLY_ATTEMPT/REPLY_REQUESTED/REPLY_FAILED 등 모든 로그를 유지하고 `IMAGE_UI_CONNECTED`, `IMAGE_UI_QUEUED`, `IMAGE_UI_START_ACCEPTED`, `IMAGE_UI_START_REJECTED`, `IMAGE_UI_SHARE_OPEN_REQUESTED`, `IMAGE_UI_ROOM_SELECTED`, `IMAGE_UI_SEND_REQUESTED`, `IMAGE_UI_TIMEOUT`, `IMAGE_UI_ABORTED`를 별도 기록.
+- `IMAGE_UI_SEND_REQUESTED`는 UI 버튼 클릭 시도 성공만 의미. **실제 카카오톡 이미지 말풍선 도착 여부는 독립적으로 확인해야 하며 사용자에게 전송 성공으로 안내하면 안 됨**.
+- 실기기 시험 순서: (1) S20+ 잠금 해제 (2) S25에서 정확히 허용된 1:1 채팅방으로 명령 전송 (3) S20+에서 공유 화면 자동 이동 여부와 이미지 미리보기 확인 (4) S25에서 이미지 말풍선 수신 여부 확인 (5) 실패 시 S20+ 브리지의 `IMAGE_UI_*` 로그를 확인하고 UI 버전 대응. 단체방/오픈채팅방은 별도 현장 검증 필요.
+- 새 앱 기능 브랜치 배포: `cd D:\stockproj\AngaeBotBridge` → `.\deploy-angaebot.ps1 -Branch "feature/image-send-20261107" -InstallAndroid`. Core .env/DB/로그·Android Bridge 설치 데이터 보존.
+- 루팅/카카오 내부 데이터베이스 접근은 이 실험에 포함하지 않으며, 일상적으로 잠긴 화면에서 24시간 완전무인 사진 게시를 보장하지 못함. 기능 검증 전 main 병합하지 않음.
+
 
 ## 실제 운영과 보안
 
