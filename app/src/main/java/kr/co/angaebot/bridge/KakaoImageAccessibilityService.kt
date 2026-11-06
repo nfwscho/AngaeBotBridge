@@ -11,6 +11,7 @@
  * 9. 사용자 대화/상대방 목록의 화면 텍스트를 저장·전송하지 않는다. 로그는 단계명과 버튼 탐지 개수만 기록한다.
  * 10. 공유 Activity는 Android의 백그라운드 실행 제한으로 열리지 않을 수 있으며, 그 경우 기존 RemoteInput 텍스트 답장은 유지된다.
  * 11. 이 모듈은 실기기 카카오톡 버전별 확인을 위한 fail-closed 실험판으로 정상 수신 보장은 하지 않는다.
+ * 12. 공유 Activity 실행 요청 전의 과거 카카오톡 UI 이벤트는 무시해 다른 대화방의 기존 보내기 버튼을 누르지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -44,6 +45,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
     private data class ImageJob(
         val room: String,
         val startedMs: Long,
+        @Volatile var shareLaunched: Boolean = false,
         var stage: ImageUiStage = ImageUiStage.PICK_ROOM
     )
 
@@ -64,6 +66,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val job = activeJob ?: return
+        if (!job.shareLaunched) return
         if (event?.packageName?.toString() != KAKAO_PACKAGE) return
         if (!ImageAutoConfig.enabled(this) || !BotConfig(this).load().enabled) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF로 중단", true)
@@ -178,6 +181,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 if (activeJob !== job) return@postDelayed
                 try {
                     startActivity(intent)
+                    job.shareLaunched = true
                     logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED",
                         "Android ACTION_SEND로 카카오톡 사진 공유 화면 열기 요청")
                 } catch (e: Exception) {
