@@ -53,6 +53,10 @@
 67. 메모리7·반도체·미국시총10·모든 사용자 그룹 시세에서 종목 분석은 1~10번, 상세/간략 전환은 독립 99번으로만 선택한다.
 68. 기존 카카오톡 9번은 종목이 9개 이상인 그룹의 9번째 종목 분석에 사용하며 시세 상세 명령과 충돌하지 않는다.
 69. 그룹 상세 조회 명령은 소유 그룹명만 사용하고 0으로 실제 이전 시세표에, 00으로 홈에 복귀하도록 5분 이력·스코프를 유지한다.
+70. 주식 메뉴 7 AI 주도주(13), 8 반도체 및 기자재(19), 9 데센 및 네트워크(5) 고정 읽기 전용 섹터를 기존 1~6번 뒤에 추가한다.
+71. 13·19종목은 10종목 단위 페이지로 나누고 98 다음 페이지/97 이전 페이지/99 상세보기 전환을 별도로 지원한다.
+72. 1~10은 현재 페이지의 정확한 티커 분석, 0은 실제 이전 화면, 00은 홈으로 유지하며 5분·채팅방/발신자 분리·로그를 보존한다.
+73. 섹터 목록은 운영 DB에 등록하지 않는 읽기 전용 상수이며 기존 사용자 그룹 10개×10종목 제한과 CRUD는 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -206,6 +210,9 @@ class StockSelectionMenus:
             MenuChoice('미국시총10 시세', command_argument='미국시총10'),
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
+            MenuChoice('AI 주도주 (13종목)', command_argument='섹터시세 ai 1 간략'),
+            MenuChoice('반도체 및 기자재 (19종목)', command_argument='섹터시세 semi 1 간략'),
+            MenuChoice('데센 및 네트워크 (5종목)', command_argument='섹터시세 dc 1 간략'),
         )
 
     @staticmethod
@@ -276,9 +283,9 @@ class StockSelectionMenus:
             '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
-            '주 2 시세 · 주 3 반도체 · 시세표 99 상세/간략 · 주 분 삼성전자',
+            '주 2 메모리7 · 주 7 AI · 주 8 반도체기자재 · 주 9 데센',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
-            '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
+            '1~10 분석 · 97/98 페이지 · 99 상세 · 0 이전 · 00 홈',
         ))
 
     @classmethod
@@ -301,7 +308,7 @@ class StockSelectionMenus:
                     detail = ' [본인 최근 조회 목록]'
                 elif choice.command_argument == '목록':
                     detail = ' [본인 관심그룹 목록]'
-                elif choice.command_argument in {'메모리7', '메모리7 상세', '반도체', '미국시총10'}:
+                elif choice.command_argument in {'메모리7', '메모리7 상세', '반도체', '미국시총10'} or choice.command_argument.startswith('섹터시세 '):
                     detail = ' [조회 후 종목 선택]'
                 lines.append('  ' * len(prefix) + f'{number}. {choice.label}{detail}')
                 if choice.page == 'stock-root':
@@ -383,15 +390,15 @@ class StockSelectionMenus:
                       root: str, numbers: tuple[str, ...]) -> MenuAnswer:
         """메뉴 점프: 실제 메뉴 정의를 단계별로 따라가며 최종 선택만 실행한다.
 
-        경로 전체는 1~10, 99, 0, 00 중 최대 다섯 단계만 허용한다.
+        경로 전체는 1~10, 97/98 페이지, 99 상세, 0 이전, 00 홈 중 최대 다섯 단계만 허용한다.
         중간 메모리7/그룹 선택은 실제 시세 HTTP를 중복 호출하지 않고
         기존 정확한 종목 메뉴를 준비한다. 마지막 종목 분석은 main.py가
         기존 인증·dedup·DB 잠금 외부의 조회 루틴으로만 실행한다.
         """
         if not numbers or len(numbers) > 5 or any(
-            re.fullmatch(r'(?:99|00|10|[0-9])', number) is None for number in numbers
+            re.fullmatch(r'(?:97|98|99|00|10|[0-9])', number) is None for number in numbers
         ):
-            raise StockQuoteError('메뉴 점프는 번호 1~10 또는 시세 상세 99를 공백으로 최대 5개 입력하세요.')
+            raise StockQuoteError('메뉴 점프는 1~10·97/98 페이지·99 상세를 최대 5단계로 입력하세요.')
         if root == '홈':
             answer = self.open_home(room, sender)
         elif root == '주식':
@@ -418,6 +425,14 @@ class StockSelectionMenus:
                     self.open_quotes(room, sender, WATCHLIST, back=answer.back,
                                      memory7_view='detail' if arg == '메모리7 상세' else 'compact',
                                      previous=answer.previous)
+                elif arg.startswith('섹터시세 '):
+                    from .sector_watchlists import parse_sector_request
+                    parsed = parse_sector_request(arg)
+                    if parsed is None:
+                        raise StockQuoteError('섹터 시세 경로가 잘못되었습니다.')
+                    key, page, detailed = parsed
+                    self.open_sector_quotes(room, sender, key, page, detailed,
+                                            back=answer.back, previous=answer.previous)
                 elif arg == '목록':
                     self.open_groups(db, room, sender, previous=answer.previous)
                 elif arg.startswith('상세시세 '):
@@ -471,6 +486,18 @@ class StockSelectionMenus:
                         else 'quotes')
         self._save(key, choices, back=back, origin=quote_origin, previous=previous)
 
+    def open_sector_quotes(self, room: str, sender: str, key_name: str, page: int,
+                           detailed: bool = False, *, back: str = 'menu',
+                           previous: 'MenuState | None' = None) -> None:
+        """고정 섹터의 현재 페이지 1~10 분석과 97/98/99 전환만 등록한다."""
+        from .sector_watchlists import get_page
+        stocks = get_page(key_name, page)
+        choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
+                        for stock in stocks)
+        mode = 'detail' if detailed else 'compact'
+        self._save(self._key(room, sender), choices, back=back,
+                   origin=f'quotes:sector:{key_name}:{page}:{mode}', previous=previous)
+
     def open_readonly_result(self, room: str, sender: str, *,
                              previous: 'MenuState | None') -> bool:
         """종목 분석 등 읽기 전용 결과도 0으로 호출 직전 메뉴에 복귀하도록 짧은 상태만 저장."""
@@ -517,8 +544,8 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:99|00|10|[0-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~10, 시세 상세보기 99 중 선택하세요. 이전 메뉴는 0입니다.')
+        if re.fullmatch(r'(?:97|98|99|00|10|[0-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10, 섹터 페이지 97/98, 상세 99, 이전 0을 사용하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
@@ -536,6 +563,12 @@ class StockSelectionMenus:
                     restored = MenuState(self._clock() + MENU_TTL_SECONDS, prior.choices,
                                          prior.back, prior.origin, prior.title, prior.previous)
                     self._states[key] = restored
+                    if prior.origin.startswith('quotes:sector:'):
+                        from .sector_watchlists import sector_argument
+                        _, _, key_name, page_text, mode = prior.origin.split(':')
+                        return MenuAnswer(execute_argument=sector_argument(
+                            key_name, int(page_text), mode == 'detail'),
+                            menu_active=True, back=prior.back, restored=True)
                     if prior.origin.startswith('quotes:memory7:'):
                         mode = prior.origin.rsplit(':', 1)[-1]
                         return MenuAnswer(execute_argument='메모리7 상세' if mode == 'detail' else '메모리7',
@@ -562,6 +595,26 @@ class StockSelectionMenus:
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
                 return self.open(room, sender, back='home')
+            if number in ('97', '98', '99') and state.origin.startswith('quotes:sector:'):
+                from .sector_watchlists import page_count, sector_argument
+                _, _, key_name, page_text, mode = state.origin.split(':')
+                page = int(page_text)
+                detailed = mode == 'detail'
+                if number == '99':
+                    detailed = not detailed
+                elif number == '98':
+                    if page >= page_count(key_name):
+                        raise StockQuoteError('이미 마지막 종목 페이지입니다.')
+                    page += 1
+                else:
+                    if page <= 1:
+                        raise StockQuoteError('이미 첫 종목 페이지입니다.')
+                    page -= 1
+                self._states.pop(key, None)
+                return MenuAnswer(execute_argument=sector_argument(key_name, page, detailed),
+                                  back=state.back, previous=state)
+            if number in ('97', '98'):
+                raise StockQuoteError('97/98은 여러 페이지가 있는 섹터 시세에서만 사용할 수 있습니다.')
             if number == '99':
                 if state.origin.startswith('quotes:memory7:'):
                     mode = state.origin.rsplit(':', 1)[-1]
