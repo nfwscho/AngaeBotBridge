@@ -1379,11 +1379,12 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
     return tuple(lines)
 
 
-def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cache: bool = True) -> str:
-    """8개 결과를 고정 순서로 표시. 실패 종목은 조회 불가로 명확히 처리한다."""
+def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
+                   use_cache: bool = True, detailed: bool = False) -> str:
+    """기본 종목당 1행, 상세 메뉴는 정규/프리/애프터 가격·시각·출처·등락기준 표시."""
     global _CACHE
     started = time.monotonic()
-    if use_cache and fetcher is fetch_quote:
+    if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
             if _CACHE is not None and started - _CACHE[0] < CACHE_SECONDS:
                 return _CACHE[1]
@@ -1396,7 +1397,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
 
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix='AngaeBotStock') as pool:
         quotes = list(pool.map(get_one, WATCHLIST))
-    lines = ['💾 메모리7 시세 요약']
+    lines = ['🔎 메모리7 시세 상세 보기' if detailed else '💾 메모리7 시세 요약']
     dates: dict[str, str] = {}
     success = 0
     latest_dates = {}
@@ -1409,7 +1410,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
             lines.append(f'{index}. {stock.name} : 조회 불가')
         else:
             success += 1
-            line = compact_quote_line(item)
+            line = quote_line(item, source_details=True) if detailed else compact_quote_line(item)
             if item.market_time.date() < latest_dates[stock.market]:
                 line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
             lines.append(f'{index}. {line}')
@@ -1418,21 +1419,30 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
     lines.append('')
-    lines.extend(compact_source_summary(quotes))
+    lines.extend(market_source_summary(quotes) if detailed else compact_source_summary(quotes))
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
     lines.append('※ 무료·지연 가능·실시간 아님')
     lines.append('※ 5분 내 1~8: 종목 분석')
+    lines.append('※ 주 2: 간략 시세로 돌아가기' if detailed else '※ 주 7: 메모리7 시세 상세 보기')
     result = '\n'.join(lines)
-    if use_cache and fetcher is fetch_quote:
+    if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
             _CACHE = (time.monotonic(), result)
     return result
 
 
 def execute_stock_command(command: str, argument: str) -> str:
-    if command == '주식' and argument.strip() == '메모리7':
-        return memory7_report()
-    if command == '메모리7' and not argument.strip():
-        return memory7_report()
-    raise StockQuoteError('사용법: 앙개야 주식 메모리7 (또는 앙개야 메모리7)')
+    """기존 메모리7 조회를 보존하고 '메모리7 상세' 읽기 전용 보기만 추가한다."""
+    mode = argument.strip()
+    if command == '주식':
+        if mode == '메모리7':
+            return memory7_report()
+        if mode in ('메모리7 상세', '상세'):
+            return memory7_report(detailed=True)
+    if command == '메모리7':
+        if not mode:
+            return memory7_report()
+        if mode == '상세':
+            return memory7_report(detailed=True)
+    raise StockQuoteError('사용법: 앙개야 주식 메모리7 / 주식 메모리7 상세')
