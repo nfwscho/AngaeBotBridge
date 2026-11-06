@@ -1464,6 +1464,9 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
     lines.append('')
     lines.extend(market_source_summary(quotes) if detailed else compact_source_summary(quotes))
+    if detailed:
+        lines.append('※ 장외 등락 기준: 프리=직전 정규장 종가 대비 / 애프터=당일 정규장 종가 대비')
+        lines.append('※ 한국 장외 전일비는 별도 표기되며 정규장 대비 상승률과 다를 수 있습니다.')
     if success < len(WATCHLIST):
         lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
     lines.append('※ 무료·지연 가능·실시간 아님')
