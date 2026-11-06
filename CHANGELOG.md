@@ -1,3 +1,11 @@
+## 2026-11-07 — Android 알림 이미지 전송 시험 (feature/image-send-20261107)
+
+- 카카오톡 알림에서 이미지 첨부 `RemoteInput.allowedDataTypes`를 검사하고 지원되는 경우에만 Android 앱 전용 테스트 PNG/JPEG를 읽기 전용 Provider를 통해 전달한다.
+- `앙개야 이미지 테스트` 명령은 기존 정확한 채팅방/발신자 허용목록·호출어·중복검사·배터리·로그를 거치며 지원하지 않으면 기존 텍스트 답장으로 이유를 알린다.
+- 기존 `ReplyManager.reply()` 텍스트 자동응답 코드는 유지하며 이미지 요청 결과만 `IMAGE_REPLY_*` SQLite 로그를 추가한다. 위험한 접근성 자동조작, 외부 저장소 권한, Python Core/DB/환경변수 변경은 하지 않는다.
+- Android Bridge v0.4.15(versionCode 19). Kotlin MIME 정책 회귀 테스트를 추가하고 GitHub Actions Android 빌드/전체 회귀 후 Galaxy S20+의 카카오톡 실제 **사진 말풍선** 수신을 별도로 확인해야 한다.
+- 실전송 성공 여부는 아직 확인 전이며 `PendingIntent.send` 성공만으로 전송 완료를 주장하지 않는다. 기능 브랜치 상태로 유지하고 main은 수정하지 않는다.
+
 ## 2026-11-06 — Windows .env 파일의 S20+ 배포 자동 동기화
 
 - `deploy-angaebot.ps1` 배포 시 로컬 `core\.env`(없으면 저장소 최상위 `.env`)를 자동 감지하고 SSH/SCP로 S20+에 비공개 전송한다. `-SkipEnvSync`로만 비활성화.
