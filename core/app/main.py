@@ -92,6 +92,9 @@
 87. 메모리7 간략 화면의 9번 상세보기 및 상세 화면 9번 간략보기는 기존 메뉴 choose 경로로 전환한다.
 88. 메모리7의 기존 1~8 분석과 5분 선택 권한·중복방지·jobs/events 로그·모듈명·배터리 표시를 보존한다.
 89. 메모리7 이외의 관심그룹 1~10 번호와 주식 메인 메뉴 번호는 변경하지 않는다.
+90. 메뉴 숫자 0은 직전 화면 상태를 선택기에서 복원하고 메모리7 상세→간략, 분석/설정/날씨/기록/그룹의 상위 이동을 유지한다.
+91. 복원된 시세는 기존 시세 조회 함수로 출력만 재생성하며 선택기 화면 스냅샷을 덮어쓰지 않아 연속 0으로 단계별 복귀할 수 있다.
+92. 메뉴 선택 00 홈/5분 만료·방/발신자 격리·중복요청·DB 락 외부 시세 조회·로그·Android 출력 기능을 그대로 유지한다.
 """
 from __future__ import annotations
 
@@ -201,6 +204,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         stock_menu_active = False
         resolved_argument = request.argument
         selection_back = 'menu'
+        selection_previous = None
+        selection_restored = False
         weather_update = None
         estate_update = None
         estate_request = (request.command == "실거래" or
@@ -276,6 +281,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
+                    selection_previous = menu.previous
+                    selection_restored = menu.restored
                 elif request.command == "주식" and request.argument.strip() == "메뉴":
                     menu = selection_menus.open(request.room, request.sender, back='home')
                     stock_reply, stock_menu_active = menu.reply, menu.menu_active
@@ -286,6 +293,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply, stock_menu_active = menu.reply or None, menu.menu_active
                     resolved_argument = menu.execute_argument
                     selection_back = menu.back
+                    selection_previous = menu.previous
+                    selection_restored = menu.restored
                 # 이미 검증된 메모리7을 그대로 유지하면서, 사용자 그룹 조회만 새 경로로 분리한다.
                 if stock_reply is not None or weather_update is not None or estate_update is not None:
                     pass
@@ -307,13 +316,17 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         location = get_location(read_db, request.room, request.sender)
                     stock_reply = forecast_text(location, resolved_argument.split(" ", 1)[1])
                     # 일회성 조회 이후에도 기존 5분 메뉴/0/00 사용을 유지한다.
-                    selection_menus.open_category(request.room, request.sender, "날씨")
+                    if not selection_restored:
+                        selection_menus.open_category(request.room, request.sender, "날씨",
+                                                      previous=selection_previous)
                     stock_reply += "\n※ 날 1~4 다른 조회 · 0 이전 · 00 홈"
                     stock_menu_active = True
                 elif request.command in {"메뉴", "날씨"} and resolved_argument == "날씨설정 안내":
                     with closing(connect()) as read_db:
                         stock_reply = location_help(read_db, request.room, request.sender)
-                    selection_menus.open_category(request.room, request.sender, "날씨")
+                    if not selection_restored:
+                        selection_menus.open_category(request.room, request.sender, "날씨",
+                                                      previous=selection_previous)
                     stock_menu_active = True
                 elif request.command == "메뉴" and resolved_argument.startswith("설정보기 "):
                     view = resolved_argument.split(" ", 1)[1]
@@ -337,7 +350,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 report = recent_errors(read_db, request.room, request.sender)
                     else:
                         raise StockQuoteError("등록되지 않은 설정 메뉴 항목입니다.")
-                    refreshed = selection_menus.open_settings(request.room, request.sender)
+                    refreshed = selection_menus.open_settings(request.room, request.sender,
+                                                              previous=selection_previous)
                     # 상태/도움말은 긴 설정 목록을 중복 출력하지 않지만 번호 선택 세션은 유지한다.
                     if view in {"status", "help"}:
                         stock_reply = report + "\n※ 설정 1~8 다른 항목 선택 · 0/00 홈"
@@ -350,9 +364,11 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     if request.room.strip() and request.sender.strip():
                         mode = resolved_argument.strip()
                         detail_view = mode in ('메모리7 상세', '상세')
-                        selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
-                                                    back=selection_back,
-                                                    memory7_view='detail' if detail_view else 'compact')
+                        if not selection_restored:
+                            selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
+                                                        back=selection_back,
+                                                        memory7_view='detail' if detail_view else 'compact',
+                                                        previous=selection_previous)
                         stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
@@ -385,8 +401,10 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply = group_report(resolved_argument.strip(), stocks)
                     # 방/발신자에 실제 등록된 그룹 종목만 원래 출력 순서대로 선택 가능.
                     if stocks:
-                        selection_menus.open_quotes(request.room, request.sender, stocks,
-                            back=selection_back)
+                        if not selection_restored:
+                            selection_menus.open_quotes(request.room, request.sender, stocks,
+                                back=selection_back, previous=selection_previous,
+                                group_name=resolved_argument.strip())
                         stock_menu_active = True
             except (StockQuoteError, RecordError, WeatherError, RealEstateError) as error:
                 stock_error = error
@@ -421,7 +439,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         elif request.command in {"주식", "메뉴"}:
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
                             if resolved_argument.strip() == '목록':
-                                selection_menus.open_groups(db, request.room, request.sender)
+                                selection_menus.open_groups(db, request.room, request.sender,
+                                                            previous=selection_previous)
                                 stock_menu_active = True
                         else:
                             # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
