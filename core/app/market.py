@@ -1001,7 +1001,11 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
             try:
                 quote=lookup(stock,opener=opener,now=now)
                 from .extended_sessions import fetch_yahoo, session_of, should_fetch
-                if should_fetch(stock, now_us):
+                # 기존 Nasdaq 일봉/보조 복구는 추가 요청 없이 유지한다.
+                # 정규장 Yahoo 성공 시에는 마감 후에도 최종 애프터를 확인할 수 있고,
+                # 나머지 공급자 복구 시에는 *실제 장외 거래시간*에만 추가 호출한다.
+                us_extended_active = bool(session_of(now_us.astimezone(_timezone(stock.timezone_name))))
+                if should_fetch(stock, now_us) and (supplier == 'Yahoo' or us_extended_active):
                     from .extended_naver import fetch_naver_extended
                     extra = tuple(quote.extended)
                     us_now_local = now_us.astimezone(_timezone(stock.timezone_name))
