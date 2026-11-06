@@ -87,6 +87,7 @@ class HelpAndStatusAPITests(unittest.TestCase):
         self.assertNotIn('⚙️ 설정·운영 메뉴', a['reply'])
         self.assertEqual(a['module_source'], 'core.menu')
         self.assertTrue(a['menu_active'])
+        self.assertIn('설정·운영 메뉴', self.post('선택 0').json()['reply'])
         self.assertIn('앙개봇 메인 메뉴', self.post('선택 0').json()['reply'])
         b = self.post('경로 홈 10 8').json()
         self.assertIn('설 8 도움말', b['reply'])
@@ -101,7 +102,8 @@ class HelpAndStatusAPITests(unittest.TestCase):
         self.assertEqual(packet['module_source'], 'core.ops')
         self.assertNotIn('⚙️ 설정·운영 메뉴', packet['reply'])
         self.assertIn('전체 메뉴 트리', self.post('선택 7').json()['reply'])
-        self.assertIn('앙개봇 메인 메뉴', self.post('선택 0').json()['reply'])
+        self.assertIn('설정·운영 메뉴', self.post('선택 0').json()['reply'])
+        self.assertIn('앙개봇 메인 메뉴', self.post('선택 00').json()['reply'])
 
     def test_scope_idempotency_and_logs_preserved(self):
         self.post('설정')
