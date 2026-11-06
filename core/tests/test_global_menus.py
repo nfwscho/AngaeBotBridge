@@ -116,12 +116,13 @@ class GlobalMenuAPITests(unittest.TestCase):
             self.assertEqual(jobs, events)
             self.assertGreaterEqual(jobs, 7)
 
+    # 주식 1번 반도체주 혼합 19종목에서 세 번째 MU 분석을 원래 메뉴/인증 경로로 확인한다.
     def test_stock_path_reuses_existing_quote_and_analysis(self):
         self.assertIn("앙개봇 메인 메뉴", self.post("홈").json()["reply"])
         self.assertIn("주식 메뉴", self.post("선택 1").json()["reply"])
-        with patch("app.main.execute_stock_command", return_value="💾 메모리7 시세 요약") as quote:
-            result = self.post("선택 2").json()
-            self.assertEqual(result["reply"], "💾 메모리7 시세 요약")
+        with patch("app.main.sector_report", return_value="📊 반도체주 시세 (19종목)") as quote:
+            result = self.post("선택 1").json()
+            self.assertEqual(result["reply"], "📊 반도체주 시세 (19종목)")
             self.assertTrue(result["menu_active"])
             quote.assert_called_once()
         with patch("app.main.fetch_history") as history, patch("app.main.individual_report", return_value="마이크론 분석") as report:
