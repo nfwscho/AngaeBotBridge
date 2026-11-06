@@ -21,6 +21,8 @@
 19. 네이버 레거시 SERVICE_ITEM 폴링에서 15:30 현재가 필드 nv가 공식 정규종가와 일치하는지 참/거짓만 점검하고 NXT 시간외 필드와 별도 여부를 검증한다.
 20. 네이버 일봉이 20:00 종가를 반영하는 경우를 대비해 다음금융 고정 A005930/A000660 공개 quote의 15:30 체결시각 및 공시 종가 일치 여부를 가격 원문 출력 없이 확인한다.
 21. Daum 2026-11-06 일별·분봉 quote 보조 API가 15:30 정규장 기준 체결을 구분해 반환하는지 시간과 공시 정규종가의 일치 여부로만 검사한다.
+22. 추가 확인 결과 Daum 일별 A005930/A000660의 종가가 공시된 15:30 정규가와 일치하고 네이버 dayCandle과 Daum 실시간 quote는 20시 가격일 수 있음을 파악했다.
+23. 진단 완료 후 평상시 GitHub Actions의 호출을 원래 한국 기본 1개/미국 MU 2개로 되돌리고 확대 진단은 --full에만 보관한다.
 """
 from __future__ import annotations
 
@@ -31,6 +33,9 @@ ENDPOINTS = (
     ('KR_SAMSUNG', 'https://polling.finance.naver.com/api/realtime/domestic/stock/005930'),
     ('US_MU_POLL', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=MU.O'),
     ('US_MU_BASIC', 'https://stock.naver.com/api/securityService/stock/MU.O/basic'),
+)
+# 확대된 국내·해외 공개 데이터 구조 검증은 명시적인 --full 진단에서만 수행.
+_FULL_ENDPOINTS = (
     ('KR_SAMSUNG_DAY', 'https://api.stock.naver.com/chart/domestic/item/005930?periodType=dayCandle'),
     ('KR_HYNIX_DAY', 'https://api.stock.naver.com/chart/domestic/item/000660?periodType=dayCandle'),
     ('KR_SAMSUNG_DETAIL', 'https://api.stock.naver.com/api/domestic/detail/005930/detail?codeType=KRX'),
@@ -53,10 +58,6 @@ ENDPOINTS = (
     ('KR_HYNIX_DAUM_DAYS', 'https://finance.daum.net/api/quote/A000660/days?symbolCode=A000660&page=1&perPage=10&pagination=true'),
     ('KR_SAMSUNG_DAUM_MINUTES', 'https://finance.daum.net/api/quotes/A005930/minutes?symbolCode=A005930&page=1&perPage=100&pagination=true'),
     ('KR_HYNIX_DAUM_MINUTES', 'https://finance.daum.net/api/quotes/A000660/minutes?symbolCode=A000660&page=1&perPage=100&pagination=true'),
-)
-# 기존 CI에서는 원래 세 개의 진단 요청만 실행한다. 확대 실측은 --full 명령으로
-# 명시적으로 선택한 경우에만 수행해 요청 제한/공급자 부하/CI 지연을 방지한다.
-_FULL_ENDPOINTS = (
     ('US_ARM_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=ARM.O'),
     ('US_MRVL_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=MRVL.O'),
     ('US_QCOM_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=QCOM.O'),
