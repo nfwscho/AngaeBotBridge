@@ -18,7 +18,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.request import Request
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,10 @@ def session_of(local: datetime) -> str:
 def should_fetch(stock, now: datetime) -> bool:
     if stock.market != '미국' or stock.currency != 'USD':
         return False
-    local = now.astimezone(ZoneInfo('America/New_York'))
+    try:
+        local = now.astimezone(ZoneInfo('America/New_York'))
+    except ZoneInfoNotFoundError:
+        return False  # DST 확인 불가: 정규장 시세만 유지
     # 정규장 동안에는 기존 시세를 그대로 사용해 호출 수와 카카오톡 지연을 늘리지 않는다.
     # 장외 장마감 후에도 같은 거래일의 최종 애프터 체결은 조회할 수 있다.
     return (local.weekday() < 5 and
@@ -62,7 +65,10 @@ def _positive(value) -> float | None:
 
 def _session_price(stock, regular, now: datetime, traded: datetime,
                    price: float, session: str, source: str) -> SessionPrice | None:
-    local_now = now.astimezone(ZoneInfo('America/New_York'))
+    try:
+        local_now = now.astimezone(ZoneInfo('America/New_York'))
+    except ZoneInfoNotFoundError:
+        return None
     if (traded.date() != local_now.date() or session_of(traded) != session
             or not 0 <= (now - traded).total_seconds() <= 20 * 3600):
         return None
@@ -100,7 +106,10 @@ def parse_yahoo(stock, payload: dict, regular, *, now: datetime) -> tuple[Sessio
     except (KeyError, IndexError, TypeError, ValueError):
         return ()
     result = {}
-    zone = ZoneInfo('America/New_York')
+    try:
+        zone = ZoneInfo('America/New_York')
+    except ZoneInfoNotFoundError:
+        return ()
     for stamp, close, volume in zip(stamps, closes, volumes):
         if (isinstance(stamp, bool) or not isinstance(stamp, (int, float))
                 or not math.isfinite(stamp) or _positive(close) is None
