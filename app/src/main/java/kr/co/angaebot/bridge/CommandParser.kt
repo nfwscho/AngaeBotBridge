@@ -49,6 +49,8 @@
  * 51. 기존 도움말 8줄·주 분·1~10 다른 메뉴·AI OFF/로그/숫자 게이트는 보존한다.
  * 52. 주식홈 1 반도체주19·2 미국시총10·3 AI·4 반도체기자재·5 데센·6 최근·7 관심목록·8 분석 새 번호 체계를 8줄 로컬 도움말에 반영한다.
  * 53. 과거 메모리7/반도체 개인그룹의 직접 명령과 인증·로그·종목 번호·다른 섹터 단축명령은 유지한다.
+ * 54. 이미지 테스트는 기존 일반 장문 파싱을 재사용하며 다른 단축어/텍스트 답장/로그를 보존한다.
+ * 55. v0.4.15 표시만 갱신하고 미지원 명령의 기존 처리 흐름·도움말 8줄을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -151,7 +153,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.14 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.15 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
