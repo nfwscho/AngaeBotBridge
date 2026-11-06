@@ -64,7 +64,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from .market import Stock, StockQuoteError
+from .market import Stock, StockQuoteError, WATCHLIST
 from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
                                get_record, list_records, record_preview, record_detail, help_text)
 
