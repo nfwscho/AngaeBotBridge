@@ -9,6 +9,8 @@
 7. 네이버에서 장외 데이터가 빈 경우 기존 Yahoo 차트 5일 1분봉과 Nasdaq 추가 소스·로그 경로를 보존한다.
 8. 미국 뉴욕 현지 프리 04:00~09:30와 정규 09:30~16:00 구분, 실제 조회 시점·타임존 및 이전 종가와의 비교 기준을 검증한다.
 9. 모든 테스트는 독립 메모리 객체·주입 HTTP opener만 사용하며 외부 인터넷, 운영 DB, GitHub 앱 설정을 변경하지 않는다.
+10. GitHub Actions 실네트워크 확인: NYSE의 .N 폴링 응답은 빈 datas, 접미사 없는 티커는 종목 data가 있어 NYSE 쿼리는 bare 코드만 사용한다.
+11. 정규 Reuters RIC .N과 공급자 특화 조회 코드가 다름을 엄격히 테스트하고 임의 코드의 확장을 금지한다.
 """
 from __future__ import annotations
 
@@ -76,7 +78,7 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
                          len(stocks))
         for stock in stocks:
             with self.subTest(ticker=stock.ticker):
-                expected = stock.ticker + ('.N' if stock.ticker in EXPECTED_NYSE else '.O')
+                expected = stock.ticker if stock.ticker in EXPECTED_NYSE else stock.ticker + '.O'
                 self.assertEqual(reuters_code(stock), expected)
         self.assertEqual(reuters_code(Stock('미확인', 'ZZZZ', 'USD', '미국',
                                            'America/New_York')), '')
