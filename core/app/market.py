@@ -78,6 +78,7 @@
 70. 기존 1~8 번호 분석/메뉴/사용자 그룹/30초 기본 캐시 및 로그·DB·Android 하단 기능모듈·배터리·AI OFF를 보존한다.
 71. 간결 시세 출처 행은 활성 프리/애프터 공급자의 실제 출처를 표시해 정규장 Yahoo 공급자와 혼동하지 않는다.
 72. 구형 네이버 본장(15:30 확정)가와 별도 시간외 필드를 받는 경우도 현재 거래시간에는 장외 대표값과 정규장대비 상승률을 표시한다.
+73. 시장별 간략 출처 및 최근 거래시각은 실제 선택된 국내 프리/애프터 체결과 미국 세션 체결 시각을 기준으로 표시한다.
 """
 from __future__ import annotations
 
@@ -1177,7 +1178,11 @@ def _us_extended_text(item: Quote) -> str:
 
 
 def _latest_market_time(item: Quote) -> datetime:
-    return max((item.market_time, *(extra.market_time for extra in item.extended)))
+    """정규장뿐 아니라 확인된 한국 시간외/미국 분봉 거래시각을 요약에 반영한다."""
+    points = [item.market_time, *(extra.market_time for extra in item.extended)]
+    if item.domestic is not None and item.domestic.after_market is not None:
+        points.append(item.domestic.after_market.market_time)
+    return max(points)
 
 
 def quote_line(item: Quote, *, source_details: bool = True) -> str:
@@ -1366,7 +1371,8 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
         providers = []
         for q in items:
             if region == '한국':
-                source = ('네이버·장외 통합' if q.domestic and q.domestic.market_session in ('aftermarket', 'after_market')
+                _selected_price, _selected_change, selected_session = _display_session(q)
+                source = ('네이버·장외 통합' if selected_session in ('프리', '애프터')
                           else '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일')
                           else (q.domestic.provider if q.domestic else '야후'))
             elif region == '미국' and q.extended:
@@ -1396,7 +1402,7 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
             line += ' · 확정 종가'
         if region == '한국' and any(q.domestic and q.domestic.after_market for q in items):
             line += (' · 장외 별도/정규 종가 검증'
-                     if all(q.domestic.regular_price is not None
+                     if all(_domestic_session_percent(q) is not None
                             for q in items if q.domestic and q.domestic.after_market)
                      else ' · 장외 시세/일부 정규 종가 미확인')
         if region == '미국' and any(q.extended for q in items):
