@@ -1,9 +1,10 @@
 /*
- * 앙개봇 실제 이미지 자동전송 UI 정책 회귀 테스트 — 전체 검증 기능
- * 1. 정확한 수신 채팅방 이름이 공유 UI에 하나만 존재할 때에만 대상 선택 가능 여부를 검증한다.
- * 2. 다른 채팅방, 비슷한 이름, 중복 이름, 방 이름 없음, 공유 화면 단서 없음에서는 전송 클릭을 차단한다.
- * 3. 확인 단계에는 같은 방 이름과 사진 첨부 단서 및 단일 전송 버튼이 모두 요구됨을 검증한다.
- * 4. 테스트는 실제 카카오톡을 조작하지 않으며 기존 Android/Python/PowerShell 테스트를 보존한다.
+ * 앙개봇 이미지 전송 최종 버튼 자동 클릭 정책 전체 회귀 테스트
+ * 1. 공유 화면에서 수신 방을 정확하게 식별하고 선택할 때만 다음 단계로 진입하는지 검증한다.
+ * 2. 사진 확인 화면에 방 이름이 다시 표시되지 않아도 확인된 수신 방과 사진 미리보기로 보내기를 허용한다.
+ * 3. 같은 화면에 수신 방 이름이 남고 전송 버튼만 나타나는 공유 UI도 처리한다.
+ * 4. 중복/다른 방, 방 선택 기록 부재, 너무 빠른 상태, 잘못된 확인 버튼, 사진 증거 부재를 안전하게 차단한다.
+ * 5. 기존 Android/Kotlin/Windows/Python 테스트와 카카오톡 로그/상태/UI는 모두 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -11,27 +12,60 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ImageUiPolicyTest {
+    private val room = "앙개봇 시험방"
+
     @Test fun onlyUniqueExactRoomCanBeSelectedInSharePicker() {
-        val valid = ImageUiSnapshot(listOf("채팅방", "앙개봇 시험방"), 1, 0)
-        assertEquals(ImageUiAction.CLICK_ROOM, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "앙개봇 시험방", valid))
+        val valid = ImageUiSnapshot(listOf("채팅방", room), 1, 0)
+        assertEquals(ImageUiAction.CLICK_ROOM, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, room, valid))
         assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "다른방", valid))
         assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "앙개봇", valid))
         assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "", valid))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "앙개봇 시험방",
-            ImageUiSnapshot(listOf("앙개봇 시험방"), 1, 0)))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, "앙개봇 시험방",
-            ImageUiSnapshot(listOf("채팅방", "앙개봇 시험방", "앙개봇 시험방"), 2, 0)))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, room,
+            ImageUiSnapshot(listOf(room), 1, 0)))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.PICK_ROOM, room,
+            ImageUiSnapshot(listOf("채팅방", room, room), 2, 0)))
     }
 
-    @Test fun sendNeedsExactRecipientMediaAndUniqueButton() {
-        val valid = ImageUiSnapshot(listOf("사진", "앙개봇 시험방", "보내기"), 0, 1)
-        assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "앙개봇 시험방", valid))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "다른방", valid))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "앙개봇 시험방",
-            ImageUiSnapshot(listOf("앙개봇 시험방", "보내기"), 0, 1)))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "앙개봇 시험방",
-            ImageUiSnapshot(listOf("사진", "앙개봇 시험방", "보내기"), 0, 2)))
-        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "앙개봇 시험방",
-            ImageUiSnapshot(listOf("사진", "앙개봇 시험방", "보내기", "앙개봇 시험방"), 0, 1)))
+    @Test fun finalSendInSamePickerWorksAfterExactRoomSelection() {
+        val selected = ImageUiSnapshot(listOf("채팅방", room, "보내기"), 1, 1,
+            selectedRoomVerified = true, afterRoomClick = true)
+        assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, selected))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "다른방", selected))
+    }
+
+    @Test fun imagePreviewCanHideRecipientAfterVerifiedSelection() {
+        val preview = ImageUiSnapshot(listOf("이미지 미리보기", "보내기"), 0, 1,
+            selectedRoomVerified = true, afterRoomClick = true, largeImagePreviewVisible = true)
+        assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, preview))
+        assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            preview.copy(visibleLabels = listOf("보내기"))))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            preview.copy(selectedRoomVerified = false)))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            preview.copy(afterRoomClick = false)))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            preview.copy(clickableSendCount = 2)))
+    }
+
+    @Test fun incompleteOrAmbiguousPreviewNeverSends() {
+        val base = ImageUiSnapshot(listOf("보내기"), 0, 1,
+            selectedRoomVerified = true, afterRoomClick = true)
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, base))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            base.copy(visibleLabels = listOf("확인"), largeImagePreviewVisible = true,
+                explicitSendControlVisible = false)))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            base.copy(visibleLabels = listOf("보내기", room, room))))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            base.copy(clickableSendCount = 0, largeImagePreviewVisible = true)))
+    }
+
+    @Test fun accessibleSendIconRequiresPreviewEvidence() {
+        val base = ImageUiSnapshot(listOf("사진"), 0, 1,
+            selectedRoomVerified = true, afterRoomClick = true,
+            explicitSendControlVisible = true, largeImagePreviewVisible = true)
+        assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, base))
+        assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+            base.copy(explicitSendControlVisible = false, visibleLabels = listOf("미리보기"))))
     }
 }
