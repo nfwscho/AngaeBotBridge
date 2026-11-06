@@ -53,6 +53,7 @@ class GlobalMenuUnitTests(unittest.TestCase):
             leaf = self.menus.choose(self.db, "방", "나", "1")
             self.assertIn("개발 예정", leaf.reply)
             self.assertTrue(leaf.menu_active)
+            self.assertIn(category + " 메뉴", self.menus.choose(self.db, "방", "나", "0").reply)
             self.assertIn("앙개봇 메인 메뉴", self.menus.choose(self.db, "방", "나", "0").reply)
 
     def test_scope_expiry_and_invalid_number(self):
@@ -104,6 +105,7 @@ class GlobalMenuAPITests(unittest.TestCase):
         self.assertTrue(pending["ok"])
         self.assertTrue(pending["menu_active"])
         self.assertIn("개발 예정", pending["reply"])
+        self.assertIn("배드민턴 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("요리 메뉴", self.post("요리").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 00").json()["reply"])
