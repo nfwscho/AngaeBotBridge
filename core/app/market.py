@@ -99,6 +99,10 @@
 91. 기존 네이버 국내 afterMarket 검증·전일 종가·야후·KRX 일봉 보조 경로·메모리7/그룹 한 줄 UI·로그·선택 상태를 유지한다.
 92. 다음 평일 08:00부터는 전 거래일 장후 체결을 현재 시장의 A 대표가격으로 표시하지 않는 보수적인 만료 규칙을 적용한다.
 93. 별도 정규장 종가 출처가 실패하면 상승/하락률을 만들어내지 않으며 장외 실체결 A 여부와 기준가 미확인을 명확히 표시한다.
+94. 2026-11-06 외부 실제 API 대조에서 Daum 일별 시세는 삼성전자 188,700원·SK하이닉스 1,132,000원 정규장 종가와 일치, Daum 현재가는 19:59 시간외 최종가격으로 확인했다.
+95. Yahoo 정규장 종가가 불가하면 Daum *일별 확정 종가*의 날짜/종목코드/전일 종가/변동률을 검증해 보완하고, 다음 단계 기존 네이버 KRX 일봉의 필드 검증은 삭제하지 않는다.
+96. 네이버 일봉 dayCandle.closePrice는 애프터 20:00 가격일 수 있으므로 명시적 정규종가+15:30 증명 없이는 기준가로 쓰지 않고, 기존 보수적인 기준가 미확인 처리를 유지한다.
+97. 0·00·99 시세 메뉴/배터리·미국 주식/종목 분석/AI·DB/.env/조회실패/기존 공급자 진단 로그는 모두 보존한다.
 """
 from __future__ import annotations
 
@@ -1005,7 +1009,33 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                 except StockQuoteError as e:
                     _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNAVAILABLE ticker=%s reason=%s',stock.ticker,e)
                 if meta.regular_price is None and not is_pre:
-                    # Yahoo 현재가가 장외 세션과 섞인 경우 KRX 당일 일봉의 '종가'를 확인.
+                    # 다음금융 current quote는 19:59 장외 최종가가 될 수 있으므로
+                    # 11/06 실측에서 15:30 KRX 종가가 분리되어 확인된 *일별 종가*만
+                    # 별도 출처로 사용한다. 현재의 Naver 정규가 추정은 하지 않는다.
+                    from .domestic_regular import fetch_daum_regular
+                    try:
+                        result = fetch_daum_regular(
+                            stock, quote, opener=opener,
+                            now=now or datetime.now(timezone.utc),
+                            timeout=min(FETCH_TIMEOUT, 2.5),
+                            max_bytes=MAX_RESPONSE_BYTES,
+                            user_agent=_YAHOO_USER_AGENT)
+                        if result:
+                            reg_price, reg_pct, reg_time, reg_source = result
+                            meta = replace(meta, regular_price=reg_price,
+                                           regular_percent=reg_pct,
+                                           regular_time=reg_time, regular_source=reg_source)
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=DaumDaily',
+                                             stock.ticker)
+                        else:
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAUM_UNVERIFIED ticker=%s',
+                                             stock.ticker)
+                    except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAUM_UNAVAILABLE ticker=%s reason=%s',
+                                         stock.ticker, type(e).__name__)
+                if meta.regular_price is None and not is_pre:
+                    # 기존 Naver KRX 일봉 보조 경로도 보존하되 2026 애프터장부터는
+                    # dayCandle.closePrice만으로 15:30 종가를 증명할 수 없다.
                     from .domestic_regular import fetch_daily_regular
                     try:
                         result = fetch_daily_regular(stock, quote, opener=opener,
