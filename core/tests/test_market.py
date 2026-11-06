@@ -8,6 +8,7 @@
 6. 네트워크/AI 호출 없이 모의 데이터만 사용하고 기존 로그·DB를 건드리지 않는다.
 7. 허용되지 않은 watchlist 인자 또는 명령에 대해 외부 API를 호출하지 않는다.
 8. v0.5.6 메모리7의 정확한 1~8 번호, 공급자 실패 시 번호 자릿수 보존, 기존 가격/출처·시차/캐시를 검사한다.
+9. 메모리7 간략형에서 시장 KR/US/JP의 압축 시각 및 9번 상세보기 위치를 검사하고 상세 원문 출처 검증은 별도 보존한다.
 """
 from __future__ import annotations
 
@@ -133,11 +134,14 @@ class StockTests(unittest.TestCase):
         def provider(stock):
             return make_quote(stock)
         body=memory7_report(fetcher=provider,use_cache=False)
-        self.assertIn('📡 한국',body)
-        self.assertIn('한국',body)
-        self.assertIn('미국',body)
-        self.assertIn('일본',body)
+        # 기본 카톡 간략 시세는 한 줄짜리 KR/US/JP 현지시각을 사용한다.
+        # 원래 국가별 한국/미국/일본 공급자 정보는 상세보기에서 보존한다.
+        self.assertIn('📡 ',body)
+        self.assertIn('KR',body)
+        self.assertIn('US',body)
+        self.assertIn('JP',body)
         self.assertIn('지연',body)
+        self.assertIn('9. 🔎 상세보기',body)
 
 
 if __name__=='__main__': unittest.main()
