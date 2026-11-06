@@ -963,10 +963,19 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
                             _MARKET_LOG.info('US_EXTENDED_YAHOO_FAILED ticker=%s reason=%s',
                                              stock.ticker, type(e).__name__)
-                        if not extra:
+                        # Yahoo가 오전 프리만 제공하고 현재 애프터 체결을 누락할 수도 있다.
+                        # 현재 세션의 거래값이 확인되지 않은 경우에만 Nasdaq 보조 세션을 병합한다.
+                        from .extended_sessions import session_of
+                        us_now_local = now_us.astimezone(_timezone(stock.timezone_name))
+                        desired = session_of(us_now_local)
+                        if not desired and us_now_local.hour >= 20:
+                            desired = '애프터'
+                        if desired and not any(q.session == desired for q in extra):
                             try:
-                                # 나스닥의 정규장 가격은 덮어쓰지 않고 검증된 장외 필드만 취한다.
-                                extra = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
+                                # 나스닥 정규 가격으로 덮지 않고 동일 세션의 검증된 장외 체결만 병합.
+                                secondary = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
+                                extra = tuple(extra) + tuple(q for q in secondary
+                                                             if q.session not in {x.session for x in extra})
                             except StockQuoteError as e:
                                 _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s',
                                                  stock.ticker, e)
