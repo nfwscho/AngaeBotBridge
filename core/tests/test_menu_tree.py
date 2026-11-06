@@ -102,6 +102,7 @@ class MenuTreeAPITests(unittest.TestCase):
         self.assertIn("10-7. 전체 메뉴 트리", first["reply"])
         self.assertIn("⚙️ 설정·운영 메뉴", first["reply"])
         self.assertEqual(first["module_source"], "core.menu")
+        self.assertIn("설정·운영 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 0").json()["reply"])
 
         via_home = self.post("경로 홈 10 7").json()
