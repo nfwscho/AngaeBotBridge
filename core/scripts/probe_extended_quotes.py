@@ -9,6 +9,7 @@
 7. GitHub Actions에서 비차단 진단으로 실행 가능하며 실제 API 불가 시 정상 CI를 실패로 판정하지 않는다.
 8. 추가된 3대 섹터 종목의 Nasdaq .O 및 NYSE .N 조회 지원을 대표 종목 ARM/MRVL/QCOM/TXN/TSM/NOW/GLW/LITE에서 공개 응답 상태와 필드명만 점검한다.
 9. 응답 가격·개인정보·사용자 토큰을 기록하지 않으며 기존 한국 삼성전자·미국 MU 양쪽 경로 진단을 삭제하지 않는다.
+10. NYSE .N 폴링 응답이 빈 경우 basic .N과 bare 티커만 제한적으로 확인하고 JSON 루트 키·항목 개수만 출력한다.
 """
 from __future__ import annotations
 
@@ -27,6 +28,11 @@ ENDPOINTS = (
     ('US_NOW_N', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=NOW.N'),
     ('US_GLW_N', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=GLW.N'),
     ('US_LITE_O', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=LITE.O'),
+    ('US_TSM_N_BASIC', 'https://stock.naver.com/api/securityService/stock/TSM.N/basic'),
+    ('US_NOW_N_BASIC', 'https://stock.naver.com/api/securityService/stock/NOW.N/basic'),
+    ('US_GLW_N_BASIC', 'https://stock.naver.com/api/securityService/stock/GLW.N/basic'),
+    ('US_TSM_NAQ', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=TSM'),
+    ('US_NOW_NAQ', 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes=NOW'),
 )
 
 
@@ -63,7 +69,9 @@ def main():
             extended = item.get('overMarketPriceInfo') if isinstance(item, dict) else None
             extended_fields = ','.join(k for k in ('tradingSessionType','overPrice','localTradedAt')
                                        if isinstance(extended, dict) and k in extended)
-            print(f'{label}: HTTP {code} type={type(payload).__name__} identity={identity} '
+            root_keys = ','.join(list(payload.keys())[:8]) if isinstance(payload, dict) else ''
+            item_count = len(rows) if isinstance(rows, list) else 0
+            print(f'{label}: HTTP {code} root_keys={root_keys} item_count={item_count} type={type(payload).__name__} identity={identity} '
                   f'session={session} fields={keys} extended_fields={extended_fields}')
         except Exception as exc:
             print(f'{label}: unavailable ({type(exc).__name__})')
