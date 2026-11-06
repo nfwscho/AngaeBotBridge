@@ -139,7 +139,7 @@ class RecordApiTests(unittest.TestCase):
         self.assertIn('10. ⚙️ 설정·운영', home['reply'])
         tree = self.call('메뉴', '경로 설정 7').json()
         self.assertIn('9-2. 다가오는 일정', tree['reply'])
-        self.assertIn('2-1. 최근 메모 목록', tree['reply'])
+        self.assertIn('2-8. 최근 메모 목록', tree['reply'])
         self.assertIn('3-1. 최근 메모 목록', tree['reply'])
         self.assertIn('앙개봇 메인 메뉴', self.call('메뉴', '선택 00').json()['reply'])
         self.assertIn('부동산 메뉴', self.call('메뉴', '경로 홈 2').json()['reply'])
@@ -149,7 +149,7 @@ class RecordApiTests(unittest.TestCase):
 
     def test_menu_selected_record_detail_and_back(self):
         self.call('부동산', '추가 건물 | 중요한 정보')
-        listing = self.call('메뉴', '경로 홈 2 1').json()
+        listing = self.call('메뉴', '경로 홈 2 8').json()
         self.assertTrue(listing['ok'], listing)
         self.assertTrue(listing['menu_active'])
         self.assertIn('건물', listing['reply'])
