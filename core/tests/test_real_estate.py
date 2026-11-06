@@ -5,10 +5,11 @@
 3. 국토부 XML 매매 및 전월세 필드 파싱·취소 계약 제거·전세/월세 구분을 검사한다.
 4. 최근 3개월·최근 5건 계약일 정렬, 만원 환산, 단지명 필터 및 출처·지연 고지를 검사한다.
 5. API 키 미설정/인증/HTTP/XML/페이지 누락·과다 오류에서 가격을 만들지 않음을 검증한다.
-6. 기존 부동산 메모 메뉴 1/2를 유지하며 홈2→3/4/5, 부 지역·직접 조회, 0/00 이동을 검증한다.
+6. 부동산 메모 기존 기능을 8/9로, 실거래 조회를 5/6/7로 이동하면서 부 지역·직접 조회·0/00 이동을 검증한다.
 7. 장문 '앙개야 부동산 시세' 및 부동산 기존 메모 CRUD를 동일 FastAPI 경로로 독립 검증한다.
 8. 기존 jobs/events 로그·요청 중복·401 인증·core.real_estate 모듈 표시를 검사한다.
 9. 네트워크와 S20+ 서비스·운영 DB·실제 공공데이터 키는 사용하지 않고 오프라인에서 실행한다.
+10. 신규 부동산 1/2 단지 관련, 3 서울시 추이, 4 뉴스 및 10 지역 설정 번호를 회귀 검증한다.
 """
 from __future__ import annotations
 
@@ -196,20 +197,25 @@ class RealEstateAPITests(unittest.TestCase):
         self.assertTrue(self.post("부동산", "추가 전세 계약 | 실거주").json()["ok"])
         menu = self.post("메뉴", "부동산").json()
         self.assertTrue(menu["ok"], menu)
-        self.assertIn("1. 최근 메모 목록", menu["reply"])
-        self.assertIn("2. 메모 등록·검색 안내", menu["reply"])
-        self.assertIn("3. 아파트 매매 실거래가", menu["reply"])
-        self.assertIn("4. 아파트 전세 실거래가", menu["reply"])
-        self.assertIn("5. 아파트 월세 실거래가", menu["reply"])
+        self.assertIn("1. 청구e편한세상 관련", menu["reply"])
+        self.assertIn("2. 신당동 아파트 관련", menu["reply"])
+        self.assertIn("3. 서울시 아파트 매매 추이", menu["reply"])
+        self.assertIn("4. 부동산 관련 뉴스", menu["reply"])
+        self.assertIn("5. 아파트 매매 실거래가", menu["reply"])
+        self.assertIn("6. 아파트 전세 실거래가", menu["reply"])
+        self.assertIn("7. 아파트 월세 실거래가", menu["reply"])
+        self.assertIn("8. 최근 메모 목록", menu["reply"])
+        self.assertIn("9. 메모 등록·검색 안내", menu["reply"])
+        self.assertIn("10. 조회 지역 설정 안내", menu["reply"])
         self.assertEqual(menu["module_source"], "core.menu")
-        guide = self.post("메뉴", "선택 6").json()
+        guide = self.post("메뉴", "선택 10").json()
         self.assertTrue(guide["ok"], guide)
         self.assertIn("미설정", guide["reply"])
         self.assertEqual(guide["module_source"], "core.real_estate")
         updated = self.post("실거래", "지역 강남구").json()
         self.assertTrue(updated["ok"], updated)
         self.assertEqual(updated["module_source"], "core.real_estate")
-        self.assertEqual(self.post("메뉴", "경로 부동산 1").json()["menu_active"], True)
+        self.assertEqual(self.post("메뉴", "경로 부동산 8").json()["menu_active"], True)
         listing = self.post("메뉴", "선택 1").json()
         self.assertIn("실거주", listing["reply"])
         self.assertEqual(self.post("메뉴", "선택 0").json()["menu_active"], True)
@@ -224,8 +230,8 @@ class RealEstateAPITests(unittest.TestCase):
         request_id = "estate_repeat_0001"
         with patch.dict(os.environ, {"MOLIT_API_KEY": "test"}):
             with patch("app.real_estate.fetch_month", return_value=[sale]) as provider:
-                first = self.post("메뉴", "경로 부동산 3", request_id=request_id).json()
-                duplicate = self.post("메뉴", "경로 부동산 3", request_id=request_id).json()
+                first = self.post("메뉴", "경로 부동산 5", request_id=request_id).json()
+                duplicate = self.post("메뉴", "경로 부동산 5", request_id=request_id).json()
         self.assertTrue(first["ok"], first)
         self.assertTrue(first["menu_active"], first)
         self.assertEqual(first["module_source"], "core.real_estate")
