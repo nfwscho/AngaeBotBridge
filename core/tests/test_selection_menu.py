@@ -16,6 +16,7 @@
 30. 사용자 관심그룹 상세·0 간략 복귀·99 왕복·메뉴 경로 주식 3 99·채팅방 격리·기존 작업 로그를 검증한다.
 31. 99 입력은 현재 시세 화면에서만 허용하고 다른 메뉴와 9/10 종목 번호가 충돌하지 않게 검증한다.
 32. 주식 메뉴 7번 AI 주도주는 기존 1~6번 뒤에 추가되고 메모리7 상세보기는 시세표 99로 유지한다.
+33. 고정 섹터 전용 11~19 선택으로 일반 사용자 관심그룹의 종목 10개 제한을 우회할 수 없고 허용된 그룹에서만 선택됨을 확인한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -139,6 +140,8 @@ class MenuSelectionUnitTests(unittest.TestCase):
         ten=tuple(Stock('같은별명',f'TEST{i}', 'USD','미국','America/New_York') for i in range(10))
         self.menus.open_quotes('방','나', ten)
         self.assertEqual(self.menus.choose(self.db,'방','나','10').execute_argument,'분석 TEST9')
+        self.menus.open_quotes('방','나', ten)
+        # 11~19 숫자는 고정 섹터에서만 허용, 사용자 일반 그룹 10종목 보호.
         with self.assertRaisesRegex(StockQuoteError,'1~10'):
             self.menus.choose(self.db,'방','나','11')
 
