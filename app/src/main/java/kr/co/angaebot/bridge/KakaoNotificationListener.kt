@@ -36,6 +36,10 @@
  * 34. 종목별 1~19 분석, 99 상세, 다른 메뉴/오류/모듈 조회에는 기존 배터리 분리 표기를 유지한다.
  * 35. 개인 '반도체' 그룹과 미국시총10 등 core.watchlists/core.market의 간략 시세도 99 뒤 배터리를 한 줄로 합치고 정규장·프리/애프터 상세는 원본 유지한다.
  * 36. 메뉴·오류·일반 답장에는 같은 줄 배터리를 붙이지 않으며 해당 응답의 정확한 모듈 식별과 작업 로그를 보존한다.
+ * 37. 이미지 테스트 명령을 기존 허용 방·발신자/호출어/중복검증 후 로컬에서만 처리한다.
+ * 38. 카카오톡 알림에 이미지 MIME 입력이 없으면 억지로 첨부하지 않고 기존 텍스트 답장으로 불가 사유를 알려준다.
+ * 39. 지원되는 경우 앱 전용 테스트 이미지만 전달하고 IMAGE_REPLY_* 로그를 추가하되 기존 RECEIVE/COMMAND/REPLY 로그를 보존한다.
+ * 40. 전송 요청 성공과 실제 카카오톡 사진 수신은 구분하며 기존 메뉴·Python·AI·배터리·상태·SQLite·UI를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -114,6 +118,7 @@ class KakaoNotificationListener : NotificationListenerService() {
                 return
             }
             val isModuleLookup = parsed.name == "모듈" && parsed.argument.isBlank()
+            val isImageTest = parsed.name == "이미지" && parsed.argument == "테스트"
             // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
             // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
             if (numericSelection == null && !isModuleLookup &&
@@ -134,7 +139,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             logger.log("INFO", "COMMAND", "command=${parsed.name} arg=${parsed.argument}", message.room, message.sender)
             // 명시적으로 켠 자연어 모드에서만 미등록 명령을 AI 질문으로 전달한다.
             // 기존 로컬 명령 및 기존 Python 3개 명령의 우선순위는 그대로 보존한다.
-            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help") || isModuleLookup
+            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help", "이미지") || isModuleLookup
             val explicitPython = parsed.name in PythonBridgeClient.supportedCommands
             val freeform = if (!isLocal && !explicitPython) {
                 try { val p = pythonConfig.load(); p.enabled && p.freeformEnabled } catch (_: Exception) { false }
@@ -145,7 +150,19 @@ class KakaoNotificationListener : NotificationListenerService() {
             } else parsed.argument
             var nextMenuActive = false
             var sourceModule = ModuleSourceFormatter.localCommandSource(parsed.name)
-            val response = if (isModuleLookup) {
+            val imageMime = if (isImageTest) ReplyManager.supportedImageMime(sbn.notification) else null
+            val response = if (parsed.name == "이미지") {
+                sourceModule = "bridge.image"
+                if (!isImageTest) {
+                    "🖼️ 이미지 전송 진단: 앙개야 이미지 테스트\n※ 등록된 채팅방과 발신자에서만 실행됩니다."
+                } else if (imageMime == null) {
+                    logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "카카오톡 알림에 이미지 MIME RemoteInput 액션 없음", message.room, message.sender)
+                    "🖼️ 이미지 직접 전송 미지원\n현재 카카오톡 알림은 사진 첨부 입력을 제공하지 않습니다.\n※ 텍스트 자동응답은 정상 유지됩니다."
+                } else {
+                    logger.log("INFO", "IMAGE_REPLY_SUPPORTED", "image MIME=$imageMime", message.room, message.sender)
+                    "🖼️ 이미지 전송 시험 요청 ($imageMime)\n※ 실제 카카오톡 수신 여부를 대화방에서 확인하세요."
+                }
+            } else if (isModuleLookup) {
                 // 사용자가 명시한 경우에만 직전 화면 출처를 표시. 가격·본문은 저장하지 않음.
                 ModuleSourceFormatter.onDemandDetail(lastModules.last(message.room, message.sender))
             } else if (explicitPython || freeform) {
@@ -212,8 +229,16 @@ class KakaoNotificationListener : NotificationListenerService() {
             val replyWithBattery = BatteryStatusReporter.append(
                 this, replyWithSource, inlineSectorFooter = inlineSectorBattery)
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
-            when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
+            val replyOutcome = if (isImageTest && imageMime != null) {
+                ReplyManager.replyTestImage(this, sbn.notification, replyWithBattery)
+            } else {
+                ReplyManager.reply(this, sbn.notification, replyWithBattery)
+            }
+            when (val outcome = replyOutcome) {
                 ReplyOutcome.Requested -> {
+                    if (isImageTest && imageMime != null) {
+                        logger.log("INFO", "IMAGE_REPLY_REQUESTED", "이미지 MIME=$imageMime PendingIntent 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
+                    }
                     logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
                     if (!isModuleLookup) {
                         // 알림 응답 요청에 성공한 화면의 모듈 ID만 최근 이력으로 기억한다.
@@ -227,10 +252,16 @@ class KakaoNotificationListener : NotificationListenerService() {
                 }
                 ReplyOutcome.NoAction -> {
                     if (numericSelection != null) menuGate.setActive(message.room, message.sender, false)
+                    if (isImageTest && imageMime != null) {
+                        logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "이미지 응답 액션을 사용하지 못함", message.room, message.sender)
+                    }
                     logger.log("WARN", "REPLY_UNAVAILABLE", "답장 가능한 알림 액션이 없음", message.room, message.sender)
                 }
                 is ReplyOutcome.Failed -> {
                     if (numericSelection != null) menuGate.setActive(message.room, message.sender, false)
+                    if (isImageTest && imageMime != null) {
+                        logger.log("ERROR", "IMAGE_REPLY_FAILED", outcome.reason, message.room, message.sender)
+                    }
                     logger.log("ERROR", "REPLY_FAILED", outcome.reason, message.room, message.sender)
                 }
             }
