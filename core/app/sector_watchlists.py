@@ -13,8 +13,10 @@
 11. 단위 테스트에서 fetcher를 주입할 수 있어 인터넷과 실제 단말 없이 동일 시세·출력·페이지 번호를 검증한다.
 12. 기존 5-worker 동시 조회 한도를 재사용해 19종목을 한 번에 표시하며 개별 실패종목의 조회 불가·기존 시세 제공자 차단을 보존한다.
 13. 긴 회사명으로 인한 카카오톡 자동 줄바꿈을 최소화하기 위해 사용자가 제시한 MSFT 표기를 그대로 유지한다.
-14. 간략보기는 19행·짧은 현지시각·지연 경고·99 상세만 출력해 Android의 기본 짧은 배터리 푸터와 함께 한 메시지로 읽기 쉽게 한다.
+14. 간략보기는 목록 직후 정확히 두 줄('📡 현지시각', '99. 🔎 상세보기')만 출력하며 Android에서 배터리 🔋/⚡ 잔량을 마지막 상세보기 줄에 합친다.
 15. 상세보기는 종가·장외·공급자 시간 등 기존 긴 상세 원문을 그대로 보존하고 별도 페이지로 나누지 않는다.
+16. 간략보기의 별도 '※ 지연·비실시간/분석' 안내는 제거하되 상세보기의 모든 원문·지연 경고·실패 건수·기존 번호 메뉴와 로그는 유지한다.
+17. 간략 조회 실패 건수는 시각 한 줄에 합쳐 데이터 상태를 숨기지 않으며 시각이 없으면 기준시각 미확인으로 표기한다.
 """
 from __future__ import annotations
 
@@ -132,10 +134,9 @@ def sector_report(key: str, page: int = 1, *, detailed: bool = False,
     rows = lines[1:1 + len(subset)]
     clock = next((line for line in lines[1 + len(subset):] if line.startswith('📡 ')), '')
     failed = [line for line in lines if line.startswith('※ ') and '조회 실패' in line]
-    compact = [lines[0], *rows, '']
-    if clock:
-        compact.append(clock)
-    compact.extend(failed)
-    compact.append(f'※ 지연·비실시간 · 1~{len(subset)} 분석')
-    compact.append(lines[-1])
-    return '\n'.join(compact)
+    # 본문 아래 정확히 두 줄: '📡 현지시각', '99. 상세보기'.
+    # 제공자 조회 실패가 있으면 기존 실패 건수를 삭제하지 않고 시각 줄에 합친다.
+    clock = clock or '📡 기준시각 미확인'
+    if failed:
+        clock += ' · ' + ' · '.join(line.removeprefix('※ ') for line in failed)
+    return '\n'.join([lines[0], *rows, clock, lines[-1]])
