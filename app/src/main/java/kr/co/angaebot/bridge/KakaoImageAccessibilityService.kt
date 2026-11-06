@@ -68,8 +68,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         val job = activeJob ?: return
         if (!job.shareLaunched) return
         if (event?.packageName?.toString() != KAKAO_PACKAGE) return
-        if (!ImageAutoConfig.enabled(this) || !BotConfig(this).load().enabled) {
-            finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF로 중단", true)
+        val settings = BotConfig(this).load()
+        if (!ImageAutoConfig.enabled(this) || !settings.enabled || !settings.isAllowedRoom(job.room)) {
+            finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
             return
         }
         if (SystemClock.elapsedRealtime() - job.startedMs > EXPIRE_MS) {
