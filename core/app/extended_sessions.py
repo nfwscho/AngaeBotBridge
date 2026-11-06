@@ -17,6 +17,7 @@
 15. 나스닥 보조 장외 데이터는 정규 시세 primaryData의 등락률 필드가 누락돼도 *기존 검증된 정규장 Quote*를 기준으로 독립 수집한다.
 16. 기존 정규 시세 fetch_nasdaq_quote의 가격·등락률 엄격 검증은 변경하지 않고 별도 제한된 Nasdaq secondaryData에서 거래소·시간·USD·세션만 검증한다.
 17. NYSE/나스닥 장외 모두 고정 URL·동일 티커·인증 없는 공개 시세·제한된 응답 크기·타임아웃을 사용하며 로그·DB·캐시·UI·메뉴는 유지한다.
+18. Nasdaq secondaryData 단독 수집에서도 본장 종목코드와 STOCKS 자산유형을 각각 확인해 다른 자산을 미국 프리 체결로 오인하지 않는다.
 """
 from __future__ import annotations
 
@@ -163,6 +164,8 @@ def parse_nasdaq(stock, data: dict, regular, *, now: datetime) -> tuple[SessionP
         return ()
     if str(data.get('symbol', '')).upper() != stock.ticker.upper():
         return ()
+    if data.get('assetClass') not in (None, '', 'STOCKS'):
+        return ()  # 미국 상장 주식 외 자산유형의 우연한 동일 티커를 배제
     status = str(data.get('marketStatus') or '').lower().replace('_', '-')
     session = ('프리' if status in ('pre-market', 'premarket')
                else '애프터' if status in ('after-hours', 'afterhours') else '')
