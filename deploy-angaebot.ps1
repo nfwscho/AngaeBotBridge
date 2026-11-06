@@ -10,6 +10,7 @@
 # 26. Validate credentials without printing values; fail safely if the source file is invalid.
 # 27. -SkipEnvSync explicitly disables synchronization; if no local .env exists, retain remote settings.
 # 28. Run .env merge only after successful SHA-matched tests, before restarting Python Core.
+# 29. Remove the staged secret-bearing .env after any failure, including a pre-apply error.
 # 6. Validate staged Python modules using the S20+ Python virtual environment.
 # 7. Retain temporary rollback copies during deployment and restore them on apply failure.
 # 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
@@ -53,6 +54,7 @@ $apkFile = ''
 $adbExe = ''
 $localEnvPath = ''
 $envSyncPrepared = $false
+$envStageAttempted = $false
 
 function Assert-Exit([string]$Message) {
     if ($LASTEXITCODE -ne 0) { throw "$Message (exit=$LASTEXITCODE)" }
@@ -232,6 +234,7 @@ try {
         }
         & scp -q -o BatchMode=yes $envHelper ($SshHost + ':' + $stage + '/.env-merge.py')
         Assert-Exit '[Env] Unable to upload merge helper'
+        $envStageAttempted = $true
         & scp -q -o BatchMode=yes $localEnvPath ($SshHost + ':' + $stage + '/.env.windows')
         Assert-Exit '[Env] Unable to stage Windows .env securely'
         Invoke-Remote "chmod 600 $stage/.env.windows $stage/.env-merge.py && $remoteCore/.venv/bin/python -m py_compile $stage/.env-merge.py" '[Env] Remote helper syntax or permissions invalid'
@@ -291,5 +294,14 @@ try {
     }
     exit 1
 } finally {
+    if ($envStageAttempted) {
+        # Never leave the copied private credential in staging after a failed pre-apply step.
+        try {
+            & ssh -q -o BatchMode=yes -o ConnectTimeout=10 $SshHost "rm -f $stage/.env.windows" | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Warning '[Env] Verify that S20+ temporary .env was removed.' }
+        } catch {
+            Write-Warning '[Env] Verify that S20+ temporary .env was removed.'
+        }
+    }
     Set-Location $root
 }
