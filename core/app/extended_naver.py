@@ -12,6 +12,7 @@
 10. 공급자의 응답 형식이 다르거나 가격이 없으면 반환값은 빈 튜플이며 정규장 가격을 임의 복사하지 않는다.
 11. 모든 공급자 조회는 고정 HTTPS 호스트·짧은 타임아웃·응답 크기 제한을 사용하고 수집 결과를 DB/운영 로그에 저장하지 않는다.
 12. 기존 인증/메모리7/관심종목 그룹/AI OFF/Android Bridge/배터리/원본 로그·에러 복구 경로를 변경하지 않는다.
+13. 동일 네이버 호스트에서 HTTP 403/429가 확인되면 즉시 중단해 과도한 재시도·휴대폰 응답 지연을 방지한다.
 """
 from __future__ import annotations
 
@@ -166,6 +167,8 @@ def fetch_naver_extended(stock, regular, *, opener, now: datetime,
                 return result
         except (OSError, TimeoutError, ValueError) as e:
             errors.append(type(e).__name__ + (f' HTTP {e.code}' if hasattr(e, 'code') else ''))
+            if getattr(e, 'code', None) in (403, 429):
+                break  # 권한 거부·요청 제한 시 동일 호스트에 다시 요청하지 않는다.
     if errors:
         raise ValueError('네이버 해외 공개 API 조회 실패: ' + ', '.join(errors))
     return ()
