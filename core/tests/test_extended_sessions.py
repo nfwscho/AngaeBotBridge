@@ -27,6 +27,9 @@
 25. 티커 오염·프리 체결시각 불일치·미지원 심볼에는 P를 만들지 않으며 기존 무료 공급자 장애/정규가 폴백을 보존한다.
 26. 실제 네이버 NYSE 폴링은 .N으로 빈 응답, 접미사 없는 LLY/TSM/NOW로 정상 데이터를 제공하므로 Reuters 공식 RIC와 조회 코드를 구분한다.
 27. NYSE bare 티커 역시 허용된 상장목록에서만 요청하고 다른 코드·전일/미래 체결을 거절하는 검증은 그대로 유지한다.
+28. 한국 금요일 11/06 장후체결을 토요일 11/07 00:14에 조회할 때 KRX 일봉 기준일은 11/06, 표시 A 및 정규장 대비 %를 유지한다.
+29. KRX 정규 기준가 복구가 전부 실패한 경우에도 실제 장후 A 표시는 남기고 등락률을 추측하지 않는다.
+30. 주말을 넘어 월요일 정규장이 시작되면 금요일 장후 A가 새로운 현재가로 보이지 않는지 확인한다.
 """
 from __future__ import annotations
 
@@ -437,6 +440,64 @@ class ExtendedSessionTests(unittest.TestCase):
         self.assertIsNone(parse_daily_regular(
             WATCHLIST[0], {'priceInfos':[{'localDate':'20261105','closePrice':201500}]},
             quote, now=korean_now))
+
+    def test_korean_regular_close_after_midnight_uses_last_market_day(self):
+        from app.domestic_regular import parse_daily_regular
+        kst = timezone(timedelta(hours=9))
+        saturday = datetime(2026, 11, 7, 0, 14, tzinfo=kst)
+        base = {'datas': [naver_after_payload()], 'time': '20261106200000'}
+        candle = {'code': '005930', 'stockExchangeType': 'KRX',
+                  'priceInfos': [{'localDate': '20261105', 'closePrice': 201500},
+                                 {'localDate': '20261106', 'closePrice': 188600}]}
+        urls = []
+        def opener(req, timeout):
+            urls.append(req.full_url)
+            if 'polling.finance' in req.full_url:
+                return _Response(base)
+            if 'chart/domestic/item/005930' in req.full_url:
+                return _Response(candle)
+            raise OSError('Yahoo unavailable')
+        q = fetch_quote(WATCHLIST[0], opener=opener, now=saturday)
+        self.assertIsNotNone(q.domestic)
+        self.assertEqual(q.domestic.regular_price, 188600)
+        self.assertEqual(q.domestic.regular_time.date(),
+                         datetime(2026, 11, 6, tzinfo=kst).date())
+        self.assertEqual(q.domestic.regular_source, '네이버 KRX 일봉')
+        self.assertEqual(compact_quote_line(q), '삼성전자 19.0만 🔺+0.74% A')
+        self.assertIn('190,000원', quote_line(q))
+        self.assertIn('188,600원', quote_line(q))
+        self.assertTrue(any('dayCandle' in url for url in urls))
+        # 이후 11/07(휴장일) 일봉을 잘못 끌어오는 동작은 반드시 거부한다.
+        invalid = {'priceInfos': [{'localDate': '20261107', 'closePrice': 195000}]}
+        self.assertIsNone(parse_daily_regular(WATCHLIST[0], invalid, q, now=saturday))
+
+    def test_korean_weekend_after_quote_keeps_a_without_invented_percent(self):
+        kst = timezone(timedelta(hours=9))
+        saturday = datetime(2026, 11, 7, 0, 14, tzinfo=kst)
+        base = {'datas': [naver_after_payload()], 'time': '20261106200000'}
+        def opener(req, timeout):
+            if 'polling.finance' in req.full_url:
+                return _Response(base)
+            raise OSError('all regular-price providers unavailable')
+        q = fetch_quote(WATCHLIST[0], opener=opener, now=saturday)
+        self.assertIsNone(q.domestic.regular_price)
+        self.assertEqual(compact_quote_line(q), '삼성전자 19.0만 A 기준가?')
+        self.assertIn('정규장 기준가 미확인', quote_line(q))
+
+    def test_korean_last_after_expires_before_next_business_day_open(self):
+        from app.domestic_regular import last_after_displayable
+        kst = timezone(timedelta(hours=9))
+        q = parse_naver_quote(WATCHLIST[0], naver_after_payload(),
+                              now=datetime(2026, 11, 6, 20, 0, tzinfo=kst))
+        after = q.domestic.after_market
+        self.assertTrue(last_after_displayable(after,
+                        now=datetime(2026, 11, 7, 0, 14, tzinfo=kst)))
+        self.assertTrue(last_after_displayable(after,
+                        now=datetime(2026, 11, 8, 23, 59, tzinfo=kst)))
+        self.assertTrue(last_after_displayable(after,
+                        now=datetime(2026, 11, 9, 7, 59, tzinfo=kst)))
+        self.assertFalse(last_after_displayable(after,
+                         now=datetime(2026, 11, 9, 8, 0, tzinfo=kst)))
 
     def test_naver_domestic_regular_verified_from_separate_yahoo(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
