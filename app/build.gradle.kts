@@ -31,6 +31,8 @@
 // 30. 카카오톡 이미지 실제 수신은 S20+ 현장 검증에 맡기며 미지원 알림은 기존 텍스트 경로로 안내한다.
 // 31. v0.4.16(versionCode 20) 접근성 공유 실험은 별도 사용자 승인/기본 OFF, 일치 방·사진 확인 실패 시 전송 차단을 추가한다.
 // 32. 기존 텍스트 알림 답장·기존 이미지 MIME 진단·전체 DB/메뉴/배터리/Android UI 요소·Core API를 보존한다.
+// 33. v0.4.17(versionCode 21)은 확인된 대상 방의 사진 보내기 버튼까지 자동 클릭하고 화면 차이 대기 로깅을 추가한다.
+// 34. 기존 설치 데이터/알림·접근성 권한/메뉴/로그/토큰/배터리/API를 보존하며 잠긴 화면에선 전송하지 않는다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -44,8 +46,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "0.4.16"
+        versionCode = 21
+        versionName = "0.4.17"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
