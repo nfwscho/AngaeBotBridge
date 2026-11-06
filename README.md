@@ -1,6 +1,6 @@
 # 현재 앙개봇 운영 문서 안내
 
-> 날씨 기능 개발 브랜치는 Android Bridge v0.4.13, Termux Python Core v0.7.2 기준입니다. main은 병합 전까지 영향이 없습니다.
+> 부동산 실거래 기능 개발 브랜치는 Android Bridge v0.4.14, Termux Python Core v0.7.3 기준입니다. main은 병합 전까지 영향이 없습니다.
 > `main` 병합은 '앙개봇 메인' 채팅에서 별도 사용자 승인 후 처리합니다.
 > 아래 초기 v0.1 설명은 역사 기록이며 현재 구현은 최신 문서를 기준으로 확인하세요.
 
@@ -9,6 +9,59 @@
 - [서버·GitHub·소스 운영](docs/OPERATIONS.md)
 - [설치·업그레이드](docs/UPGRADE.md)
 - [전체 테스트](docs/TEST_PLAN.md)
+
+## 🏠 아파트 실거래가 기능 (feature/real-estate-transactions-20261106)
+
+기존 홈 **2. 부동산** 메뉴에 메모 **1~2번을 그대로 유지**하고 국토교통부 아파트 매매·전월세 신고가격 조회를 추가했습니다. 현재 매물 호가가 아닌 **신고된 계약의 실제 거래가격**을 표시합니다.
+
+- `부` 또는 `앙 2`: 부동산 메뉴
+- `부 3`: 설정된 지역의 매매 실거래가, `부 4`: 전세, `부 5`: 월세, `부 6`: 조회지역 설정 안내
+- `부 지역 강남구`: 방·발신자별 지역 저장(임의의 기본 지역 없음)
+- `부 매매 강남구`, `부 전세 마포구`, `부 월세 동작구`: 지역을 지정해 직접 조회
+- `부 시세`: 저장된 지역의 매매 거래가격 조회
+- `부 매매 강남구 래미안`: 이름에 '래미안'이 포함된 단지 거래만 표시
+- `앙개야 부동산 시세 강남구`도 가능. `0` 이전, `00` 홈, 5분 메뉴 유지
+
+지원 지역: 서울 25개 자치구는 구 이름으로 조회 가능. 서울 밖은 전국 **법정동코드 앞 5자리**를 사용(예: `부 지역 41117`). 최근 3개 계약 월을 조회하며 취소 거래는 제외, 최신 계약일부터 최대 5건을 표시합니다.
+
+**최초 설정:** [국토부 아파트 매매 API](https://www.data.go.kr/data/15126469/openapi.do) 및 [아파트 전월세 API](https://www.data.go.kr/data/15126474/openapi.do)를 공공데이터포털에서 활용 신청/승인받고, S20+ Termux의 기존 `core/.env` 파일에 `MOLIT_API_KEY=발급받은_키`를 추가합니다. 인코딩/디코딩 키 모두 지원합니다. `.env`는 GitHub에 올리지 마세요. 키가 없으면 시세를 추측하는 대신 설정 안내를 표시합니다. API 최초 승인/연동과 공급자 최신 데이터에 따라 결과가 달라질 수 있습니다.
+
+### 국토부 API 키 비공개 등록 (1회)
+
+공개 GitHub 저장소에는 **발급된 서비스키를 절대 커밋하지 않습니다.** `.gitignore`에서 실제 `.env`는 이미 제외되어 있습니다. S20+에 SSH 접속 가능한 Windows PowerShell에서 아래 명령을 실행하세요.
+
+```powershell
+cd D:\stockproj\AngaeBotBridge
+git fetch origin
+git switch feature/real-estate-transactions-20261106
+git pull --ff-only
+.\scripts\configure-real-estate-key.ps1
+```
+
+화면에 `Paste MOLIT API key (hidden input)`이 나타나면 받은 키를 붙여넣고 Enter를 누릅니다. 키는 출력/로그/명령행에 포함하지 않고 SSH 표준입력으로만 전달합니다. 기존 `core/.env`에 키 항목만 원자적으로 수정한 후 기존 Python Core 서비스만 재시작합니다. 개인 메모·DB·다른 환경변수·Android 설정·로그는 변경하지 않습니다.
+
+이미 등록한 키를 변경할 때도 동일한 명령을 사용합니다. 서비스 재시작 없이 저장하려면 `-SkipRestart` 옵션을 붙입니다. 원격 SSH 연결이 없으면 도구가 대신 등록해 줄 수 없으므로 S20+의 기존 `core/.env`에 `MOLIT_API_KEY=...`을 직접 추가하고 기존 Core 서비스를 재시작해야 합니다.
+
+### 실기기 검증 배포
+
+```powershell
+cd D:\\stockproj\\AngaeBotBridge
+.\\deploy-angaebot.ps1 -Branch "feature/real-estate-transactions-20261106" -InstallAndroid
+```
+
+해당 브랜치의 GitHub Actions 전체 성공을 확인한 뒤 사용하세요. **실제 S20+에서 실행하는 배포 명령이며 여기에서 원격 단말기를 조작하지 않습니다.** 기존 DB·로그 및 Android Bridge의 사용자 설정을 보존합니다.
+
+**Windows `.env` 자동 동기화(기본 ON):** 배포할 때 Windows 프로젝트의 `core\.env`를 우선 확인하고, 없으면 프로젝트 최상위 `.env`를 찾습니다. 발견된 파일을 SSH/SCP로 비공개 전송하고 S20+ `core/.env`에 **변수 단위로 병합**합니다. `MOLIT_API_KEY` 등 Windows 설정은 추가/갱신하며, **S20+ 기존 `ANGAE_TOKEN`은 절대 덮어쓰지 않으며** S20+에만 있는 설정·주석도 유지합니다. 기존 설정은 배포 중 비공개 권한으로 백업하며, 실패하면 이전 설정과 Python 모듈을 복구합니다. 성공 후 임시 전송본과 백업 파일을 삭제합니다. 발급 키 및 `.env` 내용은 GitHub에 저장하지 않고 콘솔에도 출력하지 않습니다.
+
+**키 추가 방법:** Windows `D:\stockproj\AngaeBotBridge\core\.env` 파일에 `MOLIT_API_KEY=발급된_서비스키`를 저장한 뒤 배포하면 별도의 인증키 설정 명령 없이 S20+에 자동 반영됩니다. 기존 S20+ `ANGAE_TOKEN`을 Windows에서 동일하게 맞출 필요는 없습니다. Windows 파일이 없으면 기존 S20+ 설정을 그대로 사용합니다. 자동 동기화를 하지 않으려면 `-SkipEnvSync` 옵션을 추가하세요.
+
+```powershell
+cd D:\stockproj\AngaeBotBridge
+.\deploy-angaebot.ps1 -Branch "feature/real-estate-transactions-20261106" -InstallAndroid
+# .env 동기화를 원하지 않을 때만: 위 명령에 -SkipEnvSync 추가
+```
+
+---
 
 ## 🌤 날씨 기능 (feature/weather-forecast-20261106)
 

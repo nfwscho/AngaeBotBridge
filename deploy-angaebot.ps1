@@ -3,7 +3,14 @@
 # 2. Verify the exact commit has a successful GitHub Actions Python Core regression run.
 # 3. Wait for CI to finish; abort on failure, timeout, cancellation, or missing checks.
 # 4. Reuse the existing 'angaebot' SSH alias and public-key authentication.
-# 5. Stage Python Core modules via SCP without modifying SQLite, logs, .env or Android code.
+# 5. Stage Python Core modules via SCP; preserve SQLite, logs and Android settings.
+# 23. Auto-detect Windows core/.env (fallback repository-root .env) and upload it privately via SCP.
+# 24. Merge Windows variables into the existing S20+ .env; always preserve S20+ ANGAE_TOKEN.
+# 25. Keep S20+-only variables/comments, private 0600 permissions, and an automatic .env rollback copy.
+# 26. Validate credentials without printing values; fail safely if the source file is invalid.
+# 27. -SkipEnvSync explicitly disables synchronization; if no local .env exists, retain remote settings.
+# 28. Run .env merge only after successful SHA-matched tests, before restarting Python Core.
+# 29. Remove the staged secret-bearing .env after any failure, including a pre-apply error.
 # 6. Validate staged Python modules using the S20+ Python virtual environment.
 # 7. Retain temporary rollback copies during deployment and restore them on apply failure.
 # 8. Restart only the runit-managed angaebot-core service; preserve watchdog and sshd.
@@ -30,7 +37,8 @@ param(
     [string]$SshHost = 'angaebot',
     [int]$WaitMinutes = 8,
     [switch]$LocalTests,
-    [switch]$InstallAndroid
+    [switch]$InstallAndroid,
+    [switch]$SkipEnvSync
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +52,9 @@ $coreApplied = $false
 $androidSerial = ''
 $apkFile = ''
 $adbExe = ''
+$localEnvPath = ''
+$envSyncPrepared = $false
+$envStageAttempted = $false
 
 function Assert-Exit([string]$Message) {
     if ($LASTEXITCODE -ne 0) { throw "$Message (exit=$LASTEXITCODE)" }
@@ -53,9 +64,9 @@ function Invoke-Remote([string]$Command, [string]$Description) {
     Assert-Exit $Description
 }
 function Undo-Remote {
-    Write-Warning 'Deployment failed. Restoring previous Python modules and restarting Core.'
-    & ssh -o BatchMode=yes $SshHost "cp -p $backup/*.py $remoteCore/app/ && sv restart $service"
-    if ($LASTEXITCODE -ne 0) { Write-Warning 'Automatic rollback failed. Check remote service state.' }
+    Write-Warning 'Deployment failed. Restoring previous Python modules, private .env and restarting Core.'
+    & ssh -o BatchMode=yes $SshHost "if test -f $backup/.env; then cp -p $backup/.env $remoteCore/.env && chmod 600 $remoteCore/.env || exit 1; fi; cp -p $backup/*.py $remoteCore/app/ && sv restart $service"
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Automatic rollback failed. Check remote service and backup files.' }
 }
 
 try {
@@ -74,6 +85,30 @@ try {
     $sha = (& git rev-parse HEAD).Trim()
     Assert-Exit 'Git commit lookup failed'
     Write-Host "Target commit: $sha"
+
+    if (-not $SkipEnvSync) {
+        $coreEnv = Join-Path $root 'core\.env'
+        $rootEnv = Join-Path $root '.env'
+        if (Test-Path -LiteralPath $coreEnv -PathType Leaf) {
+            $localEnvPath = $coreEnv
+        } elseif (Test-Path -LiteralPath $rootEnv -PathType Leaf) {
+            $localEnvPath = $rootEnv
+        } else {
+            Write-Warning '[Env] No Windows core\.env or repository-root .env found. Existing S20+ .env will be preserved.'
+        }
+        if ($localEnvPath) {
+            $localEnvItem = Get-Item -LiteralPath $localEnvPath -Force
+            if (($localEnvItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw '[Env] Local .env is a reparse point / symlink; deployment refused.'
+            }
+            if ($localEnvItem.Length -gt 65536) {
+                throw '[Env] Windows .env exceeds the 64 KiB safety limit; deployment refused.'
+            }
+            Write-Host "[Env] Windows .env detected: $localEnvPath (content and keys are never printed)" -ForegroundColor Cyan
+        }
+    } else {
+        Write-Host '[Env] Explicit -SkipEnvSync: existing S20+ .env will not be modified.'
+    }
 
     if ($LocalTests) {
         Write-Host '[2/6] Run isolated Linux regression on S20+ (no GitHub Actions)' -ForegroundColor Cyan
@@ -181,7 +216,7 @@ try {
     }
 
     Write-Host '[3/6] Prepare remote staging directories' -ForegroundColor Cyan
-    Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && mkdir -p $stage $backup && rm -f $stage/*.py $backup/*.py" 'S20+ environment check failed'
+    Invoke-Remote "test -d $remoteCore/app && test -x $remoteCore/.venv/bin/python && test -d $service && test -f $remoteCore/.env && mkdir -p $stage $backup && chmod 700 $stage $backup && rm -f $stage/*.py $backup/*.py $stage/.env.windows $stage/.env-merge.py $backup/.env" 'S20+ environment check failed'
 
     Write-Host '[4/6] Upload and compile-check Python modules' -ForegroundColor Cyan
     $files = @(Get-ChildItem -LiteralPath (Join-Path $root 'core/app') -Filter '*.py' -File)
@@ -191,9 +226,27 @@ try {
     Assert-Exit 'SCP upload failed'
     Invoke-Remote "$remoteCore/.venv/bin/python -m compileall -q $stage" 'S20+ Python compile check failed'
 
-    Write-Host '[5/6] Apply modules and restart Core service' -ForegroundColor Cyan
+    if ($localEnvPath) {
+        Write-Host '[Env] Upload Windows .env privately and validate merge helper' -ForegroundColor Cyan
+        $envHelper = Join-Path $root 'core\scripts\merge-deployment-env.py'
+        if (-not (Test-Path -LiteralPath $envHelper -PathType Leaf)) {
+            throw '[Env] Missing merge-deployment-env.py from the selected branch.'
+        }
+        & scp -q -o BatchMode=yes $envHelper ($SshHost + ':' + $stage + '/.env-merge.py')
+        Assert-Exit '[Env] Unable to upload merge helper'
+        $envStageAttempted = $true
+        & scp -q -o BatchMode=yes $localEnvPath ($SshHost + ':' + $stage + '/.env.windows')
+        Assert-Exit '[Env] Unable to stage Windows .env securely'
+        Invoke-Remote "chmod 600 $stage/.env.windows $stage/.env-merge.py && $remoteCore/.venv/bin/python -m py_compile $stage/.env-merge.py" '[Env] Remote helper syntax or permissions invalid'
+        $envSyncPrepared = $true
+    }
+
+    Write-Host '[5/6] Apply modules, merge private .env, and restart Core service' -ForegroundColor Cyan
     Invoke-Remote "cp -p $remoteCore/app/*.py $backup/" 'Temporary rollback copy failed'
     $deploymentStarted = $true
+    if ($envSyncPrepared) {
+        Invoke-Remote "$remoteCore/.venv/bin/python $stage/.env-merge.py $remoteCore/.env $stage/.env.windows $backup/.env" '[Env] Windows .env merge failed; deployment rolled back'
+    }
     Invoke-Remote "cp -p $stage/*.py $remoteCore/app/ && sv restart $service" 'Apply or Core service restart failed'
 
     Write-Host '[6/6] Verify Core service and TCP port' -ForegroundColor Cyan
@@ -231,6 +284,7 @@ try {
     } finally {
         Remove-Item -LiteralPath $metaTemp -Force -ErrorAction SilentlyContinue
     }
+    if ($envSyncPrepared) { Write-Host '[Env] Windows .env synchronized; S20+ ANGAE_TOKEN and server-only settings preserved.' -ForegroundColor Green }
     Write-Host "Deployment successful: $sha" -ForegroundColor Green
 } catch {
     Write-Warning "Deployment stopped: $($_.Exception.Message)"
@@ -240,5 +294,14 @@ try {
     }
     exit 1
 } finally {
+    if ($envStageAttempted) {
+        # Never leave the copied private credential in staging after a failed pre-apply step.
+        try {
+            & ssh -q -o BatchMode=yes -o ConnectTimeout=10 $SshHost "rm -f $stage/.env.windows" | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Warning '[Env] Verify that S20+ temporary .env was removed.' }
+        } catch {
+            Write-Warning '[Env] Verify that S20+ temporary .env was removed.'
+        }
+    }
     Set-Location $root
 }

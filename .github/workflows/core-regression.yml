@@ -8,6 +8,7 @@
 # 7. 실제 ADB 다운로드/실기기 설치는 CI에서 수행하지 않으며 기존 운영 데이터에 접근하지 않는다.
 # 8. push 이벤트에서만 전체 CI를 수행해 기능 PR의 push/PR 중복 실행과 메일을 줄인다.
 # 9. 기능 SHA 검증과 승인된 main 병합 후 테스트, workflow_dispatch 수동 실행은 유지한다.
+# 10. S20+ MOLIT 인증키 안전 등록 스크립트를 PowerShell 7/Windows 5.1 양쪽에서 구문 검증한다.
 name: AngaeBot Core regression
 on:
   push:
@@ -28,7 +29,7 @@ jobs:
       - name: Validate PowerShell deploy and ADB script syntax
         shell: pwsh
         run: |
-          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1')) {
+          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1', './scripts/configure-real-estate-key.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
@@ -47,7 +48,7 @@ jobs:
       - name: Validate Windows PowerShell 5.1 deployment scripts
         shell: powershell
         run: |
-          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1')) {
+          foreach ($file in @('./deploy-angaebot.ps1', './scripts/resolve-adb.ps1', './scripts/test-resolve-adb.ps1', './scripts/configure-real-estate-key.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null

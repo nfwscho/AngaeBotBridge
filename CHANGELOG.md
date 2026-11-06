@@ -1,3 +1,28 @@
+## 2026-11-06 — Windows .env 파일의 S20+ 배포 자동 동기화
+
+- `deploy-angaebot.ps1` 배포 시 로컬 `core\.env`(없으면 저장소 최상위 `.env`)를 자동 감지하고 SSH/SCP로 S20+에 비공개 전송한다. `-SkipEnvSync`로만 비활성화.
+- 기존 S20+ `.env`를 통째로 덮어쓰지 않고 Windows 항목을 변수별로 병합한다. S20+ `ANGAE_TOKEN` 및 S20+ 전용 환경변수·주석은 보존한다.
+- 새 환경설정 파서는 BOM·CRLF 호환, 중복/비정상 입력 거부, 0600 권한·원자적 교체·실패 시 기존 `.env`/모듈 복구를 제공한다. 인증키·설정값을 커밋하거나 출력하지 않는다.
+- `core/scripts/merge-deployment-env.py` 및 `core/tests/test_deployment_env_merge.py`를 추가하고 기존 전체 회귀 테스트와 PowerShell 5.1/7 정적 문법 검증을 유지한다.
+- S20+ 실기기 배포/카카오톡 명령어/국토부 API 연동은 Windows 원클릭 배포 후 확인해야 하며 `main`은 수정하지 않는다.
+
+## 2026-11-06 — 실거래 인증키 비공개 등록 도구 (feature/real-estate-transactions-20261106)
+
+- S20+ `core/.env`에 기존 키·AI 환경설정·주석을 보존하면서 `MOLIT_API_KEY`만 안전하게 추가/갱신하는 `core/scripts/configure-real-estate-key.py` 추가.
+- Windows PowerShell `scripts/configure-real-estate-key.ps1`: 기존 `angaebot` SSH 접속, 숨김 입력, SSH 표준입력으로 비밀값 전달, 원자적 `.env` 교체, Core 서비스 재시작. GitHub 코드·CLI 인수·출력에 발급 키 미포함.
+- 가짜 키를 이용한 `.env` 내용/권한/줄바꿈/오류 회귀 테스트를 추가하고 PowerShell 5.1/7 양쪽 문법 검사를 CI에 연결.
+- 실제 발급 키는 공개 저장소에 절대로 올리지 않으며 이 커밋은 설정 도구만 제공한다. S20+의 실제 인증키 저장과 API 승인 확인은 실기기에서 실행 후 검증해야 한다.
+
+## 2026-11-06 — 국토교통부 아파트 실거래가 조회 (feature/real-estate-transactions-20261106)
+
+- 기존 **부동산 메모 메뉴 1·2번을 유지**하면서 3 매매 실거래, 4 전세 실거래, 5 월세 실거래, 6 지역 설정 안내를 추가. 홈의 기존 1~10 순서·금/개/주/날 단축 메뉴도 변경하지 않음.
+- 직접 명령: `부 지역 강남구`(방·발신자별 조회 지역 저장), `부 시세` / `부 매매 강남구` / `부 전세 강남구` / `부 월세 강남구` / `부 매매 강남구 래미안`. 장문 `앙개야 부동산 시세 강남구` 지원. 0 이전·00 홈·5분 번호 선택 재사용.
+- 국토교통부 **아파트 매매·전월세 실거래가 공개 API**를 최신 3개 계약 월로 조회하고 취소 계약을 제외, 거래일 순 최대 5건·전용면적·층·거래금액(만원 단위), 출처와 신고 지연 경고를 표시. 현재 매물 호가/감정가가 아님.
+- 지역 지원: **서울 25개 자치구** 지명 또는 전국 시군구 법정동 **앞 5자리 숫자 코드**. 다른 지역의 지명 자동 변환은 지원하지 않으며 추측하지 않음.
+- 공공데이터포털에서 무료로 발급/승인받은 서비스키를 S20+ 기존 `core/.env`에 `MOLIT_API_KEY=`로 설정해야 실제 호출 가능. 암호키를 GitHub에 올리거나 로그/응답에 노출하지 않음.
+- 신규 `core/app/real_estate.py`, 독립 `real_estate_regions` 테이블 및 `core/tests/test_real_estate.py`. 인증·중복 요청·jobs/events 로그·module_source·기존 메모/주식/AI/날씨/Android 배터리·UI 보존. Python Core v0.7.3 / Android Bridge v0.4.14(versionCode 18).
+- 개발 브랜치에서 GitHub Actions 회귀 테스트 수행. S20+ 배포/실거래 API 응답 검증 전 `main` 병합하지 않음.
+
 ## 2026-11-06 — 날씨 예보 및 사용자별 지역 설정 (feature/weather-forecast-20261106)
 
 - **날/홈 8 날씨**: 기존 오늘(1)·내일(2)·주간(3)·지역 설정(4) 메뉴 번호를 보존하면서 Open-Meteo 실제 예보를 조회.

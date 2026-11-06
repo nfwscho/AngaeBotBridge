@@ -46,6 +46,9 @@
 44. 기존 부/투/메 단축어를 유지하면서 금(투자)·개(개인)를 추가하고 로그/인증·5분 선택 세션을 유지한다.
 45. 날씨 메뉴 1~3은 실제 Open-Meteo 예보 조회로 연결하고 4번은 방/발신자별 지역 설정 안내로 연결한다.
 46. 미개발 다른 콘텐츠와 홈/주식/설정/메모 메뉴 및 0/00/5분 보호·로그 경로를 변경하지 않는다.
+47. 부동산 메모 1~2번을 유지하고 3 매매·4 전세·5 월세 실거래가 조회, 6 지역 안내를 추가한다.
+48. 실거래 API 호출은 메뉴 처리기가 직접 수행하지 않으며 main.py에서 DB 쓰기 잠금 외부로 분리한다.
+49. 기존 홈 번호/인증/메뉴 점프/방·발신자 격리/로그/SQLite 메모 동작과 배터리 정보를 보존한다.
 """
 from __future__ import annotations
 
@@ -174,6 +177,14 @@ class StockSelectionMenus:
             MenuChoice('최근 메모 목록', page='records:list:' + sector),
             MenuChoice('메모 등록·검색 안내', page='records:help:' + sector),
         )
+        if sector == '부동산':
+            return (
+                choices[0], choices[1],
+                MenuChoice('아파트 매매 실거래가', command_argument='실거래조회 매매'),
+                MenuChoice('아파트 전세 실거래가', command_argument='실거래조회 전세'),
+                MenuChoice('아파트 월세 실거래가', command_argument='실거래조회 월세'),
+                MenuChoice('조회 지역 설정 안내', command_argument='실거래설정 안내'),
+            )
         if sector == '개인':
             return (
                 choices[0],
@@ -212,7 +223,7 @@ class StockSelectionMenus:
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 시세 · 주 분 삼성전자 분석',
-            '앙 2/3/9 메모·일정 관리 · 날 1~3 예보 · 날 지역 서울',
+            '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
             '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
 
@@ -253,7 +264,7 @@ class StockSelectionMenus:
         walk(cls._home_choices())
         lines.extend([
             '',
-            '※ 빠른 이동: 앙 2 1 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
+            '※ 빠른 이동: 앙 2 1 / 앙 2 3 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
             '※ 단축: 앙 홈 · 주 주식 · 부 부동산 · 금 금융·투자 · 개 개인 · 여 여행 · 민 배드민턴 · 요 요리 · 종 종친 · 날 날씨 · 설 설정',
             '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
             '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',
@@ -284,7 +295,9 @@ class StockSelectionMenus:
         self._save(key, choices, back='home', origin='records-sector:' + sector)
         alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
         return MenuAnswer(self._render('📂 ' + sector + ' 메뉴', choices)
-                          + f'\n※ 등록: {alias} 추가 제목 | 내용', menu_active=True)
+                          + f'\n※ 등록: {alias} 추가 제목 | 내용'
+                          + ('\n※ 조회 지역: 부 지역 강남구' if sector == '부동산' else ''),
+                          menu_active=True)
 
     def open_record_results(self, room: str, sender: str,
                             rows, *, sector: str = '개인', heading: str = '최근 기록') -> MenuAnswer:
