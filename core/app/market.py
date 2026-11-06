@@ -64,7 +64,7 @@
 56. 2026-11-06 한국 네이버 afterMarket closePrice가 시간외 체결가로 바뀌는 경우를 확인하고 정규장 종가로 오표기하지 않는다.
 57. 한국 시간외 구간에서는 별도 Yahoo 정규장 종가를 시각·거래일 검증해 성공한 경우에만 정규 기준가로 표시한다.
 58. 미국 장외는 네이버 해외 폴링/기본시세를 추가 조회하고 Yahoo 분봉·Nasdaq 공개 시세를 종전 장애 보조로 유지한다.
-59. 미국 나스닥 SKHY ADR을 확인된 종목으로 허용하며 임의 거래소 심볼은 자동으로 추측하지 않는다.
+59. 미국 나스닥 SKHY ADR은 장외 전용 네이버 공급자에서만 허용하고 기존 해외 확정 일봉 검증 허용목록은 변경하지 않는다.
 60. 운영 로그에는 공급자별 조회 실패/조회 성공 진단 코드를 추가하며 기존 US_QUOTE_FAILED 등의 로그를 보존한다.
 61. 장외 미제공·정규장 종가 미확인 시 값을 꾸미지 않고 명시적으로 미확인을 출력한다.
 62. Yahoo 정규 종가 불일치/장애 시 네이버 KRX 당일 일봉 종가를 독립 검증하고 전일 기준가와 비교해 복구한다.
@@ -117,7 +117,7 @@ _NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stock
 _NASDAQ_DAILY = 'https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&limit=10'
 _NAVER_US_DAILY = 'https://api.stock.naver.com/chart/foreign/item/{reuters}?periodType=dayCandle'
 # 개별 티커의 상장 거래소를 추측하지 않는다. 확인 가능한 나스닥 상장 종목만 해외 차트에 연결한다.
-_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SKHY','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
+_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
 _US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
 _MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
