@@ -88,7 +88,7 @@ SECTORS: tuple[Sector, ...] = (
         ('SKHY', 'SKHY'), ('ASML', 'ASML'), ('AMAT', 'AMAT'),
         ('램리서치', 'LRCX'), ('KLA', 'KLAC'), ('세레브라스', 'CBRS'),
         ('SIMO', 'SIMO'), ('샌디스크', 'SNDK'), ('씨게이트', 'STX'),
-        ('웬디', 'WDC'),
+        ('WDC', 'WDC'),
     ))),
     Sector('dc', '데센 및 네트워크', _stocks((
         ('루멘텀', 'LITE'), ('아리스타', 'ANET'), ('버티브', 'VRT'),
@@ -97,7 +97,7 @@ SECTORS: tuple[Sector, ...] = (
 )
 
 _SECTOR_BY_KEY = {sector.key: sector for sector in SECTORS}
-_REQUEST = re.compile(r'^섹터시세 (chip|ai|semi|dc) ([1-9][0-9]?) (간략|상세)
+_REQUEST = re.compile(r'^섹터시세 (chip|ai|semi|dc) ([1-9][0-9]?) (간략|상세)$')
 
 
 def get_sector(key: str) -> Sector:
