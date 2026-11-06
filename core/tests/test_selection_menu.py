@@ -177,7 +177,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
         back=self.menus.choose(self.db,'방','나','0')
         self.assertTrue(back.menu_active)
         self.assertIn('📊 주식 메뉴',back.reply)
-        self.assertEqual(self.menus.choose(self.db,'방','나','2').execute_argument,'메모리7')
+        self.assertEqual(self.menus.choose(self.db,'방','나','2').execute_argument,'섹터시세 us10 1 간략')
         with self.assertRaisesRegex(StockQuoteError,'5분'):
             self.menus.choose(self.db,'방','나','0')
         self.menus.open('방','나')
@@ -267,11 +267,11 @@ class MenuSelectionAPITests(unittest.TestCase):
                 self.assertEqual(item['reply'], 'ASML 분석')
                 self.assertEqual(history.call_args.args[0].ticker, 'ASML')
         self.assertIn('주식 메뉴', self.post('메뉴').json()['reply'])
-        with patch('app.main.group_report', return_value='📊 미국시총10 관심종목 시세 요약') as group:
+        with patch('app.main.sector_report', return_value='📊 미국 시총10 시세 (10종목)') as group:
             second = self.post('선택 2').json()
             self.assertTrue(second['ok'], second)
-            self.assertIn('미국시총10', second['reply'])
-            self.assertEqual(len(group.call_args.args[1]), 10)
+            self.assertIn('미국 시총10 시세', second['reply'])
+            group.assert_called_once_with('us10',1,detailed=False)
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
                              db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
@@ -593,7 +593,7 @@ class MenuSelectionAPITests(unittest.TestCase):
         back=self.post('선택 0').json()
         self.assertTrue(back['menu_active'])
         self.assertIn('📊 주식 메뉴',back['reply'])
-        self.assertTrue(self.post('선택 5').json()['menu_active'])
+        self.assertTrue(self.post('선택 7').json()['menu_active'])
         with patch('app.main.group_report',return_value='반도체 시세'):
             # 그룹에 종목이 없으면 그룹 선택 후 새 종목 선택 메뉴는 열리지 않는다.
             group=self.post('선택 2').json()
@@ -621,9 +621,9 @@ class MenuSelectionAPITests(unittest.TestCase):
         root=self.post('선택 0').json()
         self.assertTrue(root['menu_active'])
         self.assertIn('📊 주식 메뉴',root['reply'])
-        # 메인 메뉴의 그룹 바로가기는 그룹 목록을 거치지 않았으므로 메인으로 복귀.
+        # 개인그룹은 새 홈 1~5와 별개로 직접 명령 시 여전히 조회 가능하다.
         with patch('app.main.group_report',return_value='반도체 시세'):
-            direct=self.post('선택 3').json()
+            direct=self.post('반도체').json()
             self.assertTrue(direct['menu_active'])
         self.assertIn('📊 주식 메뉴',self.post('선택 0').json()['reply'])
 
