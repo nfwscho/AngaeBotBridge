@@ -15,6 +15,7 @@
 29. 10종목 그룹의 9/10번째 종목 분석과 99 상세 전환이 각각 독립 선택인 것을 검증한다.
 30. 사용자 관심그룹 상세·0 간략 복귀·99 왕복·메뉴 경로 주식 3 99·채팅방 격리·기존 작업 로그를 검증한다.
 31. 99 입력은 현재 시세 화면에서만 허용하고 다른 메뉴와 9/10 종목 번호가 충돌하지 않게 검증한다.
+32. 주식 메뉴 7번 AI 주도주는 기존 1~6번 뒤에 추가되고 메모리7 상세보기는 시세표 99로 유지한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -232,10 +233,13 @@ class MenuSelectionAPITests(unittest.TestCase):
         self.assertTrue(opened['menu_active'])
         self.assertIn('6. 종목별 분석', opened['reply'])
         self.assertNotIn('7. 메모리7 시세 상세 보기', opened['reply'])
-        self.assertFalse(self.post('선택 7').json()['ok'])  # 7번은 삭제
+        # 7번은 과거 메모리7 상세 기능이 아니라 새 AI 주도주 시세.
+        with patch('app.main.sector_report', return_value='📊 AI 주도주 시세'):
+            self.assertIn('AI 주도주', self.post('선택 7').json()['reply'])
+        self.assertEqual(self.post('선택 00').json()['module_source'], 'core.menu')
         with patch('app.main.execute_stock_command', side_effect=lambda _cmd, arg:
                    '🔎 메모리7 시세 상세 보기' if arg == '메모리7 상세' else '💾 메모리7 시세 요약') as renderer:
-            self.assertIn('💾 메모리7', self.post('선택 2').json()['reply'])
+            self.assertIn('💾 메모리7', self.post('경로 주식 2').json()['reply'])
             detail = self.post('선택 99').json()
             self.assertTrue(detail['ok'], detail)
             self.assertTrue(detail['menu_active'])
