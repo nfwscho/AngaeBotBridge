@@ -16,6 +16,8 @@
  * v0.4.12 사용자 요청 홈 메뉴 순서 및 부·금·개 단축 안내를 갱신하되 기존 UI/동작/로그를 보존한다.
  * v0.4.14 부동산 실거래 단축 기능 배포에 따른 표시 버전만 변경하고 UI·설정·로그·응답 기능을 보존한다.
  * v0.4.15 이미지 첨부 실험용 버전 표시만 갱신하며 모든 스위치·허용목록·토큰·SQLite 로그·내보내기·관리 UI를 유지한다.
+ * v0.4.16은 사용자가 직접 승인하는 Android 접근성 이미지 자동전송 스위치와 접근성 설정 이동 버튼만 별도 섹션에 추가한다.
+ * 기존 알림 접근 권한/자동응답/허용 방·발신자/Python/AI/테스트/로그 UI·데이터를 그대로 보존하고 기능은 기본 OFF다.
  */
 package kr.co.angaebot.bridge
 
@@ -49,6 +51,7 @@ class MainActivity : Activity() {
     private lateinit var pythonConfig: PythonBridgeConfig
     private lateinit var pythonSwitch: Switch
     private lateinit var aiFreeformSwitch: Switch
+    private lateinit var imageAutoSwitch: Switch
     private lateinit var pythonTokenInput: EditText
     private lateinit var logs: LogRepository
     private lateinit var powerSwitch: Switch
@@ -159,6 +162,32 @@ class MainActivity : Activity() {
         root.addView(button("Python 서버 연결 테스트") { testPythonConnection() })
         root.addView(label("Python 연결은 휴대폰 내부로만 가능합니다. 토큰을 채팅방·로그·GitHub에 올리지 마세요.", 12f))
 
+        root.addView(space(12))
+        root.addView(section("②-B 이미지 사진 자동전송 실험"))
+        root.addView(label("기존 텍스트 빠른답장은 그대로 유지합니다. 사진 자동전송은 별도 접근성 서비스를 켜야 합니다.\n잠금 상태, 채팅방 이름 불일치, 공유화면 식별 실패 시 사진 전송을 취소합니다.", 12f))
+        imageAutoSwitch = Switch(this).apply {
+            text = "카카오톡 실제 사진 자동전송 시험 허용 (기본 OFF)"
+            textSize = 15f
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        root.addView(imageAutoSwitch)
+        root.addView(button("이미지 전송 실험 설정 저장") {
+            val saved = ImageAutoConfig.save(this, imageAutoSwitch.isChecked)
+            if (saved) {
+                logs.log("INFO", "IMAGE_UI_SETTING_SAVED", "enabled=${imageAutoSwitch.isChecked}")
+                Toast.makeText(this, "이미지 실험 설정을 저장했습니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                imageAutoSwitch.isChecked = ImageAutoConfig.enabled(this)
+                Toast.makeText(this, "설정 저장 실패", Toast.LENGTH_LONG).show()
+            }
+            updateStatusAndLogs()
+        })
+        root.addView(button("이미지 자동전송 접근성 권한 설정 열기") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        })
+        root.addView(label("앱 설정을 ON으로 저장하고 Android 접근성에서 '앙개봇 이미지 공유 실험'을 직접 켜세요.\n시험: '앙개야 이미지 자동시험' (화면 잠금 해제 상태만 지원).\n메시지와 사진 말풍선의 실제 수신 여부는 채팅방에서 확인해야 합니다.", 12f))
+        root.addView(space(10))
+
         root.addView(section("③ 오프라인 명령 파서 진단"))
         root.addView(label("카카오톡을 보내지 않고 앱 내부에서 명령 문법만 시험합니다.", 12f))
         testInput = input(singleLine = true, hint = "앙개야 테스트")
@@ -200,6 +229,7 @@ class MainActivity : Activity() {
     private fun loadSettings() {
         val values = config.load()
         powerSwitch.isChecked = values.enabled
+        imageAutoSwitch.isChecked = ImageAutoConfig.enabled(this)
         wakeInput.setText(values.wakeWord)
         roomsInput.setText(values.allowedRooms.joinToString("\n"))
         sendersInput.setText(values.allowedSenders.joinToString("\n"))
