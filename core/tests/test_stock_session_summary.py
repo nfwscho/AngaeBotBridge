@@ -143,7 +143,8 @@ class CompactSessionQuoteTests(unittest.TestCase):
         self.assertIn('1. 삼성전자 19.4만 🔺+2.76% A', report)
         self.assertIn('2. 마이크론 $707.11 🔺+7.73% P', report)
         self.assertNotIn('   └ ', report)
-        self.assertIn('※ 5분 내 1~2', report)
+        self.assertNotIn('※ 5분 내 1~2', report)
+        self.assertEqual(report.splitlines()[-1], '99. 🔎 상세보기')
 
     def test_us_regular_session_does_not_show_stale_premarket(self):
         quote = us_sessions()
