@@ -20,6 +20,11 @@
 18. NYSE 상장 LLY(일라이릴리)는 공식 Reuters RIC LLY.N만 허용하여 나스닥 .O를 임의 적용하거나 다른 종목을 혼동하지 않는다.
 19. SPCX.O/LLY.N 모두 네이버 응답의 종목코드·현지 거래시각·명시적 세션 검증을 통과할 때만 프리·애프터 대표값으로 채택한다.
 20. 지원 목록 외 종목·불확실한 코드·누락된 시간외 체결은 기존 정규장 시세 유지, 오류 로그/DB/Android/인증은 변경하지 않는다.
+21. 신규 AI 주도주 PLTR.O, NOW.N, CRM.N, ORCL.N, IBM.N의 프리/애프터 조회를 거래소 확인된 코드로 지원한다.
+22. 반도체 ARM.O, MRVL.O, QCOM.O, TXN.O, ASML.O, AMAT.O, LRCX.O, KLAC.O, CBRS.O, SIMO.O, TSM.N을 지원한다.
+23. 데이터센터 LITE.O, ANET.N, VRT.N, DELL.N, GLW.N을 지원하며 기존 WDC·STX·MU·NVDA 등 화이트리스트는 그대로 유지한다.
+24. 등록된 코드가 있다고 실제 체결로 가정하지 않고 응답의 종목·통화·현지 장외 체결시각·프리/애프터 세션을 계속 검증한다.
+25. 기존 403/429 호스트 차단·타임아웃·원본 정규장 가격·로그·메모리7·관심그룹·SQLite/Android UI 보존 정책을 유지한다.
 """
 from __future__ import annotations
 
@@ -37,12 +42,21 @@ from .extended_sessions import SessionPrice, _session_price
 
 # 2026년 11월 기준 공개 Nasdaq 등록 종목. 임의 NYSE 티커를 .O로 추측하지 않는다.
 _NAVER_NASDAQ = frozenset({
+    # 기존 검증된 나스닥 종목은 삭제하지 않으며 2026-11-06 추가 3대 섹터의
+    # 나스닥 상장종목만 거래소별로 명시한다. NYSE 종목을 .O로 추정하지 않는다.
     'MU', 'SKHY', 'SNDK', 'STX', 'WDC', 'NVDA', 'AAPL', 'MSFT',
     'GOOG', 'GOOGL', 'AMZN', 'META', 'AVGO', 'AMD', 'INTC',
     'ADBE', 'COST', 'NFLX', 'TSLA', 'SPCX',
+    'PLTR', 'ARM', 'MRVL', 'QCOM', 'TXN', 'ASML', 'AMAT',
+    'LRCX', 'KLAC', 'CBRS', 'SIMO', 'LITE',
 })
-# 검증된 뉴욕증권거래소 종목. 임의의 미확인 ticker.N을 생성하지 않는다.
-_NAVER_NYSE = {'LLY': 'LLY.N'}
+# NYSE 미국 상장 티커의 공식 거래소 정보를 확인한 화이트리스트.
+# LLY를 포함한 기존 정보를 유지하고 NYSE 거래소 코드 .N으로만 조회한다.
+_NAVER_NYSE = {
+    'LLY': 'LLY.N', 'NOW': 'NOW.N', 'CRM': 'CRM.N', 'ORCL': 'ORCL.N',
+    'IBM': 'IBM.N', 'TSM': 'TSM.N', 'ANET': 'ANET.N',
+    'VRT': 'VRT.N', 'DELL': 'DELL.N', 'GLW': 'GLW.N',
+}
 _POLLING = 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes='
 _BASIC = 'https://stock.naver.com/api/securityService/stock/{reuters}/basic'
 _NUMBER_RE = re.compile(r'^[+]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$')
