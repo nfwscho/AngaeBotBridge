@@ -87,6 +87,8 @@
 82. 메뉴 2→3/4/5 실거래 조회와 단축어 부 매매/전세/월세/시세는 DB 쓰기 락 밖에서 수행한다.
 83. API 키 미설정·연결 장애·취소 계약은 보수적으로 처리하며 기존 인증·중복 방지·jobs/events 로그·module_source를 보존한다.
 84. Android UI/배터리·주식/날씨/AI 및 기존 SQLite 테이블은 수정/초기화하지 않는다.
+85. 주식 메뉴 7번의 '메모리7 상세'는 기존 시세 조회와 동일 인증·중복방지·로그·번호 선택 흐름에서 읽기 전용 실행한다.
+86. 기본 메모리7과 사용자 그룹은 한 종목 한 줄로 표기하고 상세는 원본 시세/장외/출처를 별도 표기하지만 DB와 선택 세션 구조는 유지한다.
 """
 from __future__ import annotations
 
@@ -339,7 +341,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         stock_reply = report + "\n\n" + refreshed.reply
                     stock_menu_active = True
-                elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() == "메모리7"):
+                elif request.command == "메모리7" or (request.command in {"주식", "메뉴"} and resolved_argument.strip() in {"메모리7", "메모리7 상세", "상세"}):
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
