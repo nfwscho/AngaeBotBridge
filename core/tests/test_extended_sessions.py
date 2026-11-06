@@ -21,6 +21,10 @@
 19. 메모리7 기본 1행 대표세션과 7번 상세 다중행, 장외 정규장대비 비교기준을 각각 검사한다.
 20. 카카오톡 간략표시의 프리/애프터 한 글자 P/A 및 9번 상세보기·9번 간략보기 전환 안내를 검증한다.
 21. P/A 한 줄 시세의 삼각형과 등락률 사이 공백 제거 회귀를 검증한다.
+22. 공식 신규 나스닥 상장 SPCX.O와 뉴욕증권거래소 LLY.N 네이버 해외 코드 매핑을 구별해 프리/애프터 가격을 채택한다.
+23. 2026-11-06 미국 프리장 시각에서 SPCX/LLY 프리 체결이 있으면 정규장만 표시하지 않고 P를 노출한다.
+24. Yahoo 정규장 차트 403으로 Nasdaq 정규가를 사용했어도 Yahoo 장외 1분봉이 정상이라면 검증 후 프리 가격을 복구한다.
+25. 티커 오염·프리 체결시각 불일치·미지원 심볼에는 P를 만들지 않으며 기존 무료 공급자 장애/정규가 폴백을 보존한다.
 """
 from __future__ import annotations
 
@@ -32,8 +36,8 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from app.extended_sessions import parse_yahoo, parse_nasdaq, session_of
-from app.extended_naver import parse_naver_extended, fetch_naver_extended
-from app.market import (Quote, WATCHLIST, fetch_quote, parse_chart, parse_naver_quote,
+from app.extended_naver import parse_naver_extended, fetch_naver_extended, reuters_code
+from app.market import (Stock, Quote, WATCHLIST, fetch_quote, parse_chart, parse_naver_quote,
                         parse_nasdaq_quote, compact_quote_line, quote_line, memory7_report)
 
 ET = ZoneInfo('America/New_York')
@@ -294,6 +298,98 @@ class ExtendedSessionTests(unittest.TestCase):
                                                       reg, now=early), ())
         self.assertEqual(parse_naver_extended(WATCHLIST[2], {'datas':[{
             k:v for k,v in item.items() if k != 'marketSessionType'}]}, reg, now=early), ())
+
+    def test_spacex_and_eli_lilly_have_distinct_verified_reuters_codes(self):
+        spcx = Stock('스페이스X', 'SPCX', 'USD', '미국', 'America/New_York')
+        lly = Stock('일라이릴리', 'LLY', 'USD', '미국', 'America/New_York')
+        self.assertEqual(reuters_code(spcx), 'SPCX.O')
+        self.assertEqual(reuters_code(lly), 'LLY.N')
+        self.assertEqual(reuters_code(Stock('미상', 'TESTX', 'USD', '미국',
+                                          'America/New_York')), '')
+        now = datetime(2026, 11, 6, 8, 19, tzinfo=ET)
+        close = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
+        for stock, ric, previous, price, time_text in (
+            (spcx, 'SPCX.O', 123.62, 128.90, '2026-11-06T04:30:00-05:00'),
+            (lly, 'LLY.N', 1364.73, 1346.00, '2026-11-06T06:30:00-05:00'),
+        ):
+            with self.subTest(stock=stock.ticker):
+                regular = Quote(stock, previous, previous + 12,
+                                -0.5, close, now)
+                body = {'datas': [{'reutersCode': ric,
+                                  'currencyType': {'name': 'USD'},
+                                  'marketSessionType': 'preMarket',
+                                  'closePrice': str(price),
+                                  'localTradedAt': time_text}]}
+                result = parse_naver_extended(stock, body, regular, now=now)
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0].session, '프리')
+                self.assertAlmostEqual(result[0].price, price)
+                self.assertAlmostEqual(result[0].percent,
+                                       (price / previous - 1) * 100)
+                from dataclasses import replace
+                rendered = compact_quote_line(replace(regular, extended=result))
+                self.assertIn(' P', rendered)
+                self.assertIn(stock.name, rendered)
+                body['datas'][0]['reutersCode'] = ('LLY.O' if ric.endswith('.N')
+                                                  else 'SPCX.N')
+                self.assertFalse(parse_naver_extended(stock, body, regular, now=now))
+
+    def test_spacex_premarket_yahoo_bar_survives_regular_quote_provider_fallback(self):
+        from urllib.error import HTTPError
+        spcx = Stock('스페이스X', 'SPCX', 'USD', '미국', 'America/New_York')
+        now = datetime(2026, 11, 6, 8, 19, tzinfo=ET)
+        nasdaq = {'data': {'symbol': 'SPCX', 'assetClass': 'STOCKS',
+                           'marketStatus': 'Closed',
+                           'primaryData': {'lastSalePrice': '$123.62',
+                                           'netChange': '-$12.30',
+                                           'percentageChange': '-9.05%',
+                                           'lastTradeTimestamp': 'Nov 05, 2026 04:00 PM ET'}}}
+        chart = yahoo_chart(pre_price=129.46, symbol='SPCX')
+        urls = []
+        def opener(req, timeout):
+            url = req.full_url
+            urls.append(url)
+            if 'api.nasdaq.com' in url:
+                return _Response(nasdaq)
+            if 'stock.naver.com' in url:
+                return _Response({'datas': []})
+            if 'interval=1m' in url:
+                return _Response(chart)
+            raise HTTPError(url, 403, 'Blocked regular chart only', {}, None)
+        quote = fetch_quote(spcx, opener=opener, now=now)
+        self.assertEqual(quote.source, '나스닥 웹')
+        self.assertEqual(quote.price, 123.62)
+        self.assertEqual([entry.session for entry in quote.extended], ['프리'])
+        self.assertAlmostEqual(quote.extended[0].price, 129.46)
+        self.assertIn('스페이스X $129.46', compact_quote_line(quote))
+        self.assertIn(' P', compact_quote_line(quote))
+        self.assertTrue(any('interval=1m' in url for url in urls))
+        self.assertTrue(any('reutersCodes=SPCX.O' in url for url in urls))
+
+    def test_eli_lilly_prefers_nyse_verified_trade_and_does_not_fake_missing(self):
+        lly = Stock('일라이릴리', 'LLY', 'USD', '미국', 'America/New_York')
+        now = datetime(2026, 11, 6, 8, 19, tzinfo=ET)
+        close = datetime(2026, 11, 5, 16, 0, tzinfo=ET)
+        regular = Quote(lly, 1364.73, 1417.99, -3.76, close, now)
+        urls = []
+        payload = {'datas': [{'reutersCode':'LLY.N','marketSessionType':'preMarket',
+                              'currencyType': {'name':'USD'},
+                              'closePrice':'1346.00',
+                              'localTradedAt':'2026-11-06T06:30:00-05:00'}]}
+        def opener(req, timeout):
+            urls.append(req.full_url)
+            return _Response(payload)
+        found = fetch_naver_extended(lly, regular, opener=opener, now=now,
+                                     timeout=1.8, max_bytes=180000, user_agent='Test')
+        self.assertEqual(len(urls), 1)
+        self.assertIn('reutersCodes=LLY.N', urls[0])
+        self.assertAlmostEqual(found[0].percent,(1346 / 1364.73 - 1)*100)
+        from dataclasses import replace
+        self.assertIn('일라이릴리 $1,346', compact_quote_line(replace(regular,extended=found)))
+        invalid = {'datas': [{'reutersCode':'LLY.N','marketSessionType':'preMarket',
+                              'closePrice':'1346.00',
+                              'localTradedAt':'2026-11-05T06:30:00-05:00'}]}
+        self.assertFalse(parse_naver_extended(lly,invalid,regular,now=now))
 
     def test_naver_domestic_after_price_never_assumed_regular_close(self):
         korean_now = datetime(2026, 11, 6, 17, 28, tzinfo=timezone(timedelta(hours=9)))
