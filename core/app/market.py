@@ -1318,6 +1318,12 @@ def _display_session(item: Quote) -> tuple[float, float | None, str]:
             if on_session_day and (expected == aft.session or market_in_session):
                 label = '애프터' if aft.session == '장후' else '프리'
                 return aft.price, _domestic_session_percent(item), label
+            # 이전 거래일 통합 응답 closePrice가 여전히 장외 가격인 경우,
+            # 그 값을 오늘 정규장 시세인 것처럼 보여주지 않는다.
+            if expected and not on_session_day:
+                if meta.regular_price is not None:
+                    return meta.regular_price, meta.regular_percent, '정규'
+                return aft.price, None, '이전 장외'
     if item.stock.market == '미국' and item.extended:
         from .extended_sessions import session_of
         # 공급자의 검증된 장외체결 중 현재 현지 세션을 우선.
