@@ -12,6 +12,9 @@
  * 10. 공유 Activity는 Android의 백그라운드 실행 제한으로 열리지 않을 수 있으며, 그 경우 기존 RemoteInput 텍스트 답장은 유지된다.
  * 11. 이 모듈은 실기기 카카오톡 버전별 확인을 위한 fail-closed 실험판으로 정상 수신 보장은 하지 않는다.
  * 12. 공유 Activity 실행 요청 전의 과거 카카오톡 UI 이벤트는 무시해 다른 대화방의 기존 보내기 버튼을 누르지 않는다.
+ * 13. v0.4.17은 사진 확인 화면에서 방 이름이 숨겨진 경우에도 앞 단계의 정확한 방 선택을 기억하고 이미지 미리보기를 검증한다.
+ * 14. 350ms 이상 지난 최종 화면에서 유일한 보내기 버튼만 찾아 누르며, 미확인/중복 버튼/잠금 상태에서는 중단한다.
+ * 15. 카카오 UI 변경 진단은 화면 내용·채팅 문구 없이 단계/버튼 개수/사진 미리보기 유무만 주기적으로 기록한다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,6 +26,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -46,7 +50,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         val room: String,
         val startedMs: Long,
         @Volatile var shareLaunched: Boolean = false,
-        var stage: ImageUiStage = ImageUiStage.PICK_ROOM
+        var stage: ImageUiStage = ImageUiStage.PICK_ROOM,
+        var selectedRoomAtMs: Long = 0L,
+        var lastDiagnosticAtMs: Long = 0L
     )
 
     private val handler = Handler(Looper.getMainLooper())
@@ -66,8 +72,12 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val job = activeJob ?: return
-        if (!job.shareLaunched) return
-        if (event?.packageName?.toString() != KAKAO_PACKAGE) return
+        if (!job.shareLaunched || event?.packageName?.toString() != KAKAO_PACKAGE) return
+        inspectCurrentWindow(job)
+    }
+
+    private fun inspectCurrentWindow(job: ImageJob) {
+        if (activeJob !== job || !job.shareLaunched) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) || !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
@@ -99,29 +109,56 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             (node.text?.toString()?.trim() == job.room ||
              node.contentDescription?.toString()?.trim() == job.room) &&
                 clickableParent(node) != null && node.isVisibleToUser
-        }
+        }.mapNotNull { clickableParent(it) }.distinct()
+        // 팝업의 일반 '확인'은 전송 버튼으로 인정하지 않는다.
         val sendCandidates = nodes.filter { node ->
-            (node.text?.toString()?.trim() in setOf("보내기", "전송", "확인") ||
-             node.contentDescription?.toString()?.trim() in setOf("보내기", "전송", "확인")) &&
-                clickableParent(node) != null && node.isVisibleToUser
+            isExplicitSendControl(node) && node.isVisibleToUser
+        }.mapNotNull { clickableParent(it) }.distinct()
+        val density = resources.displayMetrics.density
+        val imagePreview = nodes.any { node ->
+            if (!node.className.toString().endsWith("ImageView")) false else {
+                val bounds = Rect()
+                node.getBoundsInScreen(bounds)
+                bounds.width() >= 160f * density && bounds.height() >= 95f * density
+            }
         }
+        val elapsedSinceSelection = SystemClock.elapsedRealtime() - job.selectedRoomAtMs
+        val readyAfterRoomSelection = job.selectedRoomAtMs > 0L && elapsedSinceSelection >= 350L
         val decision = ImageUiPolicy.action(
-            job.stage, job.room, ImageUiSnapshot(labeled, roomCandidates.size, sendCandidates.size)
+            job.stage, job.room,
+            ImageUiSnapshot(labeled, roomCandidates.size, sendCandidates.size,
+                selectedRoomVerified = job.selectedRoomAtMs > 0L,
+                afterRoomClick = readyAfterRoomSelection,
+                largeImagePreviewVisible = imagePreview,
+                explicitSendControlVisible = nodes.any { isExplicitSendControl(it) })
         )
+        if (decision == ImageUiAction.WAIT && job.stage == ImageUiStage.CONFIRM_IMAGE &&
+            SystemClock.elapsedRealtime() - job.lastDiagnosticAtMs >= 2000L) {
+            job.lastDiagnosticAtMs = SystemClock.elapsedRealtime()
+            logger.log("INFO", "IMAGE_UI_CONFIRM_WAIT",
+                "recipientOnScreen=${labeled.count { it == job.room }} mediaPreview=$imagePreview sendButtons=${sendCandidates.size} roomSelectionReady=$readyAfterRoomSelection")
+        }
         when (decision) {
             ImageUiAction.WAIT -> return
             ImageUiAction.CLICK_ROOM -> {
                 if (roomCandidates.size == 1 &&
-                    clickableParent(roomCandidates[0])?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) {
+                    roomCandidates[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                     job.stage = ImageUiStage.CONFIRM_IMAGE
+                    job.selectedRoomAtMs = SystemClock.elapsedRealtime()
                     logger.log("INFO", "IMAGE_UI_ROOM_SELECTED", "검증된 동일 이름 채팅방 항목 선택 요청")
+                    // 이벤트를 생략하는 카카오 UI에서도 후속 화면을 반복 확인한다.
+                    for (delay in longArrayOf(550L, 1150L, 2100L, 3500L, 5500L)) {
+                        handler.postDelayed({
+                            if (activeJob === job) inspectCurrentWindow(job)
+                        }, delay)
+                    }
                 } else {
                     finish("IMAGE_UI_ABORTED", "대상 방 항목을 클릭하지 못함", true)
                 }
             }
             ImageUiAction.CLICK_SEND -> {
                 if (sendCandidates.size == 1 &&
-                    clickableParent(sendCandidates[0])?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) {
+                    sendCandidates[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                     finish("IMAGE_UI_SEND_REQUESTED",
                         "사진 보내기 UI 버튼 클릭 요청 성공(실제 카카오톡 수신 확인 불가)", false)
                 } else {
@@ -131,14 +168,26 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun isExplicitSendControl(node: AccessibilityNodeInfo): Boolean {
+        val labels = listOfNotNull(node.text?.toString()?.trim(), node.contentDescription?.toString()?.trim())
+        val textMatches = labels.any {
+            it in setOf("보내기", "전송", "전송하기", "사진 보내기", "사진 전송",
+                "이미지 보내기", "Send", "Send photo")
+        }
+        val resourceName = node.viewIdResourceName?.substringAfterLast('/')?.lowercase().orEmpty()
+        val idMatches = resourceName in setOf("btn_send", "button_send", "send_button",
+            "action_send", "share_send", "send")
+        return textMatches || idMatches
+    }
+
     private fun collectNodes(node: AccessibilityNodeInfo, results: MutableList<AccessibilityNodeInfo>, depth: Int) {
-        if (depth > 20 || results.size >= 250) return
+        if (depth > 20 || results.size >= 400) return
         if (!node.isVisibleToUser) return
         results.add(node)
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectNodes(child, results, depth + 1)
-            if (results.size >= 250) return
+            if (results.size >= 400) return
         }
     }
 
