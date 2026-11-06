@@ -46,6 +46,7 @@
 60. 화면 이력은 채팅방/발신자별로만 최대 8단계·5분 TTL까지 메모리에 저장하고 메뉴 원문/시세/인증키/DB/로그는 새로 저장하지 않는다.
 61. 기존 1~10 번호·주 2/7·9 상세·5분 만료·세션 격리·인증·중복방지·운영 로그·배터리 표기는 그대로 유지한다.
 62. 연속 번호 경로 탐색에서도 중간 시세 HTTP 조회 없이 직전 메뉴 상태를 이어받아 0으로 한 단계씩 복귀한다.
+63. 종목 분석 등 메뉴에서 선택한 읽기 전용 결과 화면도 가격/본문을 세션에 저장하지 않고 직전 메뉴로 돌아갈 수 있는 0번 전용 상태만 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -439,6 +440,16 @@ class StockSelectionMenus:
         quote_origin = ('quotes:memory7:' + memory7_view if memory7_view
                         else 'quotes:group:' + group_name if group_name else 'quotes')
         self._save(key, choices, back=back, origin=quote_origin, previous=previous)
+
+    def open_readonly_result(self, room: str, sender: str, *,
+                             previous: 'MenuState | None') -> bool:
+        """종목 분석 등 읽기 전용 결과도 0으로 호출 직전 메뉴에 복귀하도록 짧은 상태만 저장."""
+        if previous is None or previous.expire_at <= self._clock():
+            return False
+        key = self._key(room, sender)
+        self._save(key, (), back=previous.back, origin='readonly-result',
+                   previous=previous)
+        return True
 
     def open_groups(self, db: sqlite3.Connection, room: str, sender: str, *, previous: 'MenuState | None' = None) -> None:
         """관심그룹 목록에 표시된 번호를 동일 순서의 시세 조회 명령으로 연결한다."""
