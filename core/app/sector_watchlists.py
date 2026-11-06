@@ -112,12 +112,9 @@ def sector_argument(key: str, page: int, detailed: bool) -> str:
 
 def sector_report(key: str, page: int = 1, *, detailed: bool = False,
                   fetcher: Callable[[Stock], object] | None = None) -> str:
-    """해당 페이지의 1~10종목만 실행 시 조회; 사용자 기존 시세 렌더러 재사용."""
+    """고정 섹터의 전체 5~19종목을 한 화면에 조회; 기존 공통 시세 렌더러를 재사용."""
     sector = get_sector(key)
     subset = get_page(key, page)
-    pages = page_count(key)
-    start = (page - 1) * PAGE_SIZE + 1
-    stop = start + len(subset) - 1
     # 모든 섹터를 1쪽에 표시한다. 원본 그룹 조회 병렬성/가격 검증은 재사용.
     label = sector.title
     report = group_report(label, subset, fetcher=fetcher, detailed=detailed)
