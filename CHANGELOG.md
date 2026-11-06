@@ -1,3 +1,10 @@
+## 2026-11-06 — 실거래 인증키 비공개 등록 도구 (feature/real-estate-transactions-20261106)
+
+- S20+ `core/.env`에 기존 키·AI 환경설정·주석을 보존하면서 `MOLIT_API_KEY`만 안전하게 추가/갱신하는 `core/scripts/configure-real-estate-key.py` 추가.
+- Windows PowerShell `scripts/configure-real-estate-key.ps1`: 기존 `angaebot` SSH 접속, 숨김 입력, SSH 표준입력으로 비밀값 전달, 원자적 `.env` 교체, Core 서비스 재시작. GitHub 코드·CLI 인수·출력에 발급 키 미포함.
+- 가짜 키를 이용한 `.env` 내용/권한/줄바꿈/오류 회귀 테스트를 추가하고 PowerShell 5.1/7 양쪽 문법 검사를 CI에 연결.
+- 실제 발급 키는 공개 저장소에 절대로 올리지 않으며 이 커밋은 설정 도구만 제공한다. S20+의 실제 인증키 저장과 API 승인 확인은 실기기에서 실행 후 검증해야 한다.
+
 ## 2026-11-06 — 국토교통부 아파트 실거래가 조회 (feature/real-estate-transactions-20261106)
 
 - 기존 **부동산 메모 메뉴 1·2번을 유지**하면서 3 매매 실거래, 4 전세 실거래, 5 월세 실거래, 6 지역 설정 안내를 추가. 홈의 기존 1~10 순서·금/개/주/날 단축 메뉴도 변경하지 않음.
