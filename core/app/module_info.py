@@ -13,6 +13,8 @@
 11. v0.7.0 개인 기록 CRUD·일정·검색·상세보기는 core.personal_records로 식별하고 기존 메뉴·주식·AI 표시를 보존한다.
 12. 날씨 조회/지역 설정 결과는 core.weather, 메뉴 진입은 core.menu로 구분하며 중복 API 응답에도 같은 모듈을 표시한다.
 13. 부동산 매매·전월세 공식 실거래 조회 및 지역 설정은 core.real_estate로 식별하고 개인메모는 core.records를 보존한다.
+14. v0.7.4 부동산 1/2번의 단지별 메모 검색 결과가 없을 때도 core.records로 식별한다.
+15. 3/4번 개발 예정 화면은 실제 데이터가 없어 core.menu로 분류하고 기존 모듈 푸터 규칙을 유지한다.
 """
 from __future__ import annotations
 
@@ -63,7 +65,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         if arg in {'반도체', '미국시총10'}:
             return 'core.market' if command == '주식' else 'core.watchlists'
         # 메뉴 선택은 명령 인수가 비어 있어도 기록 결과 본문이 오면 실제 모듈로 구분한다.
-        if reply.startswith(('🗂 ', '📒 메모 #', '📅 일정 #', '📭 저장된 기록')):
+        if reply.startswith(('🗂 ', '📒 메모 #', '📅 일정 #', '📭 저장된 기록',
+                             '📭 청구e편한세상 관련 메모', '📭 신당동 아파트 관련 메모')):
             return 'core.records'
         if not arg or arg == '메뉴':
             return 'core.menu'
