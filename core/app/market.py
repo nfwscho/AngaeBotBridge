@@ -86,6 +86,8 @@
 78. 미국 정규장 도중에는 이전 프리 체결가가 존재해도 현재 대표가격을 프리로 오표시하지 않는다.
 79. 종목별 지연 거래일 꼬리표는 최신 검증 프리/애프터 시각을 기준으로 부착해 장외 당일가를 전일가로 잘못 표시하지 않는다.
 80. 메모리7/관심그룹 간략 시세에서 상승 🔺+/하락 ▽-/보합 ➖의 화살표 뒤 공백 한 글자를 제거하여 좁은 카카오톡 말풍선의 P/A 줄바꿈을 방지하고 상세 시세 형식은 유지한다.
+81. 메모리7 기본 간략 시세는 99번으로 상세보기로 이동한다. 99는 종목 번호 1~10 및 기존 0 이전/00 홈과 절대 충돌하지 않는다.
+82. 관심그룹도 공통 한 줄 시각 요약을 사용하고 상세 화면에만 시세 출처와 세션별 원문을 제공한다.
 """
 from __future__ import annotations
 
@@ -1503,7 +1505,7 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
                       if not detailed else f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.'))
     lines.append('※ 무료·지연 가능·실시간 아님' if detailed else '※ 무료·지연·실시간 아님')
     lines.append('※ 5분 내 1~8: 종목 분석' if detailed else '※ 5분 내 1~8: 분석')
-    lines.append('9. ↩ 간략보기' if detailed else '9. 🔎 상세보기')
+    lines.append('99. ↩ 간략보기' if detailed else '99. 🔎 상세보기')
     result = '\n'.join(lines)
     if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
