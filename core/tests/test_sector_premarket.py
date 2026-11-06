@@ -14,6 +14,7 @@
 12. NYSE ORCL/ANET/DELL 공개 폴링 datas=[]에서 기본 API bare 코드로 실거래가를 복구하고 1차 실패/2차 성공·P 표시를 검증한다.
 13. NYSE 3종목 네이버·Yahoo 장외가 미제공이고 Nasdaq primaryData가 불완전해도 independent secondaryData의 실제 당일 프리 체결가와 USD를 검증해 P를 보완한다.
 14. Nasdaq secondaryData의 STOCKS 자산유형·실제 종목코드·USD·당일 프리 시간 검증을 유지하며 외화/다른 티커/펀드/이전 거래일은 보수적으로 거절한다.
+15. 혼합 반도체주 19종목은 기존 37개 미국 섹터 목록과 겹치므로 해당 미국 전용 공급자·티커 고유성 검사에서는 분리한다. 새 혼합 목록의 KR/JP는 별도 환율·현지시장 테스트에서 검증한다.
 """
 from __future__ import annotations
 
@@ -75,7 +76,7 @@ def _polling(stock, *, ric=None, price=104.25, traded=PRE_TRADE, explicit=False)
 
 class VerifiedSectorPremarketTests(unittest.TestCase):
     def test_37_symbols_have_exchange_correct_reuters_code(self):
-        stocks = [stock for sector in SECTORS for stock in sector.stocks]
+        stocks = [stock for sector in SECTORS if sector.key != 'chip' for stock in sector.stocks]
         self.assertEqual(len(stocks), 37)
         self.assertEqual(len(set(stock.ticker for stock in stocks)),
                          len(stocks))
@@ -87,7 +88,7 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
                                            'America/New_York')), '')
 
     def test_all_37_premarket_prices_render_p_and_correct_percent(self):
-        stocks = [stock for sector in SECTORS for stock in sector.stocks]
+        stocks = [stock for sector in SECTORS if sector.key != 'chip' for stock in sector.stocks]
         for stock in stocks:
             with self.subTest(ticker=stock.ticker):
                 calls = []
@@ -115,6 +116,8 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
 
     def test_nyse_and_nasdaq_wrong_ric_rejected(self):
         for sector in SECTORS:
+            if sector.key == 'chip':
+                continue  # 혼합 국가 고정목록은 미국 전용 Naver RIC 검사 대상이 아님
             for stock in sector.stocks:
                 wrong = stock.ticker + ('.O' if stock.ticker in EXPECTED_NYSE else '.N')
                 with self.subTest(ticker=stock.ticker):
