@@ -15,6 +15,7 @@
 13. 메모리7 간략 보기와 상세 보기 사이에 원본 정규·프리·애프터 데이터, 거래일과 출처가 누락되지 않음을 검증한다.
 14. 모바일 8개 종목 수 검증의 괄호 문법을 수정하고 수량·430자·15줄 검사를 모두 유지한다.
 15. 상승·하락 화살표 뒤의 공백을 제거한 간략 시세 문자열을 비교하고 P/A 한 글자 표기를 유지한다.
+16. 금요일 한국 장후 시세는 토요일 00:14에도 마지막 거래 A와 확정 KRX 종가 대비 양의 %를 유지하고, 월요일 개장 후 오래된 A는 숨긴다.
 """
 from __future__ import annotations
 
@@ -105,7 +106,10 @@ class CompactSessionQuoteTests(unittest.TestCase):
 
     def test_prior_day_korean_after_does_not_override_current_regular_quote(self):
         old = korean_after(WATCHLIST[0], 188600, 193800, 201500)
-        stale = replace(old, fetched_at=old.fetched_at + timedelta(days=1))
+        # 금요일 장후는 다음 월요일 오전 장 시작(08:00)까지만 최신 거래가.
+        weekend = replace(old, fetched_at=datetime(2026, 11, 7, 0, 14, tzinfo=KST))
+        self.assertEqual(compact_quote_line(weekend), '삼성전자 19.4만 🔺+2.76% A')
+        stale = replace(old, fetched_at=datetime(2026, 11, 9, 9, 0, tzinfo=KST))
         self.assertNotIn(' A', compact_quote_line(stale))
         self.assertIn('18.9만', compact_quote_line(stale))
         self.assertNotIn('19.4만', compact_quote_line(stale))
