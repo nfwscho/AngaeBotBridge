@@ -88,6 +88,10 @@
 80. 메모리7/관심그룹 간략 시세에서 상승 🔺+/하락 ▽-/보합 ➖의 화살표 뒤 공백 한 글자를 제거하여 좁은 카카오톡 말풍선의 P/A 줄바꿈을 방지하고 상세 시세 형식은 유지한다.
 81. 메모리7 기본 간략 시세는 99번으로 상세보기로 이동한다. 99는 종목 번호 1~10 및 기존 0 이전/00 홈과 절대 충돌하지 않는다.
 82. 관심그룹도 공통 한 줄 시각 요약을 사용하고 상세 화면에만 시세 출처와 세션별 원문을 제공한다.
+83. 미국 SPCX(스페이스X) 신규 상장 티커는 검증된 나스닥 시세 공급자에 등록하고 NYSE LLY는 해외 프리 공급자의 LLY.N을 이용한다.
+84. 정규장 데이터가 Yahoo 외 Nasdaq/일봉 보조 공급자로 복구된 종목도 프리·애프터 거래시간에는 Yahoo 검증 분봉 조회를 추가 시도한다.
+85. 어떤 공급자도 검증된 장외 체결을 제공하지 않으면 P/A 및 시간외 가격을 임의 생성하지 않고 원래 정규장 가격과 오류 로그를 유지한다.
+86. 각 공급자별 조회 시간·응답 크기·인증·기존 DB/메뉴/로그·5분 그룹선택·Android Bridge 출력은 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -137,7 +141,7 @@ _NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stock
 _NASDAQ_DAILY = 'https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&limit=10'
 _NAVER_US_DAILY = 'https://api.stock.naver.com/chart/foreign/item/{reuters}?periodType=dayCandle'
 # 개별 티커의 상장 거래소를 추측하지 않는다. 확인 가능한 나스닥 상장 종목만 해외 차트에 연결한다.
-_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
+_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX','SPCX'})
 _US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
 _MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
@@ -1061,7 +1065,9 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
                             _MARKET_LOG.info('US_EXTENDED_NAVER_FAILED ticker=%s reason=%s',
                                              stock.ticker, str(e)[:160])
-                    if desired and not any(p.session == desired for p in extra) and supplier == 'Yahoo':
+                    if desired and not any(p.session == desired for p in extra):
+                        # 정규장 소스가 Yahoo 일봉/나스닥으로 폴백했더라도 별도
+                        # Yahoo 장외 분봉의 응답은 살아 있을 수 있으므로 빠뜨리지 않는다.
                         try:
                             from_yahoo = fetch_yahoo(stock, quote, opener=opener, now=now_us,
                                                      timeout=min(FETCH_TIMEOUT, 2.5), max_bytes=MAX_RESPONSE_BYTES * 4,
