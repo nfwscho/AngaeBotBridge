@@ -176,7 +176,8 @@ class NaverRealtimeTests(unittest.TestCase):
         report=memory7_report(fetcher=quotes,use_cache=False)
         self.assertIn('1. 삼성전자',report)
         self.assertIn('2. 하이닉스 : 조회 불가',report)
-        self.assertIn('📡 한국',report)
+        self.assertIn('📡 11/05 KR09:15',report)
+        self.assertIn('9. 🔎 상세보기',report)
         self.assertNotIn('   └ KRX',report)
         self.assertIn('5분 내 1~8',report)
         def group_quotes(stock): return q if stock.ticker == q.stock.ticker else None
