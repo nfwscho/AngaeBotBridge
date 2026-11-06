@@ -176,7 +176,7 @@ class WatchlistUnitTests(unittest.TestCase):
         self.assertIn('3. 키오시아 : 조회 불가',report)
         self.assertIn('5분 내 1~3',report)
         self.assertIn('📡 11/04 KR', report)
-        self.assertIn('999. 🔎 상세보기', report)
+        self.assertIn('99. 🔎 상세보기', report)
         self.assertNotIn('시세 출처 · 기준시각:', report)
         self.assertTrue(report.index('삼성전자') < report.index('마이크론') < report.index('키오시아'))
         with self.assertRaisesRegex(StockQuoteError, '모든 시세'):
@@ -194,7 +194,7 @@ class WatchlistUnitTests(unittest.TestCase):
         stocks = load_group(self.db,self.room,self.sender,'반도체')
         compact = group_report('반도체',stocks,fetcher=fake)
         detail = group_report('반도체',stocks,fetcher=fake,detailed=True)
-        self.assertIn('999. 🔎 상세보기',compact)
+        self.assertIn('99. 🔎 상세보기',compact)
         self.assertIn('99. ↩ 간략보기',detail)
         self.assertIn('시세 출처 · 기준시각:', detail)
         self.assertIn('1. 삼성전자 :', detail)
