@@ -49,6 +49,10 @@
 47. 부동산 메모 1~2번을 유지하고 3 매매·4 전세·5 월세 실거래가 조회, 6 지역 안내를 추가한다.
 48. 실거래 API 호출은 메뉴 처리기가 직접 수행하지 않으며 main.py에서 DB 쓰기 잠금 외부로 분리한다.
 49. 기존 홈 번호/인증/메뉴 점프/방·발신자 격리/로그/SQLite 메모 동작과 배터리 정보를 보존한다.
+50. 부동산 홈 메뉴를 10개로 재구성: 청구e편한세상/신당동 관련, 서울 매매 추이, 뉴스, 매매/전세/월세, 메모 목록/안내, 지역 설정.
+51. 1~2번은 방·발신자 스코프의 기존 부동산 개인 메모를 아파트 키워드로 필터링해 보여주며 DB를 수정하지 않는다.
+52. 공식 서울시 전체 추이 및 뉴스 연동이 미구현인 3~4번은 추정치·가공 기사 없이 개발 예정 화면을 표시한다.
+53. 기존 실거래 API·부동산 개인 기록·지역 지정·5분 선택·0/00 복귀·설정 전체 트리·모듈 정보/로그를 유지한다.
 """
 from __future__ import annotations
 
@@ -179,10 +183,15 @@ class StockSelectionMenus:
         )
         if sector == '부동산':
             return (
-                choices[0], choices[1],
+                MenuChoice('청구e편한세상 관련', page='records:topic:청구e편한세상'),
+                MenuChoice('신당동 아파트 관련', page='records:topic:신당동'),
+                MenuChoice('서울시 아파트 매매 추이', page='records:planned:서울시 아파트 매매 추이'),
+                MenuChoice('부동산 관련 뉴스', page='records:planned:부동산 관련 뉴스'),
                 MenuChoice('아파트 매매 실거래가', command_argument='실거래조회 매매'),
                 MenuChoice('아파트 전세 실거래가', command_argument='실거래조회 전세'),
                 MenuChoice('아파트 월세 실거래가', command_argument='실거래조회 월세'),
+                choices[0],
+                choices[1],
                 MenuChoice('조회 지역 설정 안내', command_argument='실거래설정 안내'),
             )
         if sector == '개인':
@@ -223,7 +232,7 @@ class StockSelectionMenus:
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 2 메모리7 시세 · 주 분 삼성전자 분석',
-            '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
+            '앙 2/3/9 메모·일정 · 부 5~7 실거래 · 날 지역 서울',
             '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
 
@@ -241,7 +250,7 @@ class StockSelectionMenus:
                 path = prefix + (index,)
                 number = '-'.join(map(str, path))
                 detail = ''
-                if choice.page.startswith('pending:'):
+                if choice.page.startswith(('pending:', 'records:planned:')):
                     detail = ' [개발 예정]'
                 elif choice.page == 'recent':
                     detail = ' [본인 최근 조회 목록]'
@@ -264,7 +273,7 @@ class StockSelectionMenus:
         walk(cls._home_choices())
         lines.extend([
             '',
-            '※ 빠른 이동: 앙 2 1 / 앙 2 3 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
+            '※ 빠른 이동: 앙 2 1 / 앙 2 5 / 앙 3 1 / 앙 9 2 / 앙 10 7 / 설 7',
             '※ 단축: 앙 홈 · 주 주식 · 부 부동산 · 금 금융·투자 · 개 개인 · 여 여행 · 민 배드민턴 · 요 요리 · 종 종친 · 날 날씨 · 설 설정',
             '※ 최근 조회·관심그룹·종목 번호는 실행 시 표시되는 실제 목록을 따릅니다.',
             '※ 읽기 전용 · 0 이전 · 00 홈 · 메뉴 선택 5분 유효',
@@ -465,6 +474,28 @@ class StockSelectionMenus:
             return self.open_settings(room, sender)
         if choice.page.startswith('records:root:'):
             return self.open_record_sector(room, sender, choice.page.split(':', 2)[2])
+        if choice.page.startswith('records:topic:'):
+            # 명시적으로 저장된 '부동산' 메모만 제목·본문 키워드로 검색한다.
+            # 다른 방이나 사람의 개인 정보와 실거래 API 데이터는 결합하지 않는다.
+            topic = choice.page.split(':', 2)[2]
+            heading = '청구e편한세상 관련 메모' if topic == '청구e편한세상' else '신당동 아파트 관련 메모'
+            rows = list_records(db, room, sender, category='부동산', kind='note', query=topic)
+            if not rows:
+                parent = self.open_record_sector(room, sender, '부동산')
+                return MenuAnswer(f'📭 {heading}가 없습니다.\n'
+                                  f'※ 등록: 부동산 추가 {topic} | 메모 내용\n\n{parent.reply}',
+                                  menu_active=True)
+            return self.open_record_results(room, sender, rows, sector='부동산', heading=heading)
+        if choice.page.startswith('records:planned:'):
+            title = choice.page.split(':', 2)[2]
+            parent = self.open_record_sector(room, sender, '부동산')
+            if title == '서울시 아파트 매매 추이':
+                message = ('서울시 전체의 월별 아파트 매매 거래량·가격 집계 기능은 개발 예정입니다.\n'
+                           '※ 현재는 5번에서 구별 공식 신고 실거래가를 조회할 수 있습니다.')
+            else:
+                message = ('부동산 뉴스 출처 검증 및 기사 조회 기능은 개발 예정입니다.\n'
+                           '※ 확인되지 않은 기사 제목·URL은 제공하지 않습니다.')
+            return MenuAnswer(f'🛠 {title}\n{message}\n\n{parent.reply}', menu_active=True)
         if choice.page.startswith('records:list:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
