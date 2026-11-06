@@ -20,6 +20,7 @@
 34. 주식 메뉴 1~8 새 순서와 반도체주 19개/99/19번째 ASML 및 기존 미국시총10·메모리7 직접 명령을 검증한다.
 35. 레거시 메모리7 직접 호출은 메뉴 2를 점유하지 않고 기존 8종목 선택·99 상세·0 단계별 뒤로가기를 유지한다.
 36. 반도체 사용자그룹의 경로는 새 7번 관심목록→2번 등록그룹을 통해 원래 99 상세로 진입하며 사용자별 권한을 유지한다.
+37. 새 2번 미국 시총10 메뉴는 개인 SQLite 그룹 생성 여부와 무관한 고정 us10 섹터 요청으로 실행하고 동일한 99/0·종목 분석 상태를 유지한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -75,7 +76,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
         self.assertIn('1. 반도체주 시세', opened.reply)
         self.assertIn('8. 종목별 분석', opened.reply)
         result = self.menus.choose(self.db, '방','나','2')
-        self.assertEqual(result.execute_argument, '미국시총10')
+        self.assertEqual(result.execute_argument, '섹터시세 us10 1 간략')
         self.assertFalse(result.menu_active)
         with self.assertRaisesRegex(StockQuoteError, '5분'):
             self.menus.choose(self.db,'방','나','2')
