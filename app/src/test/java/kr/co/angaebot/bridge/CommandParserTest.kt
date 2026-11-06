@@ -18,6 +18,7 @@
  * v0.4.12은 신규 부·금·개 및 홈 10/9 경로와 구형 투·메 호환을 회귀 검증한다.
  * 신규 날씨 단축 조회/지역 설정은 정확한 명령으로만 인식하고 기존 숫자 게이트·일상문장 차단을 보존한다.
  * 부 시세/매매/전세/월세/지역 직접 조회 단축어를 검증하고 기존 부 메모·번호 점프 및 8줄 도움말을 보존한다.
+ * 공통 시세표 99 상세보기 숫자 경로는 1~10번 종목 분석과 충돌하지 않고 기존 0/00 및 메뉴 인증 흐름을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -118,6 +119,9 @@ class CommandParserTest {
     @Test fun menuJumpChainedNumbers() {
         assertEquals(ParseResult.Command("메뉴", "경로 주식 2"), CommandParser.parse("주 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 주식 2 2"), CommandParser.parse("주 2 2", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 2 99"), CommandParser.parse("주 2 99", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 주식 3 99"), CommandParser.parse("주 3 99", "앙개야"))
+        assertEquals(ParseResult.Command("메뉴", "경로 홈 1 3 99"), CommandParser.parse("앙 1 3 99", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 주식 6 2"), CommandParser.parse("주   6  2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2 2"), CommandParser.parse("앙 1 2 2", "앙개야"))
         assertEquals(ParseResult.Command("메뉴", "경로 홈 1 2"), CommandParser.parse("앙개야 메뉴 1 2", "앙개야"))
