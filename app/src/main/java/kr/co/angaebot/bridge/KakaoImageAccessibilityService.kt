@@ -2,7 +2,8 @@
  * 앙개봇 S20+ 카카오톡 실제 사진 자동전송 실험 서비스 — 전체 기능/보안/로그
  * 1. 기존 카카오톡 알림 텍스트 답장/허용 방·발신자 필터/Python Core/배터리/SQLite 로그/관리 UI를 변경하지 않는다.
  * 2. 사용자가 Android 접근성 권한과 별도 이미지 자동전송 스위치를 모두 켠 경우에만 이미지 전송 시험을 수락한다.
- * 3. 잠금 화면에서는 작업을 시작하지 않고, 사용자 허용 채팅방 이름이 명확하지 않아도 전송하지 않는다.
+ * 3. 잠금 화면에서 인증이 필요한 기기는 거절하고, 인증 불필요한 잠금/꺼진 화면은 공식 Android 잠금 해제 API로 깨운다.
+ * 3-1. PIN·패턴·비밀번호 및 사용자 인증 정보는 저장·입력·우회하지 않고 안전하게 거부한다.
  * 4. Android ACTION_SEND와 앱 자체 ContentProvider의 테스트 PNG를 사용하며 다른 파일·개인 사진은 접근하지 않는다.
  * 5. 카카오톡 화면에서 실제 방 이름이 단일·정확히 일치하고 공유 UI 단서가 있을 때만 방을 선택한다.
  * 6. 이후 화면에 같은 방 이름·사진 첨부 단서·단일 '보내기' 버튼이 보일 때에만 전송 버튼을 누른다.
@@ -15,6 +16,8 @@
  * 13. v0.4.17은 사진 확인 화면에서 방 이름이 숨겨진 경우에도 앞 단계의 정확한 방 선택을 기억하고 이미지 미리보기를 검증한다.
  * 14. 350ms 이상 지난 최종 화면에서 유일한 보내기 버튼만 찾아 누르며, 미확인/중복 버튼/잠금 상태에서는 중단한다.
  * 15. 카카오 UI 변경 진단은 화면 내용·채팅 문구 없이 단계/버튼 개수/사진 미리보기 유무만 주기적으로 기록한다.
+ * 16. v0.4.18은 Android 공식 화면 깨우기 Activity로 사용자 인증이 불필요한 경우에만 공유를 재개한다.
+ * 17. 일회성 토큰·화면 잠금 재검사·타임아웃·기존 Image_UI 및 IMAGE_WAKE 로그와 접근성 방 검증을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -26,6 +29,8 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.PowerManager
+import java.util.UUID
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -52,7 +57,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         @Volatile var shareLaunched: Boolean = false,
         var stage: ImageUiStage = ImageUiStage.PICK_ROOM,
         var selectedRoomAtMs: Long = 0L,
-        var lastDiagnosticAtMs: Long = 0L
+        var lastDiagnosticAtMs: Long = 0L,
+        val shareIntent: Intent,
+        val wakeToken: String,
+        @Volatile var wakePending: Boolean = false
     )
 
     private val handler = Handler(Looper.getMainLooper())
@@ -207,9 +215,14 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             return ImageAutoStart.Rejected("자동응답 OFF 또는 허용되지 않은 채팅방")
         }
         if (room.isBlank() || room.length > 100) return ImageAutoStart.Rejected("채팅방 식별 불가")
-        val lock = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        if (lock.isKeyguardLocked) return ImageAutoStart.Rejected("화면 잠금 해제 필요")
         if (activeJob != null) return ImageAutoStart.Rejected("이전 이미지 작업 진행 중")
+        val lock = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        val power = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val action = ImageLockPolicy.evaluate(lock.isKeyguardLocked, lock.isDeviceLocked, power.isInteractive)
+        if (action == ImageLockAction.AUTH_REQUIRED) {
+            logger.log("WARN", "IMAGE_WAKE_AUTH_REQUIRED", "S20+에 사용자 인증이 필요한 잠금이 걸림")
+            return ImageAutoStart.Rejected("S20+ 보안 잠금 인증 필요: PIN·패턴·비밀번호는 자동 해제하지 않습니다.")
+        }
         val uri = try {
             ReplyManager.prepareShareTestImage(this)
         } catch (e: Exception) {
@@ -224,28 +237,73 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         }
         return try {
             grantUriPermission(KAKAO_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            val job = ImageJob(room, SystemClock.elapsedRealtime())
+            val job = ImageJob(room, SystemClock.elapsedRealtime(),
+                shareIntent = intent, wakeToken = UUID.randomUUID().toString(),
+                wakePending = action == ImageLockAction.WAKE)
             activeJob = job
-            logger.log("INFO", "IMAGE_UI_QUEUED", "정확한 허용 채팅방 기준 이미지 공유 준비")
-            handler.postDelayed({
-                if (activeJob !== job) return@postDelayed
-                try {
-                    startActivity(intent)
-                    job.shareLaunched = true
-                    logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED",
-                        "Android ACTION_SEND로 카카오톡 사진 공유 화면 열기 요청")
-                } catch (e: Exception) {
-                    finish("IMAGE_UI_ABORTED", "공유 화면 시작 실패: ${e.javaClass.simpleName}", true)
+            logger.log("INFO", "IMAGE_UI_QUEUED", "허용 채팅방 기준 이미지 공유 준비")
+            if (action == ImageLockAction.WAKE) {
+                logger.log("INFO", "IMAGE_WAKE_REQUESTED", "사용자 인증 불필요: Android 공식 화면 깨우기 요청")
+                handler.post {
+                    if (activeJob !== job || !job.wakePending) return@post
+                    try {
+                        startActivity(Intent(this, ImageWakeActivity::class.java).apply {
+                            putExtra(ImageWakeActivity.EXTRA_TOKEN, job.wakeToken)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                        })
+                    } catch (e: Exception) {
+                        finish("IMAGE_WAKE_FAILED", "깨우기 Activity 시작 오류: ${e.javaClass.simpleName}", true)
+                    }
                 }
-            }, 900L)
+            } else {
+                handler.postDelayed({ launchShare(job) }, 900L)
+            }
             handler.postDelayed({
-                if (activeJob === job) finish("IMAGE_UI_TIMEOUT",
-                    "15초 안에 안전하게 확인된 카카오톡 이미지 공유 UI가 나타나지 않음", true)
+                if (activeJob === job) finish("IMAGE_UI_TIMEOUT", "잠금/이미지 화면 확인 시간 초과", true)
             }, EXPIRE_MS + 100L)
             ImageAutoStart.Queued
         } catch (e: Exception) {
             activeJob = null
-            ImageAutoStart.Rejected("이미지 공유 요청 실패: ${e.javaClass.simpleName}")
+            ImageAutoStart.Rejected("이미지 공유 시작 오류: ${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun onWakeResult(token: String, success: Boolean, reason: String) {
+        handler.post {
+            val job = activeJob ?: return@post
+            if (job.wakeToken != token || !job.wakePending) return@post
+            job.wakePending = false
+            if (!success) {
+                finish("IMAGE_WAKE_FAILED", reason, true)
+            } else {
+                logger.log("INFO", "IMAGE_WAKE_DISMISSED", "인증 불필요 잠금 해제 확인 후 공유 단계 재개")
+                handler.postDelayed({
+                    if (activeJob === job) launchShare(job)
+                }, 350L)
+            }
+        }
+    }
+
+    /** 재개 직전 허용목록과 잠금 상태를 다시 확인하여 잠긴 화면에는 사진을 전송하지 않는다. */
+    private fun launchShare(job: ImageJob) {
+        if (activeJob !== job || job.shareLaunched || job.wakePending) return
+        val settings = BotConfig(this).load()
+        if (!ImageAutoConfig.enabled(this) || !settings.enabled || !settings.isAllowedRoom(job.room)) {
+            finish("IMAGE_UI_ABORTED", "자동응답/이미지 설정 또는 허용 채팅방 변경", true)
+            return
+        }
+        val lock = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        if (lock.isKeyguardLocked || lock.isDeviceLocked) {
+            finish("IMAGE_WAKE_FAILED", "잠금 미해제 또는 재잠금 감지", true)
+            return
+        }
+        try {
+            startActivity(job.shareIntent)
+            job.shareLaunched = true
+            logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
+        } catch (e: Exception) {
+            finish("IMAGE_UI_ABORTED", "공유 화면 시작 오류: ${e.javaClass.simpleName}", true)
         }
     }
 
@@ -267,10 +325,14 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val KAKAO_PACKAGE = "com.kakao.talk"
-        private const val EXPIRE_MS = 15_000L
+        private const val EXPIRE_MS = 20_000L
         @Volatile private var connected: KakaoImageAccessibilityService? = null
 
         fun isConnected(): Boolean = connected != null
+
+        internal fun wakeResult(token: String, success: Boolean, reason: String) {
+            connected?.onWakeResult(token, success, reason)
+        }
 
         internal fun queueTest(room: String): ImageAutoStart {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
