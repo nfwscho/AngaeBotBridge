@@ -442,26 +442,26 @@ class StockSelectionMenus:
 
     def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *,
                     back: str = 'menu', memory7_view: str = '',
-                    previous: 'MenuState | None' = None, group_name: str = '') -> None:
-        """시세표 번호/종목 분석 5분 보관. 메모리7 전용 9번만 간략↔상세 전환."""
+                    previous: 'MenuState | None' = None, group_name: str = '',
+                    group_view: str = 'compact') -> None:
+        """메모리7/그룹 시세의 1~10 종목 분석 및 별도 99번 상세/간략 전환을 안전하게 보관."""
         key = self._key(room, sender)
         if not stocks or len(stocks) > 10:
             raise StockQuoteError('선택 가능한 시세 종목 수는 1~10개여야 합니다.')
-        if memory7_view not in ('', 'compact', 'detail'):
+        if memory7_view not in ('', 'compact', 'detail') or group_view not in ('compact', 'detail'):
             raise StockQuoteError('지원되지 않는 시세 보기 모드입니다.')
         if memory7_view and (len(stocks) != len(WATCHLIST) or
                              tuple(s.ticker for s in stocks) != tuple(s.ticker for s in WATCHLIST)):
-            raise StockQuoteError('9번 상세 전환은 메모리7 시세에서만 사용할 수 있습니다.')
-        # 별칭이나 표시 이름이 중복돼도 고정된 허용 티커로만 분석한다.
-        # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
+            raise StockQuoteError('99번 메모리7 상세 전환에는 고정된 8종목만 사용할 수 있습니다.')
+        if memory7_view and group_name:
+            raise StockQuoteError('메모리7과 사용자 그룹을 동시에 지정할 수 없습니다.')
+        # 실제 9/10번은 9/10번째 종목 분석으로만 사용한다. 99번은 별도 선택 처리.
+        # 선택지는 고정된 티커만 보관하고 메시지 원문이나 가격은 메모리에 저장하지 않는다.
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
                         for stock in stocks)
-        if memory7_view == 'compact':
-            choices += (MenuChoice('🔎 상세보기', command_argument='메모리7 상세'),)
-        elif memory7_view == 'detail':
-            choices += (MenuChoice('↩ 간략보기', command_argument='메모리7'),)
         quote_origin = ('quotes:memory7:' + memory7_view if memory7_view
-                        else 'quotes:group:' + group_name if group_name else 'quotes')
+                        else 'quotes:group:' + group_name + ':' + group_view if group_name
+                        else 'quotes')
         self._save(key, choices, back=back, origin=quote_origin, previous=previous)
 
     def open_readonly_result(self, room: str, sender: str, *,
@@ -534,7 +534,8 @@ class StockSelectionMenus:
                         return MenuAnswer(execute_argument='메모리7 상세' if mode == 'detail' else '메모리7',
                                           menu_active=True, back=prior.back, restored=True)
                     if prior.origin.startswith('quotes:group:'):
-                        return MenuAnswer(execute_argument=prior.origin.split(':', 2)[2],
+                        name, mode = prior.origin.split(':', 2)[2].rsplit(':', 1)
+                        return MenuAnswer(execute_argument='상세시세 ' + name if mode == 'detail' else name,
                                           menu_active=True, back=prior.back, restored=True)
                     if prior.origin == 'groups':
                         from .watchlists import execute_group_command
@@ -554,6 +555,17 @@ class StockSelectionMenus:
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
                 return self.open(room, sender, back='home')
+            if number == '99':
+                if state.origin.startswith('quotes:memory7:'):
+                    mode = state.origin.rsplit(':', 1)[-1]
+                    argument = '메모리7 상세' if mode == 'compact' else '메모리7'
+                elif state.origin.startswith('quotes:group:'):
+                    name, mode = state.origin.split(':', 2)[2].rsplit(':', 1)
+                    argument = '상세시세 ' + name if mode == 'compact' else name
+                else:
+                    raise StockQuoteError('99번은 시세표에서만 상세/간략 전환할 수 있습니다.')
+                self._states.pop(key, None)
+                return MenuAnswer(execute_argument=argument, back=state.back, previous=state)
             index = int(number) - 1
             if index >= len(state.choices):
                 raise StockQuoteError(f'메뉴에 없는 번호입니다. 1~{len(state.choices)}번 중 선택하세요.')
