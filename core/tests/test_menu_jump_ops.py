@@ -96,6 +96,7 @@ class MenuJumpCoreTests(unittest.TestCase):
         self.assertNotIn("타인방", report["reply"])
         self.assertNotIn("타인", report["reply"])
         self.assertNotIn("경로 주식 6", report["reply"])
+        self.assertIn("설정·운영 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("메인 메뉴", self.post("선택 0").json()["reply"])
 
     def test_settings_subsections_readonly(self):
