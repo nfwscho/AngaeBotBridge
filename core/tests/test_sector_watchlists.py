@@ -10,6 +10,8 @@
 8. 메뉴 경로 주식 7 99 및 주식 8 19의 실제 티커를 검증하고 메뉴 트리·모듈 소스·5분 만료·스코프·인증을 보존한다.
 9. 실제 API 시세/네트워크는 mock fetcher로만 처리하여 외부 시세를 하드코딩하거나 운영 DB/.env/로그를 건드리지 않는다.
 10. 구형 97/98 숫자 경로는 한 페이지 섹터에서 거부하며 19개 전부 실제 티커를 선택할 수 있는지 검증한다.
+11. AI·반도체·데센의 간략 종목 목록 직후 정확히 2줄(📡 시각/99 상세)을 확인하고 별도 지연·분석 문구를 출력하지 않는다.
+12. 조회 실패 원인은 새 줄을 추가하지 않고 시각 줄에 합쳐 기존 오류 건수와 조회 불가 표시를 보존한다.
 """
 from __future__ import annotations
 
@@ -94,6 +96,8 @@ class SectorCatalogTests(unittest.TestCase):
         self.assertNotIn('시세 출처 · 기준시각:',brief)
         self.assertEqual(sum(line.startswith(tuple(str(n)+'. ' for n in range(1,14)))
                              for line in brief.splitlines()),13)
+        self.assertEqual(brief.splitlines()[-2:], [
+            '📡 11/05 US16:00', '99. 🔎 상세보기'])
         detail=sector_report('ai',1,fetcher=fake_quote,detailed=True)
         self.assertIn('1. 엔비디아 :',detail)
         self.assertIn('13. 스페이스X :',detail)
@@ -111,8 +115,25 @@ class SectorCatalogTests(unittest.TestCase):
                 nums=[line for line in brief.splitlines() if
                       line.startswith(tuple(str(n)+'. ' for n in range(1,count+1)))]
                 self.assertEqual(len(nums),count)
-                self.assertIn('📡 11/05 US16:00',brief)
-                self.assertIn(f'1~{count} 분석',brief)
+                self.assertEqual(brief.splitlines()[-2:], [
+                    '📡 11/05 US16:00',
+                    '99. 🔎 상세보기',
+                ])
+                self.assertEqual(len(brief.splitlines()), count + 3)
+                self.assertNotIn('※ 지연·비실시간 ·', brief)
+                self.assertNotIn('※ 5분 내', brief)
+
+    def test_failed_sector_quote_still_has_two_footer_lines(self):
+        def quote_or_fail(stock):
+            if stock.ticker in ('ARM', 'MU'):
+                raise StockQuoteError('provider rejected')
+            return fake_quote(stock)
+        brief = sector_report('semi', 1, fetcher=quote_or_fail)
+        self.assertIn('1. ARM : 조회 불가', brief)
+        self.assertIn('9. 마이크론 : 조회 불가', brief)
+        self.assertEqual(len(brief.splitlines()), 22)
+        self.assertIn('2종목 조회 실패', brief.splitlines()[-2])
+        self.assertEqual(brief.splitlines()[-1], '99. 🔎 상세보기')
 
     def test_old_menu_choices_and_source_module(self):
         choices = StockSelectionMenus._stock_choices()
