@@ -14,6 +14,7 @@
 12. 카카오톡 관심그룹의 한 줄 간략 시세에서 상승·하락 화살표 뒤 한 글자 공백을 제거하고 그룹 목록/권한/로그를 유지한다.
 13. 반도체·미국시총10·사용자 그룹은 한 줄 간략 시세/짧은 시장별 기준시각을 기본으로 하고 99 상세보기에서만 정규장과 제공처 원문을 표시한다.
 14. 상세/간략 조회의 그룹 등록·소유자/종목 순서/조회실패/1~10 분석은 그대로 유지한다.
+15. 모든 그룹의 간략 시세는 기존 무료·지연/분석 안내 2줄을 생략하지만 시각 줄에 조회 실패 건수를 병기하고 99 전환/상세 원문은 그대로 둔다.
 """
 from __future__ import annotations
 
@@ -174,7 +175,8 @@ class WatchlistUnitTests(unittest.TestCase):
         self.assertIn('1. 삼성전자 ',report)
         self.assertIn('2. 마이크론 ',report)
         self.assertIn('3. 키오시아 : 조회 불가',report)
-        self.assertIn('5분 내 1~3',report)
+        self.assertNotIn('5분 내 1~3',report)
+        self.assertIn('1종목 조회 실패',report.splitlines()[-2])
         self.assertIn('📡 11/04 KR', report)
         self.assertIn('99. 🔎 상세보기', report)
         self.assertNotIn('시세 출처 · 기준시각:', report)
@@ -215,7 +217,8 @@ class WatchlistUnitTests(unittest.TestCase):
         report=group_report('십종목',stocks,fetcher=fake)
         self.assertIn('1. 엔비디아 ',report)
         self.assertIn('10. 일라이릴리 ',report)
-        self.assertIn('5분 내 1~10',report)
+        self.assertNotIn('5분 내 1~10',report)
+        self.assertEqual(report.splitlines()[-1], '99. 🔎 상세보기')
 
     def test_reads_and_writes_do_not_call_network(self):
         with patch('app.watchlists.fetch_quote') as network:
