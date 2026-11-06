@@ -18,6 +18,7 @@
  * 16. 기존 5분 TTL/정확한 방·발신자 보호/활성화 시점/일상 대화 차단을 그대로 유지한다.
  * 17. Python Core가 연 시세 메뉴에 한해 99·99번·99.·99)를 별도 메뉴 선택으로 전달하여 9/10번째 종목 분석과 겹치지 않게 한다.
  * 18. 99개·999·99만원 등 일상 숫자 문장 차단, 기존 0 이전/00 홈/5분·발신자 스코프·로그·버전·UI를 보존한다.
+ * 19. 주식 섹터 페이지 97(이전)·98(다음) 선택을 활성 5분 시세 메뉴에서만 인식하고 기존 9/10 종목 분석·99 상세·0/00을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -26,7 +27,7 @@ class MenuSelectionGate(
 ) {
     companion object {
         const val MENU_TTL_MS = 300_000L
-        private val SELECTION = Regex("^(99|00|10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
+        private val SELECTION = Regex("^(97|98|99|00|10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
     }
     private data class Scope(val room: String, val sender: String)
     private val expiresAt = mutableMapOf<Scope, Long>()
