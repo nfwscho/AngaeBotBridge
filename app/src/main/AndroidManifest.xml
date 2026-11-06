@@ -8,6 +8,8 @@
   5. 기본 자동응답 OFF, 허용목록 비어 있음; v0.2.0은 loopback Python을 위해 INTERNET만 추가하며 SMS/접근성/저장소 권한은 요구하지 않음.
   7. Python 연결 기본 OFF; localhost 외 HTTP는 허용하지 않는다.
   6. 알림만으로는 실제 카카오 사용자 신원 확인이 불가능하므로 강력한 인증 아님.
+  8. 명시적으로 이미지 MIME을 허용한 알림 시험에서만 앱 캐시의 고정 PNG/JPEG를 제공하는 비공개 읽기 전용 Provider를 추가한다.
+  9. 외부 저장소/접근성/카카오톡 내부 API 권한은 추가하지 않고 기존 서비스/설정/로그를 보존한다.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
@@ -27,6 +29,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name=".ImageReplyProvider"
+            android:authorities="${applicationId}.imageprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <service
             android:name=".KakaoNotificationListener"
