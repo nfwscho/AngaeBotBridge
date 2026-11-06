@@ -70,7 +70,7 @@ class MenuJumpCoreTests(unittest.TestCase):
                 answer = self.post(route).json()
                 self.assertTrue(answer["ok"], answer)
                 self.assertEqual(answer["reply"], "SK하이닉스 분석")
-                self.assertFalse(answer["menu_active"])
+                self.assertTrue(answer["menu_active"])  # 0은 바로 이전 시세/그룹 목록으로 복귀
                 self.assertEqual(history.call_args.args[0].ticker, "000660.KS")
 
     def test_jump_to_nested_menu_and_back(self):
