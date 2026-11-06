@@ -1,0 +1,171 @@
+"""
+앙개봇 미국 주식 네이버 장외 시세 공급 모듈 — 전체 기능과 안전 제약
+1. 기존 Yahoo 정규장 시세와 분리하여 네이버 증권 해외 주식 공개 폴링 응답에서 프리/애프터 체결가만 수집한다.
+2. 확인된 나스닥 종목은 Reuters code '.O'와 연결하며 티커 문자를 검증하고 외부 입력 URL/호스트는 사용하지 않는다.
+3. 네이버 공개 폴링 /api/polling/worldstock/stock?reutersCodes= 를 우선 조회한다.
+4. 폴링에 체결가가 없거나 차단되면 공개 종목 basic /api/securityService/stock/{reuters}/basic 을 보조 확인한다.
+5. 자료의 reutersCode/symbolCode/itemCode 등 동일 종목코드가 명시적으로 일치해야만 가격을 인정한다.
+6. 응답의 marketSessionType 또는 overMarketPriceInfo.tradingSessionType으로 프리·애프터 상태를 증명한다.
+7. localTradedAt은 타임존이 명시된 거래시각만 수용하고 America/New_York 기준 거래일·시장시간을 검증한다.
+8. 가격은 양수·유한값·USD만 수용하며 20시간 초과 과거 시세나 미래 체결·정규장 체결을 장외로 둔갑시키지 않는다.
+9. 프리 등락률은 직전 정규장 대비, 애프터 등락률은 당일 정규장 대비로 계산한다.
+10. 공급자의 응답 형식이 다르거나 가격이 없으면 반환값은 빈 튜플이며 정규장 가격을 임의 복사하지 않는다.
+11. 모든 공급자 조회는 고정 HTTPS 호스트·짧은 타임아웃·응답 크기 제한을 사용하고 수집 결과를 DB/운영 로그에 저장하지 않는다.
+12. 기존 인증/메모리7/관심종목 그룹/AI OFF/Android Bridge/배터리/원본 로그·에러 복구 경로를 변경하지 않는다.
+"""
+from __future__ import annotations
+
+import json
+import math
+import re
+from datetime import datetime
+from urllib.parse import quote as urlquote
+from urllib.request import Request
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .extended_sessions import SessionPrice, _session_price
+
+
+# 2026년 11월 기준 공개 Nasdaq 등록 종목. 임의 NYSE 티커를 .O로 추측하지 않는다.
+_NAVER_NASDAQ = frozenset({
+    'MU', 'SKHY', 'SNDK', 'STX', 'WDC', 'NVDA', 'AAPL', 'MSFT',
+    'GOOG', 'GOOGL', 'AMZN', 'META', 'AVGO', 'AMD', 'INTC',
+    'ADBE', 'COST', 'NFLX', 'TSLA',
+})
+_POLLING = 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes='
+_BASIC = 'https://stock.naver.com/api/securityService/stock/{reuters}/basic'
+_NUMBER_RE = re.compile(r'^[+]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$')
+
+
+def reuters_code(stock) -> str:
+    if stock.market != '미국' or stock.currency != 'USD' or stock.ticker not in _NAVER_NASDAQ:
+        return ''
+    return stock.ticker + '.O'
+
+
+def _price(value) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip().replace(',', '').replace('$', '')
+        if not _NUMBER_RE.fullmatch(value):
+            return None
+        value = float(value)
+    if not isinstance(value, (int, float)):
+        return None
+    n = float(value)
+    return n if math.isfinite(n) and 0 < n < 1e10 else None
+
+
+def _session(value) -> str:
+    key = re.sub(r'[^a-z]', '', str(value or '').lower())
+    if key in ('premarket', 'beforemarket', 'pre'):
+        return '프리'
+    if key in ('aftermarket', 'postmarket', 'afterhours', 'post'):
+        return '애프터'
+    return ''
+
+
+def _timestamp(value) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        return None
+    try:
+        return stamp.astimezone(ZoneInfo('America/New_York'))
+    except (ValueError, OverflowError, ZoneInfoNotFoundError):
+        return None
+
+
+def _records(payload: dict, expected: str):
+    """기본 시세와 폴링 데이터 구조 모두 지원하되 신원 필드의 일치를 필수로 한다."""
+    if not isinstance(payload, dict):
+        return ()
+    candidates = []
+    for key in ('datas', 'data', 'items', 'result'):
+        value = payload.get(key)
+        if isinstance(value, list):
+            candidates.extend(item for item in value if isinstance(item, dict))
+        elif isinstance(value, dict):
+            if expected in value and isinstance(value[expected], dict):
+                candidates.append(value[expected])
+            else:
+                candidates.append(value)
+    candidates.append(payload)
+    result = []
+    for item in candidates:
+        identifiers = [item.get(k) for k in ('reutersCode', 'symbolCode', 'stockCode', 'itemCode', 'ticker')]
+        provided = [str(v).upper() for v in identifiers if isinstance(v, str) and v]
+        if provided and all(v in (expected, expected.split('.')[0]) for v in provided):
+            result.append(item)
+    return tuple(result)
+
+
+def parse_naver_extended(stock, payload: dict, regular, *, now: datetime) -> tuple[SessionPrice, ...]:
+    """공급자 세션·거래시각·통화·가격 검증, 현재 거래일 장외 체결만 반환."""
+    code = reuters_code(stock)
+    if not code:
+        return ()
+    result = {}
+    for item in _records(payload, code):
+        currency = item.get('currencyType', item.get('currency'))
+        if isinstance(currency, dict):
+            currency = currency.get('name') or currency.get('code')
+        if currency and currency != 'USD':
+            continue
+        candidates = []
+        for name, default in (
+            ('overMarketPriceInfo', ''),
+            ('preMarketPriceInfo', '프리'),
+            ('afterMarketPriceInfo', '애프터'),
+            ('nxtOverMarketPriceInfo', ''),
+        ):
+            value = item.get(name)
+            if isinstance(value, dict):
+                period = _session(value.get('tradingSessionType') or value.get('marketSessionType')) or default
+                if period:
+                    candidates.append((period, value, ('overPrice', 'closePrice', 'lastPrice', 'price')))
+        period = _session(item.get('marketSessionType') or item.get('tradingSessionType'))
+        if period:
+            candidates.append((period, item, ('closePrice', 'lastPrice', 'price')))
+        for session, value, keys in candidates:
+            raw_price = next((_price(value[k]) for k in keys if _price(value.get(k)) is not None), None)
+            if raw_price is None:
+                continue
+            traded = _timestamp(value.get('localTradedAt') or value.get('lastTradedAt') or value.get('lastTradeTimestamp'))
+            if traded is None:
+                continue
+            verified = _session_price(stock, regular, now, traded, raw_price, session, '네이버 해외')
+            if verified and (session not in result or traded > result[session].market_time):
+                result[session] = verified
+    return tuple(result[key] for key in ('프리', '애프터') if key in result)
+
+
+def fetch_naver_extended(stock, regular, *, opener, now: datetime,
+                         timeout: float, max_bytes: int, user_agent: str) -> tuple[SessionPrice, ...]:
+    """두 가지 고정된 네이버 시세 경로만 요청한다. 전체 실패는 호출자가 정규장 시세를 보존."""
+    code = reuters_code(stock)
+    if not code:
+        return ()
+    errors = []
+    for uri in (_POLLING + urlquote(code, safe='.'), _BASIC.format(reuters=urlquote(code, safe='.'))):
+        req = Request(uri, headers={'User-Agent': user_agent,
+                                    'Accept': 'application/json',
+                                    'Referer': 'https://stock.naver.com/'}, method='GET')
+        try:
+            with opener(req, timeout=timeout) as response:
+                raw = response.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise ValueError('네이버 해외 응답 용량 초과')
+            result = parse_naver_extended(stock, json.loads(raw), regular, now=now)
+            if result:
+                return result
+        except (OSError, TimeoutError, ValueError) as e:
+            errors.append(type(e).__name__ + (f' HTTP {e.code}' if hasattr(e, 'code') else ''))
+    if errors:
+        raise ValueError('네이버 해외 공개 API 조회 실패: ' + ', '.join(errors))
+    return ()
