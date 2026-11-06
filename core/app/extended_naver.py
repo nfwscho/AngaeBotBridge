@@ -25,6 +25,10 @@
 23. 데이터센터 LITE.O, ANET.N, VRT.N, DELL.N, GLW.N을 지원하며 기존 WDC·STX·MU·NVDA 등 화이트리스트는 그대로 유지한다.
 24. 등록된 코드가 있다고 실제 체결로 가정하지 않고 응답의 종목·통화·현지 장외 체결시각·프리/애프터 세션을 계속 검증한다.
 25. 기존 403/429 호스트 차단·타임아웃·원본 정규장 가격·로그·메모리7·관심그룹·SQLite/Android UI 보존 정책을 유지한다.
+26. 실제 GitHub Actions 공개 API 진단에서 NYSE .N 요청은 200/datas=[]이나 같은 TSM/NOW bare 요청은 200/datas=[종목]임을 확인했다.
+27. Reuters 공식 거래소 코드 .N과 Naver API의 조회 코드가 다르므로 NYSE 허용목록만 접미사 없는 코드로 폴링 조회한다.
+28. 기존 공개 함수 reuters_code 이름·인수/호출 호환성은 보존하며 '출력값=Naver 조회 코드'로 명시하고 응답의 동일 종목 일치검사를 계속 적용한다.
+29. 37종목의 프리마켓 가격은 유효한 실제 체결시각·세션·USD가 확인될 때만 표시하며 빈 응답 또는 HTTP 오류에서 P를 발명하지 않는다.
 """
 from __future__ import annotations
 
@@ -50,24 +54,30 @@ _NAVER_NASDAQ = frozenset({
     'PLTR', 'ARM', 'MRVL', 'QCOM', 'TXN', 'ASML', 'AMAT',
     'LRCX', 'KLAC', 'CBRS', 'SIMO', 'LITE',
 })
-# NYSE 미국 상장 티커의 공식 거래소 정보를 확인한 화이트리스트.
-# LLY를 포함한 기존 정보를 유지하고 NYSE 거래소 코드 .N으로만 조회한다.
-_NAVER_NYSE = {
-    'LLY': 'LLY.N', 'NOW': 'NOW.N', 'CRM': 'CRM.N', 'ORCL': 'ORCL.N',
-    'IBM': 'IBM.N', 'TSM': 'TSM.N', 'ANET': 'ANET.N',
-    'VRT': 'VRT.N', 'DELL': 'DELL.N', 'GLW': 'GLW.N',
-}
+# 공식 거래소는 NYSE(.N)가 맞지만 2026-11-06 실제 Naver 공개
+# /api/polling/worldstock/stock 응답에서는 .N 요청의 datas=[]임을 확인.
+# 동일 API에서 접미사 없는 미국 NYSE 티커로만 조회해야 종목이 반환된다.
+# 종목코드는 검증된 NYSE 화이트리스트 안에서만 bare 형태를 사용한다.
+_NAVER_NYSE = frozenset({
+    'LLY', 'NOW', 'CRM', 'ORCL', 'IBM', 'TSM',
+    'ANET', 'VRT', 'DELL', 'GLW',
+})
 _POLLING = 'https://stock.naver.com/api/polling/worldstock/stock?reutersCodes='
 _BASIC = 'https://stock.naver.com/api/securityService/stock/{reuters}/basic'
 _NUMBER_RE = re.compile(r'^[+]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$')
 
 
 def reuters_code(stock) -> str:
+    """기존 공개 함수명 유지; 반환값은 '표준 Reuters RIC'이 아닌 실제 Naver 조회 코드.
+
+    Nasdaq는 TICKER.O, NYSE는 TICKER(bare)를 사용한다.
+    알려진 NYSE 외의 티커를 접미사 없이 조회하지 않는다.
+    """
     if stock.market != '미국' or stock.currency != 'USD':
         return ''
     if stock.ticker in _NAVER_NASDAQ:
         return stock.ticker + '.O'
-    return _NAVER_NYSE.get(stock.ticker, '')
+    return stock.ticker if stock.ticker in _NAVER_NYSE else ''
 
 
 def _price(value) -> float | None:
