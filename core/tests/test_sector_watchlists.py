@@ -194,7 +194,8 @@ class SectorAPITests(unittest.TestCase):
         self.id += 1
         return self.client.post('/v1/commands',headers=self.headers if auth else {},
                                 json={'request_id':f'sector_{self.id:011d}',
-                                      'command':'주식','argument':arg,
+                                      'command':'메뉴' if arg.startswith('경로 ') else '주식',
+                                      'argument':arg,
                                       'room':room,'sender':sender})
 
     def test_ai_menu_navigation_to_page_two_detail_and_back(self):
