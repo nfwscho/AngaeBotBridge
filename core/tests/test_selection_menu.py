@@ -6,6 +6,9 @@
 20. 메모리7 결과 화면에서 숫자 9로 간략↔상세 전환하며 원래 1~8 종목 분석·5분 메뉴·인증·중복방지를 유지한다.
 21. 사용자 관심그룹 10종목 번호와 메모리7 전용 숫자 9가 섞이지 않게 검증한다.
 22. 주식 메뉴 경로 2→9를 따라가도 중간에 중복 시세 조회를 하지 않고 마지막 상세보기만 한 번 실행한다.
+23. 주식 메뉴→간략 시세→9 상세→0 간략→0 주식→0 홈을 실제 HTTP API에서 검증한다.
+24. 9를 연속 두 번 눌러 상세↔간략으로 왕복한 후 0은 직전 실제 상세 화면으로 돌아가야 한다.
+25. 00은 중간 단계와 무관하게 홈으로 이동하고 방·발신자별 이력·5분 TTL·jobs/events 로그를 지킨다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -296,6 +299,48 @@ class MenuSelectionAPITests(unittest.TestCase):
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
+
+    def test_zero_returns_actual_previous_memo7_view_level_by_level(self):
+        def render(_command, argument):
+            return ('🔎 메모리7 시세 상세 보기\\n9. ↩ 간략보기'
+                    if argument == '메모리7 상세' else
+                    '💾 메모리7 시세 요약\\n9. 🔎 상세보기')
+        with patch('app.main.execute_stock_command', side_effect=render) as quote:
+            opened = self.post('메뉴').json()
+            self.assertIn('주식 메뉴', opened['reply'])
+            brief = self.post('선택 2').json()
+            self.assertIn('시세 요약', brief['reply'])
+            self.assertTrue(brief['menu_active'])
+            detail = self.post('선택 9').json()
+            self.assertIn('상세 보기', detail['reply'])
+            self.assertTrue(detail['menu_active'])
+            self.assertFalse(self.post('선택 0', sender='다른사람').json()['ok'])
+            previous = self.post('선택 0').json()
+            self.assertIn('시세 요약', previous['reply'])
+            self.assertTrue(previous['menu_active'])
+            self.assertEqual(previous['module_source'], 'core.market')
+            self.assertEqual(quote.call_count, 3)
+            self.assertIn('주식 메뉴', self.post('선택 0').json()['reply'])
+            self.assertIn('메인 메뉴', self.post('선택 0').json()['reply'])
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],
+                             db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
+
+    def test_zero_from_reverse_ninth_toggle_restores_actual_detail_and_00_home(self):
+        with patch('app.main.execute_stock_command', side_effect=lambda _command, argument:
+                   '🔎 메모리7 시세 상세 보기' if argument == '메모리7 상세'
+                   else '💾 메모리7 시세 요약'):
+            self.assertTrue(self.post('메뉴').json()['menu_active'])
+            self.assertTrue(self.post('선택 2').json()['menu_active'])
+            self.assertIn('상세 보기', self.post('선택 9').json()['reply'])
+            self.assertIn('시세 요약', self.post('선택 9').json()['reply'])
+            back = self.post('선택 0').json()
+            self.assertIn('상세 보기', back['reply'])
+            self.assertTrue(back['menu_active'])
+            home = self.post('선택 00').json()
+            self.assertIn('메인 메뉴', home['reply'])
+            self.assertTrue(home['menu_active'])
+            self.assertFalse(self.post('선택 9', sender='다른사람').json()['ok'])
 
     def test_inline_ninth_switches_compact_detail_and_back_without_losing_logs(self):
         def output(command, argument):
