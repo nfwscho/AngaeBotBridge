@@ -15,6 +15,7 @@
 13. 네이버 NYSE 조회가 차단된 ORCL/ANET/DELL의 나스닥 웹 공개 secondaryData·marketStatus 구조를 가격·개인정보 없이 확인한다.
 14. 기본 CI는 기존 한국 005930·미국 MU 폴링/기본 3개 진단만 실행하고 --full 명시 시에만 종목별 상세 진단을 추가해 불필요한 요청과 CI 지연을 줄인다.
 15. 2026-11-06 KRX 장마감 기준가 누락을 해결하기 위해 삼성전자·SK하이닉스의 일봉 endpoint 응답 형태·거래일·필드명만 일시 진단하고 원문 가격은 기록하지 않는다.
+16. 2026-11-06 공시된 KRX 종가와 검증값 동일 여부만 불리언으로 확인하고 원본 체결가/가격은 GitHub 로그에 남기지 않는다.
 """
 from __future__ import annotations
 
@@ -106,7 +107,18 @@ def main(*, full: bool = False):
                 fields_dates = [(','.join(str(k) for k in row.keys()),
                                 str(row.get('localDate') or row.get('tradedAt') or row.get('date') or '')[:30])
                                 for row in samples if isinstance(row, dict)]
-                print(f'{label}_SHAPE: total={len(day_rows)} samples={fields_dates}')
+                expected = {'KR_SAMSUNG_DAY': 188700, 'KR_HYNIX_DAY': 1132000}.get(label)
+                last = next((row for row in reversed(day_rows)
+                             if isinstance(row, dict) and str(row.get('localDate')) == '20261106'), None)
+                observed = None
+                if last is not None:
+                    try:
+                        observed = int(str(last.get('closePrice', '')).replace(',', ''))
+                    except (ValueError, TypeError):
+                        pass
+                exchange = payload.get('stockExchangeType')
+                print(f'{label}_SHAPE: total={len(day_rows)} samples={fields_dates} '
+                      f'exchange={exchange} known_20261106_krx_close_match={observed == expected}')
             print(f'{label}: HTTP {code} root_keys={root_keys} item_count={item_count} type={type(payload).__name__} identity={identity} '
                   f'session={session} fields={keys} extended_fields={extended_fields}')
         except Exception as exc:
