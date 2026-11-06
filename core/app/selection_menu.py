@@ -59,6 +59,9 @@
 73. 섹터 목록은 운영 DB에 등록하지 않는 읽기 전용 상수이며 기존 사용자 그룹 10개×10종목 제한과 CRUD는 유지한다.
 74. 주식 섹터 한 페이지 11~19번은 Android/파이썬 공통 메뉴의 기존 보안 상태 검증 후에만 허용하고 일반 메뉴에는 없는 번호로 거부한다.
 75. 구형 97/98 입력은 하위 호환으로 인식하지만 새 섹터는 모두 한 페이지이므로 앞·뒤 이동 없이 경고하고, 99 상세는 계속 사용한다.
+76. 주식 홈을 사용자 지정 8개 메뉴(1 반도체주 19, 2 미국 시총10, 3 AI 주도주, 4 반도체 및 기자재, 5 데센, 6 최근조회, 7 관심목록, 8 분석)로 교체한다.
+77. 메모리7 원본과 기존 사용자 '반도체' 그룹 조회는 주식 메모리7/주식 반도체 직접 명령 및 관심목록에서 유지해 데이터·로그를 삭제하지 않는다.
+78. 새 섹터의 1~19 번호/99 상세/0 이전·00 홈은 유지하고 8개 홈 선택 번호만 변경, 개인 기록·설정 메뉴는 그대로 둔다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -206,15 +209,14 @@ class StockSelectionMenus:
     def _stock_choices() -> tuple[MenuChoice, ...]:
         """주식 메뉴의 단일 정의."""
         return (
+            MenuChoice('반도체주 시세', command_argument='섹터시세 chip 1 간략'),
+            MenuChoice('미국 시총10 시세', command_argument='미국시총10'),
+            MenuChoice('AI 주도주', command_argument='섹터시세 ai 1 간략'),
+            MenuChoice('반도체 및 기자재', command_argument='섹터시세 semi 1 간략'),
+            MenuChoice('데센 및 네트워크', command_argument='섹터시세 dc 1 간략'),
             MenuChoice('최근 사용한 주식 조회', page='recent'),
-            MenuChoice('메모리7 현재 시세', command_argument='메모리7'),
-            MenuChoice('반도체 그룹 시세', command_argument='반도체'),
-            MenuChoice('미국시총10 시세', command_argument='미국시총10'),
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
-            MenuChoice('AI 주도주 (13종목)', command_argument='섹터시세 ai 1 간략'),
-            MenuChoice('반도체 및 기자재 (19종목)', command_argument='섹터시세 semi 1 간략'),
-            MenuChoice('데센 및 네트워크 (5종목)', command_argument='섹터시세 dc 1 간략'),
         )
 
     @staticmethod
@@ -285,9 +287,9 @@ class StockSelectionMenus:
             '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
-            '주 2 메모리7 · 주 7 AI · 주 8 반도체 · 주 9 데센 · 주 분 삼성전자',
+            '주 1 반도체주 · 주 2 미국시총10 · 주 3 AI · 주 4 반도체기자재',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
-            '1~19(섹터) 분석 · 99 상세 · 0 이전 · 00 홈',
+            '주 5 데센 · 주 6 최근 · 주 7 관심목록 · 주 8 분석 · 주 분 삼성전자',
         ))
 
     @classmethod
