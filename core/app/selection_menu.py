@@ -485,6 +485,26 @@ class StockSelectionMenus:
                 return self.open_home(room, sender)
             if number == '0':
                 self._states.pop(key, None)
+                # 실제 이전 단계가 있으면 고정 메뉴가 아닌 그 화면의 선택지·번호·상태를 복원.
+                # 시세 본문은 세션에 저장하지 않고 기존 안전한 시세 조회 경로로 재구성한다.
+                prior = state.previous
+                if prior is not None and prior.expire_at > self._clock():
+                    restored = MenuState(self._clock() + MENU_TTL_SECONDS, prior.choices,
+                                         prior.back, prior.origin, prior.title, prior.previous)
+                    self._states[key] = restored
+                    if prior.origin.startswith('quotes:memory7:'):
+                        mode = prior.origin.rsplit(':', 1)[-1]
+                        return MenuAnswer(execute_argument='메모리7 상세' if mode == 'detail' else '메모리7',
+                                          menu_active=True, back=prior.back, restored=True)
+                    if prior.origin.startswith('quotes:group:'):
+                        return MenuAnswer(execute_argument=prior.origin.split(':', 2)[2],
+                                          menu_active=True, back=prior.back, restored=True)
+                    if prior.origin == 'groups':
+                        from .watchlists import execute_group_command
+                        return MenuAnswer(execute_group_command(db, room, sender, '목록'),
+                                          menu_active=True, back=prior.back, restored=True)
+                    return MenuAnswer(self._render(prior.title or '📂 이전 메뉴', prior.choices),
+                                      menu_active=True, back=prior.back, restored=True)
                 back = state.back
                 if back == 'home':
                     return self.open_home(room, sender)
@@ -504,53 +524,54 @@ class StockSelectionMenus:
             # 하나를 선택하면 재선택/이중 실행 방지를 위해 현재 페이지를 즉시 닫는다.
             self._states.pop(key, None)
         if choice.page == 'stock-root':
-            return self.open(room, sender, back='home')
+            return self.open(room, sender, back='home', previous=state)
         if choice.page == 'settings-root':
-            return self.open_settings(room, sender)
+            return self.open_settings(room, sender, previous=state)
         if choice.page.startswith('records:root:'):
-            return self.open_record_sector(room, sender, choice.page.split(':', 2)[2])
+            return self.open_record_sector(room, sender, choice.page.split(':', 2)[2], previous=state)
         if choice.page.startswith('records:list:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
                     list_records(db, room, sender, category=sector, kind='note'),
-                    sector=sector, heading=sector + ' 최근 메모')
+                    sector=sector, heading=sector + ' 최근 메모', previous=state)
         if choice.page.startswith('records:upcoming:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
                     list_records(db, room, sender, category=sector, kind='schedule', upcoming=True),
-                    sector=sector, heading='다가오는 개인 일정')
+                    sector=sector, heading='다가오는 개인 일정', previous=state)
         if choice.page.startswith('records:help:'):
             target = choice.page.split(':', 2)[2]
             sector = '개인' if target == '일정' else target
             command = '일정' if target == '일정' else '메모' if target == '개인' else '부동산' if target == '부동산' else '투자'
-            parent = self.open_record_sector(room, sender, sector)
+            parent = self.open_record_sector(room, sender, sector, previous=state)
             return MenuAnswer(help_text(command) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('records:view:'):
             _, _, id_text, sector = choice.page.split(':', 3)
             record = get_record(db, room, sender, int(id_text),
                                 category=sector if sector in PERSONAL_SECTORS else None)
-            parent = self.open_record_sector(room, sender, record.category)
+            parent = self.open_record_sector(room, sender, record.category, previous=state)
             return MenuAnswer(record_detail(record) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('ops:'):
             return MenuAnswer(execute_argument='설정보기 ' + choice.page.split(':', 1)[1],
-                              back='settings')
+                              back='settings', previous=state)
         if choice.page.startswith('category:'):
-            return self.open_category(room, sender, choice.page.split(':', 1)[1])
+            return self.open_category(room, sender, choice.page.split(':', 1)[1], previous=state)
         if choice.page.startswith('pending:'):
             _, category, name = choice.page.split(':', 2)
             # 단독 '준비 중' 응답으로 메뉴가 닫히지 않도록 동일 카테고리 메뉴를 다시 보여준다.
-            menu = self.open_category(room, sender, category)
+            menu = self.open_category(room, sender, category, previous=state)
             return MenuAnswer(f'🛠 {category} / {name}: 개발 예정입니다.\n\n{menu.reply}',
                               menu_active=True)
         if choice.page == 'recent':
             choices = self._recent(db, room, sender)
             if not choices:
                 return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.')
-            self._save(key, choices, back='menu')
+            self._save(key, choices, back='menu', origin='recent', title='📋 내 최근 주식 조회 명령', previous=state)
             return MenuAnswer(self._render('📋 내 최근 주식 조회 명령', choices), menu_active=True)
         if choice.page == 'analysis':
             choices = self._analysis_choices()
-            self._save(key, choices, back='menu')
+            self._save(key, choices, back='menu', origin='analysis', title='📈 분석할 종목 선택', previous=state)
             return MenuAnswer(self._render('📈 분석할 종목 선택', choices), menu_active=True)
         return MenuAnswer(execute_argument=choice.command_argument,
-                          back='groups' if state.origin == 'groups' else 'menu')
+                          back='groups' if state.origin == 'groups' else 'menu',
+                          previous=state)
