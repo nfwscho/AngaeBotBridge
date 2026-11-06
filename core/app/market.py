@@ -85,6 +85,7 @@
 77. 메모리7 본문 9번 상세보기/상세보기 9번 간략보기는 1~8번 기존 종목분석과 5분 세션을 보존한다.
 78. 미국 정규장 도중에는 이전 프리 체결가가 존재해도 현재 대표가격을 프리로 오표시하지 않는다.
 79. 종목별 지연 거래일 꼬리표는 최신 검증 프리/애프터 시각을 기준으로 부착해 장외 당일가를 전일가로 잘못 표시하지 않는다.
+80. 메모리7/관심그룹 간략 시세에서 상승 🔺+/하락 ▽-/보합 ➖의 화살표 뒤 공백 한 글자를 제거하여 좁은 카카오톡 말풍선의 P/A 줄바꿈을 방지하고 상세 시세 형식은 유지한다.
 """
 from __future__ import annotations
 
@@ -1368,7 +1369,7 @@ def compact_quote_line(item: Quote) -> str:
         return f'{name} {price}{suffix} 기준가?'
     arrow = '🔺' if change > 0.00001 else ('▽' if change < -0.00001 else '➖')
     sign = '+' if change > 0.00001 else ('-' if change < -0.00001 else '')
-    return f'{name} {price} {arrow} {sign}{abs(change):.2f}%{suffix}'
+    return f'{name} {price} {arrow}{sign}{abs(change):.2f}%{suffix}'
 
 
 def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
