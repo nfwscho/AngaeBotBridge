@@ -19,6 +19,8 @@
  * 17. Python Core가 연 시세 메뉴에 한해 99·99번·99.·99)를 별도 메뉴 선택으로 전달하여 9/10번째 종목 분석과 겹치지 않게 한다.
  * 18. 99개·999·99만원 등 일상 숫자 문장 차단, 기존 0 이전/00 홈/5분·발신자 스코프·로그·버전·UI를 보존한다.
  * 19. 주식 섹터 페이지 97(이전)·98(다음) 선택을 활성 5분 시세 메뉴에서만 인식하고 기존 9/10 종목 분석·99 상세·0/00을 보존한다.
+ * 20. AI 주도주 13종목·반도체 19종목을 한 메시지로 보일 때 11~19 분석 번호를 5분 활성 메뉴에서만 인식한다.
+ * 21. 11개·19만원·110·20·다른 방/발신자는 일반 대화로 거부하고 기존 0/00/99 및 구형 97/98 숫자 게이트는 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -27,7 +29,7 @@ class MenuSelectionGate(
 ) {
     companion object {
         const val MENU_TTL_MS = 300_000L
-        private val SELECTION = Regex("^(97|98|99|00|10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
+        private val SELECTION = Regex("^(1[1-9]|97|98|99|00|10|[0-9])(?:번|[.)])?(?:\\s+.*)?$")
     }
     private data class Scope(val room: String, val sender: String)
     private val expiresAt = mutableMapOf<Scope, Long>()
