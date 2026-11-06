@@ -1,3 +1,11 @@
+## 2026-11-06 — Windows .env 파일의 S20+ 배포 자동 동기화
+
+- `deploy-angaebot.ps1` 배포 시 로컬 `core\.env`(없으면 저장소 최상위 `.env`)를 자동 감지하고 SSH/SCP로 S20+에 비공개 전송한다. `-SkipEnvSync`로만 비활성화.
+- 기존 S20+ `.env`를 통째로 덮어쓰지 않고 Windows 항목을 변수별로 병합한다. S20+ `ANGAE_TOKEN` 및 S20+ 전용 환경변수·주석은 보존한다.
+- 새 환경설정 파서는 BOM·CRLF 호환, 중복/비정상 입력 거부, 0600 권한·원자적 교체·실패 시 기존 `.env`/모듈 복구를 제공한다. 인증키·설정값을 커밋하거나 출력하지 않는다.
+- `core/scripts/merge-deployment-env.py` 및 `core/tests/test_deployment_env_merge.py`를 추가하고 기존 전체 회귀 테스트와 PowerShell 5.1/7 정적 문법 검증을 유지한다.
+- S20+ 실기기 배포/카카오톡 명령어/국토부 API 연동은 Windows 원클릭 배포 후 확인해야 하며 `main`은 수정하지 않는다.
+
 ## 2026-11-06 — 실거래 인증키 비공개 등록 도구 (feature/real-estate-transactions-20261106)
 
 - S20+ `core/.env`에 기존 키·AI 환경설정·주석을 보존하면서 `MOLIT_API_KEY`만 안전하게 추가/갱신하는 `core/scripts/configure-real-estate-key.py` 추가.
