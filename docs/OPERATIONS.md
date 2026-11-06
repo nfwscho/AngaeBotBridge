@@ -2,6 +2,18 @@
 
 > 운영 기준은 이 파일에만 기록합니다. 과거 서비스 구축 문서의 전문은 아래에 보존합니다.
 
+## 이미지 전송 시험 (기능 브랜치 feature/image-send-20261107)
+
+- 목적: 카카오톡 **사진 자체**를 자동 전송할 수 있는지 Android 알림 `RemoteInput` 공식 데이터 MIME 지원 여부를 실기기에서 먼저 확인한다. 이미지 링크 전송과 구별한다.
+- 조건: Galaxy S20+의 앙개봇 Android Bridge 0.4.15 설치, 알림 접근 허용, 카카오톡 알림에서 같은 방과 발신자에 대해 기존 자동응답이 정상 작동해야 한다. 기존 방/발신자 허용목록·호출어·ON/OFF는 그대로 적용된다.
+- 테스트: 허용된 1:1 채팅방에서 `앙개야 이미지 테스트` 입력. 앱 캐시에 자체 생성한 640×360 샘플 PNG/JPEG 이외의 사진은 사용하지 않는다.
+- 카카오톡이 알림의 `RemoteInput.allowedDataTypes`에 `image/png`, `image/jpeg` 또는 `image/*`를 제공한 경우에만 첨부된 파일의 `content://` URI를 알림 답장 액션에 전달한다. 다른 앱 내부 API나 접근성 제어는 사용하지 않는다.
+- 이미지 입력이 **없으면** 채팅방에 `이미지 직접 전송 미지원` 텍스트만 보내며 기존 텍스트 자동응답은 그대로 작동한다. 이 상태에서는 카카오톡 앱이 직접 사진 자동전송을 지원하는 것으로 판단할 수 없다.
+- 로그: 기존 `RECEIVE`, `COMMAND`, `REPLY_ATTEMPT`, `REPLY_REQUESTED`, `REPLY_UNAVAILABLE`, `REPLY_FAILED`를 유지하고 `IMAGE_REPLY_SUPPORTED`, `IMAGE_REPLY_UNAVAILABLE`, `IMAGE_REPLY_REQUESTED`, `IMAGE_REPLY_FAILED`를 보조로 기록한다. `IMAGE_REPLY_REQUESTED`는 Android `PendingIntent.send` 요청 성공일 뿐 실제 카카오톡 수신 보장이 아니다.
+- 검증: 카카오톡에서 **사진 말풍선이 실제로 나타났는지**와 Android Bridge 로그를 비교한다. 개발 PC/CI에서는 카카오톡 실전송을 검증할 수 없다. 1:1 채팅 성공 후 오픈채팅방도 별도로 확인한다.
+- 기능 브랜치 배포: `cd D:\stockproj\AngaeBotBridge` 이후 `.\deploy-angaebot.ps1 -Branch "feature/image-send-20261107" -InstallAndroid`. Core .env·DB·기존 로그·Android 앱 데이터는 보존한다.
+- 기존 주식·날씨·부동산·메모·금융·AI·배터리·로그/메뉴 등 모든 기능은 변경하지 않는다. 실기기 검증 전 main 병합 금지.
+
 ## 실제 운영과 보안
 
 - 운영 단말: Galaxy S20+ Android Bridge (알림 기반 카카오톡) 및 Termux Python Core (localhost:8765).
