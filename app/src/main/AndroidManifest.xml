@@ -9,7 +9,9 @@
   7. Python 연결 기본 OFF; localhost 외 HTTP는 허용하지 않는다.
   6. 알림만으로는 실제 카카오 사용자 신원 확인이 불가능하므로 강력한 인증 아님.
   8. 명시적으로 이미지 MIME을 허용한 알림 시험에서만 앱 캐시의 고정 PNG/JPEG를 제공하는 비공개 읽기 전용 Provider를 추가한다.
-  9. 외부 저장소/접근성/카카오톡 내부 API 권한은 추가하지 않고 기존 서비스/설정/로그를 보존한다.
+  9. 기존 첫 단계 시험은 외부 저장소/접근성 권한 없이 동작하며 알림·설정·로그를 보존한다.
+  10. 후속 실험에서 접근성 서비스를 명시적으로 별도 추가한다. 사용자가 직접 켜고 이미지 전송 스위치를 켠 경우에만 실행한다.
+  11. 정확한 방/사진 UI 확인 실패 시 중단하며 일반 알림 텍스트 답장과 Python Core를 변경하지 않는다.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
@@ -35,6 +37,19 @@
             android:authorities="${applicationId}.imageprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <service
+            android:name=".KakaoImageAccessibilityService"
+            android:label="앙개봇 이미지 공유 실험"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/image_auto_accessibility" />
+        </service>
 
         <service
             android:name=".KakaoNotificationListener"
