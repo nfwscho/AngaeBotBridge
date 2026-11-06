@@ -117,7 +117,7 @@ class MenuSelectionUnitTests(unittest.TestCase):
         with self.assertRaisesRegex(StockQuoteError, '메뉴'):
             self.menus.choose(self.db,'방','다른사람','1')
         with self.assertRaisesRegex(StockQuoteError, '없는 번호'):
-            self.menus.choose(self.db,'방','나','9')
+            self.menus.choose(self.db,'방','나','10')
         with self.assertRaisesRegex(StockQuoteError, '1~10'):
             self.menus.choose(self.db,'방','나','22')
         sub=self.menus.choose(self.db,'방','나','6')
