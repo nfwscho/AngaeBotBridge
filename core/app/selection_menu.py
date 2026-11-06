@@ -47,6 +47,8 @@
 61. 기존 1~10 번호·주 2/7·9 상세·5분 만료·세션 격리·인증·중복방지·운영 로그·배터리 표기는 그대로 유지한다.
 62. 연속 번호 경로 탐색에서도 중간 시세 HTTP 조회 없이 직전 메뉴 상태를 이어받아 0으로 한 단계씩 복귀한다.
 63. 종목 분석 등 메뉴에서 선택한 읽기 전용 결과 화면도 가격/본문을 세션에 저장하지 않고 직전 메뉴로 돌아갈 수 있는 0번 전용 상태만 유지한다.
+64. 뒤로가기로 복원된 날씨/기록/설정 화면은 기존 정적 안내문까지 동일하게 재구성하며 개인정보 및 상세 결과 본문을 이력에 저장하지 않는다.
+65. 직접 경로의 관심그룹 조회와 최근 조회 내역이 비어 있는 경우에도 직전 메뉴로 복귀할 수 있는 0번 상태를 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -142,6 +144,24 @@ class StockSelectionMenus:
             return None
         return MenuState(state.expire_at, state.choices, state.back, state.origin,
                          state.title, StockSelectionMenus._history(state.previous, limit=limit-1))
+
+    @classmethod
+    def _restore_menu_reply(cls, state: MenuState) -> str:
+        """복귀 화면의 기존 안내문까지 복원하되 시세·개인 기록 본문은 보관하지 않는다."""
+        rendered = cls._render(state.title or '📂 이전 메뉴', state.choices)
+        if state.origin.startswith('category:'):
+            category = state.origin.split(':', 1)[1]
+            rendered += ('\n※ 지역 변경: 날 지역 서울' if category == '날씨'
+                         else '\n※ 하위 기능은 순차적으로 개발됩니다.')
+        elif state.origin.startswith('records-sector:'):
+            sector = state.origin.split(':', 1)[1]
+            alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
+            rendered += f'\n※ 등록: {alias} 추가 제목 | 내용'
+            if sector == '부동산':
+                rendered += '\n※ 조회 지역: 부 지역 강남구'
+        elif state.origin == 'settings':
+            rendered += '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만'
+        return rendered
 
     def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *,
               back: str = 'menu', origin: str = 'menu', title: str = '',
@@ -396,7 +416,7 @@ class StockSelectionMenus:
                                      memory7_view='detail' if arg == '메모리7 상세' else 'compact',
                                      previous=answer.previous)
                 elif arg == '목록':
-                    self.open_groups(db, room, sender)
+                    self.open_groups(db, room, sender, previous=answer.previous)
                 elif is_group_quote_request(arg):
                     group = load_group(db, room, sender, arg)
                     if not group:
@@ -517,7 +537,7 @@ class StockSelectionMenus:
                         from .watchlists import execute_group_command
                         return MenuAnswer(execute_group_command(db, room, sender, '목록'),
                                           menu_active=True, back=prior.back, restored=True)
-                    return MenuAnswer(self._render(prior.title or '📂 이전 메뉴', prior.choices),
+                    return MenuAnswer(self._restore_menu_reply(prior),
                                       menu_active=True, back=prior.back, restored=True)
                 back = state.back
                 if back == 'home':
@@ -579,7 +599,9 @@ class StockSelectionMenus:
         if choice.page == 'recent':
             choices = self._recent(db, room, sender)
             if not choices:
-                return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.')
+                self.open_readonly_result(room, sender, previous=state)
+                return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.',
+                                  menu_active=True)
             self._save(key, choices, back='menu', origin='recent', title='📋 내 최근 주식 조회 명령', previous=state)
             return MenuAnswer(self._render('📋 내 최근 주식 조회 명령', choices), menu_active=True)
         if choice.page == 'analysis':
