@@ -34,6 +34,8 @@
  * 32. 짧은 🔋/⚡ 잔량만 응답 마지막 한 줄에 표시하고 ACTION_BATTERY_CHANGED 상태 판정/오류·20% 알림을 유지한다.
  * 33. 고정 섹터 13/19/5종목의 간략보기에서만 99 상세보기와 배터리 잔량을 같은 줄에 합쳐 시각 줄 다음 1줄로 완료한다.
  * 34. 종목별 1~19 분석, 99 상세, 다른 메뉴/오류/모듈 조회에는 기존 배터리 분리 표기를 유지한다.
+ * 35. 개인 '반도체' 그룹과 미국시총10 등 core.watchlists/core.market의 간략 시세도 99 뒤 배터리를 한 줄로 합치고 정규장·프리/애프터 상세는 원본 유지한다.
+ * 36. 메뉴·오류·일반 답장에는 같은 줄 배터리를 붙이지 않으며 해당 응답의 정확한 모듈 식별과 작업 로그를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -201,9 +203,12 @@ class KakaoNotificationListener : NotificationListenerService() {
             val replyWithSource = ModuleSourceFormatter.append(response, sourceModule, showDetails = false)
             // 고정 주식 섹터 간략 시세만 시각/99+배터리 두 줄로 출력한다.
             // 상세보기/오류/타 메뉴의 기존 배터리 단독 줄은 변경하지 않는다.
-            val inlineSectorBattery = sourceModule == "core.sector_watchlists" &&
+            val inlineSectorBattery =
                 response.startsWith("📊 ") &&
-                response.trimEnd().endsWith("99. 🔎 상세보기")
+                response.trimEnd().endsWith("99. 🔎 상세보기") &&
+                (sourceModule == "core.sector_watchlists" ||
+                 sourceModule == "core.watchlists" ||
+                 sourceModule == "core.market")
             val replyWithBattery = BatteryStatusReporter.append(
                 this, replyWithSource, inlineSectorFooter = inlineSectorBattery)
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
