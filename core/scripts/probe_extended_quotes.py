@@ -113,7 +113,7 @@ def main(*, full: bool = False):
                 observed = None
                 if last is not None:
                     try:
-                        observed = int(str(last.get('closePrice', '')).replace(',', ''))
+                        observed = float(str(last.get('closePrice', '')).replace(',', ''))
                     except (ValueError, TypeError):
                         pass
                 exchange = payload.get('stockExchangeType')
