@@ -73,12 +73,16 @@ class MarketSourceSummaryTests(unittest.TestCase):
         report = memory7_report(fetcher=get,use_cache=False)
         self.assertIn('8. 웬디 : 조회 불가', report)
         self.assertIn('3. 마이크론 ', report)
-        self.assertIn('📡 한국 11/05', report)
-        self.assertIn('📡 미국 11/04', report)
-        self.assertIn('📡 일본 11/05', report)
-        self.assertEqual(report.count('📡 미국 '), 1)
-        self.assertEqual(report.count('📡 한국 '), 1)
-        self.assertEqual(report.count('📡 일본 '), 1)
+        # 메모리7 기본 화면은 국가별 시각 3줄 대신 한 줄 압축.
+        # 거래일 차이(한국·일본 11/05, 미국 11/04)를 숨기지 않는다.
+        self.assertIn('📡 KR11/05', report)
+        self.assertIn('US11/04', report)
+        self.assertIn('JP11/05', report)
+        self.assertEqual(report.count('📡 '), 1)
+        self.assertEqual(report.count('KR11/05'), 1)
+        self.assertEqual(report.count('US11/04'), 1)
+        self.assertEqual(report.count('JP11/05'), 1)
+        self.assertIn('9. 🔎 상세보기', report)
         self.assertIn('4종목 조회 실패', report)
         self.assertIn('5분 내 1~8', report)
 
