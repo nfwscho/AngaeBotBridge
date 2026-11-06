@@ -9,6 +9,7 @@
 23. 주식 메뉴→간략 시세→9 상세→0 간략→0 주식→0 홈을 실제 HTTP API에서 검증한다.
 24. 9를 연속 두 번 눌러 상세↔간략으로 왕복한 후 0은 직전 실제 상세 화면으로 돌아가야 한다.
 25. 00은 중간 단계와 무관하게 홈으로 이동하고 방·발신자별 이력·5분 TTL·jobs/events 로그를 지킨다.
+26. 종목 분석 결과 화면은 기존 내용 그대로 표시하고 0을 누르면 분석을 선택한 직전 목록으로 되돌아간다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -198,7 +199,7 @@ class MenuSelectionAPITests(unittest.TestCase):
             item=self.post('선택 1').json()
             self.assertTrue(item['ok'])
             self.assertEqual(item['reply'],'분석 보고서')
-            self.assertFalse(item['menu_active'])
+            self.assertTrue(item['menu_active'])  # 0으로 직전 분석 종목 목록 복귀
             self.assertEqual(fetched.call_args[0][0].ticker,'005930.KS')
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
@@ -292,13 +293,30 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertFalse(wrong['menu_active'])
             selected=self.post('선택 3').json()
             self.assertTrue(selected['ok'])
-            self.assertFalse(selected['menu_active'])
+            self.assertTrue(selected['menu_active'])  # 0으로 이전 메모리7 시세표 복귀
             self.assertEqual(selected['reply'],'마이크론 5일 분석')
             self.assertEqual(history.call_args.args[0].ticker,'MU')
             self.assertFalse(self.post('선택 3').json()['ok'])
         with closing(sqlite3.connect(self.dbpath)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],4)
+
+    def test_zero_from_analysis_result_restores_prior_memory7_quote(self):
+        with patch('app.main.execute_stock_command', return_value='💾 메모리7 시세 요약') as renderer:
+            self.assertTrue(self.post('메뉴').json()['menu_active'])
+            self.assertTrue(self.post('선택 2').json()['menu_active'])
+            with patch('app.main.fetch_history') as history, patch(
+                 'app.main.individual_report', return_value='마이크론 5일 분석 결과'):
+                detail = self.post('선택 3').json()
+                self.assertTrue(detail['menu_active'])
+                self.assertEqual(detail['reply'], '마이크론 5일 분석 결과')
+                self.assertEqual(history.call_args.args[0].ticker, 'MU')
+            self.assertFalse(self.post('선택 0', room='타인방').json()['ok'])
+            restored = self.post('선택 0').json()
+            self.assertTrue(restored['menu_active'])
+            self.assertEqual(restored['reply'], '💾 메모리7 시세 요약')
+            self.assertEqual(renderer.call_count, 2)
+            self.assertIn('주식 메뉴', self.post('선택 0').json()['reply'])
 
     def test_zero_returns_actual_previous_memo7_view_level_by_level(self):
         def render(_command, argument):
