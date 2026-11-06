@@ -76,6 +76,7 @@
 68. 미국 장외 시세는 세션과 현지 거래일을 확인하고 프리/애프터 최신 체결값만 대표가격으로 사용하며 지연·실시간을 보증하지 않는다.
 69. 상세보기(주식 메뉴 7번·메모리7 상세)는 기존 원본 Quote/시각·공급자·정규장/장외 가격을 여러 줄로 보여주고 간략 화면에는 반복하지 않는다.
 70. 기존 1~8 번호 분석/메뉴/사용자 그룹/30초 기본 캐시 및 로그·DB·Android 하단 기능모듈·배터리·AI OFF를 보존한다.
+71. 간결 시세 출처 행은 활성 프리/애프터 공급자의 실제 출처를 표시해 정규장 Yahoo 공급자와 혼동하지 않는다.
 """
 from __future__ import annotations
 
@@ -1347,6 +1348,15 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
                 source = ('네이버·장외 통합' if q.domestic and q.domestic.market_session in ('aftermarket', 'after_market')
                           else '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일')
                           else (q.domestic.provider if q.domestic else '야후'))
+            elif region == '미국' and q.extended:
+                active_price, _active_percent, active_session = _display_session(q)
+                active = next((entry for entry in q.extended
+                               if entry.session == active_session and entry.price == active_price), None)
+                if active is not None:
+                    source = active.source.replace('Yahoo 1분봉', '야후 장외').replace(
+                        'Yahoo 메타', '야후 장외')
+                else:
+                    source = q.source or '야후'
             elif q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가'):
                 source = '나스닥 종가' if q.source.startswith('나스닥') else '네이버 종가'
             elif q.source == '나스닥 웹':
