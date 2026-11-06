@@ -18,6 +18,8 @@
 32. 주식 메뉴 7번 AI 주도주는 기존 1~6번 뒤에 추가되고 메모리7 상세보기는 시세표 99로 유지한다.
 33. 고정 섹터 전용 11~19 선택으로 일반 사용자 관심그룹의 종목 10개 제한을 우회할 수 없고 허용된 그룹에서만 선택됨을 확인한다.
 34. 주식 메뉴 1~8 새 순서와 반도체주 19개/99/19번째 ASML 및 기존 미국시총10·메모리7 직접 명령을 검증한다.
+35. 레거시 메모리7 직접 호출은 메뉴 2를 점유하지 않고 기존 8종목 선택·99 상세·0 단계별 뒤로가기를 유지한다.
+36. 반도체 사용자그룹의 경로는 새 7번 관심목록→2번 등록그룹을 통해 원래 99 상세로 진입하며 사용자별 권한을 유지한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -341,7 +343,7 @@ class MenuSelectionAPITests(unittest.TestCase):
     def test_zero_from_analysis_result_restores_prior_memory7_quote(self):
         with patch('app.main.execute_stock_command', return_value='💾 메모리7 시세 요약') as renderer:
             self.assertTrue(self.post('메뉴').json()['menu_active'])
-            self.assertTrue(self.post('선택 2').json()['menu_active'])
+            self.assertTrue(self.post('메모리7').json()['menu_active'])
             with patch('app.main.fetch_history') as history, patch(
                  'app.main.individual_report', return_value='마이크론 5일 분석 결과'):
                 detail = self.post('선택 3').json()
@@ -363,7 +365,7 @@ class MenuSelectionAPITests(unittest.TestCase):
         with patch('app.main.execute_stock_command', side_effect=render) as quote:
             opened = self.post('메뉴').json()
             self.assertIn('주식 메뉴', opened['reply'])
-            brief = self.post('선택 2').json()
+            brief = self.post('메모리7').json()
             self.assertIn('시세 요약', brief['reply'])
             self.assertTrue(brief['menu_active'])
             detail = self.post('선택 99').json()
@@ -386,7 +388,7 @@ class MenuSelectionAPITests(unittest.TestCase):
                    '🔎 메모리7 시세 상세 보기' if argument == '메모리7 상세'
                    else '💾 메모리7 시세 요약'):
             self.assertTrue(self.post('메뉴').json()['menu_active'])
-            self.assertTrue(self.post('선택 2').json()['menu_active'])
+            self.assertTrue(self.post('메모리7').json()['menu_active'])
             self.assertIn('상세 보기', self.post('선택 99').json()['reply'])
             self.assertIn('시세 요약', self.post('선택 99').json()['reply'])
             back = self.post('선택 0').json()
@@ -431,20 +433,20 @@ class MenuSelectionAPITests(unittest.TestCase):
         payload = {
             'request_id': f'menus_{self.sequence:011d}',
             'command': '메뉴',
-            'argument': '경로 주식 2 99',
+            'argument': '경로 주식 1 99',
             'room': '방', 'sender': '나',
         }
-        with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
+        with patch('app.main.sector_report', return_value='🔎 반도체주 시세 상세 보기') as renderer:
             response = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
             self.assertTrue(response['ok'], response)
-            self.assertEqual(response['module_source'], 'core.market')
+            self.assertEqual(response['module_source'], 'core.sector_watchlists')
             self.assertTrue(response['menu_active'])
-            renderer.assert_called_once_with('주식','메모리7 상세')
+            renderer.assert_called_once_with('chip', 1, detailed=True)
 
     def test_root_menu_memo7_quote_then_eighth_analysis(self):
         with patch('app.main.execute_stock_command',return_value='💾 메모리7 시세 요약'):
             self.assertTrue(self.post('메뉴').json()['menu_active'])
-            quote=self.post('선택 2').json()
+            quote=self.post('메모리7').json()
             self.assertTrue(quote['menu_active'])
         with patch('app.main.fetch_history') as history, patch('app.main.individual_report',return_value='웬디 분석'):
             selected=self.post('선택 8').json()
@@ -525,7 +527,7 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.sequence += 1
             payload = {
                 'request_id': f'menus_{self.sequence:011d}',
-                'command': '메뉴','argument':'경로 주식 3 99',
+                'command': '메뉴','argument':'경로 주식 7 2 99',
                 'room':'방','sender':'나',
             }
             response=self.client.post('/v1/commands',headers=self.headers,json=payload).json()
