@@ -45,6 +45,7 @@
 59. 홈→주식→메모리7→상세/분석·설정·날씨·기록·그룹/최근조회 등 기존 메뉴 화면의 경로는 짧은 안전 스냅샷으로 보관한다.
 60. 화면 이력은 채팅방/발신자별로만 최대 8단계·5분 TTL까지 메모리에 저장하고 메뉴 원문/시세/인증키/DB/로그는 새로 저장하지 않는다.
 61. 기존 1~10 번호·주 2/7·9 상세·5분 만료·세션 격리·인증·중복방지·운영 로그·배터리 표기는 그대로 유지한다.
+62. 연속 번호 경로 탐색에서도 중간 시세 HTTP 조회 없이 직전 메뉴 상태를 이어받아 0으로 한 단계씩 복귀한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -391,14 +392,16 @@ class StockSelectionMenus:
                 if arg in ('메모리7', '메모리7 상세'):
                     from .market import WATCHLIST
                     self.open_quotes(room, sender, WATCHLIST, back=answer.back,
-                                     memory7_view='detail' if arg == '메모리7 상세' else 'compact')
+                                     memory7_view='detail' if arg == '메모리7 상세' else 'compact',
+                                     previous=answer.previous)
                 elif arg == '목록':
                     self.open_groups(db, room, sender)
                 elif is_group_quote_request(arg):
                     group = load_group(db, room, sender, arg)
                     if not group:
                         raise StockQuoteError('빈 관심그룹에는 추가 숫자 선택이 없습니다.')
-                    self.open_quotes(room, sender, group, back=answer.back)
+                    self.open_quotes(room, sender, group, back=answer.back,
+                                     previous=answer.previous, group_name=arg)
                 else:
                     raise StockQuoteError('이 메뉴는 마지막 선택 단계입니다. 이후 번호를 제거하세요.')
             elif not answer.menu_active:
