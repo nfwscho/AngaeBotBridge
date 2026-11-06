@@ -59,7 +59,8 @@ class MarketSourceSummaryTests(unittest.TestCase):
         self.assertIn('JP11/05', report)
         self.assertIn('99. 🔎 상세보기', report)
         self.assertNotIn('네이버·KRX', report)
-        self.assertIn('5분 내 1~5', report)
+        self.assertNotIn('5분 내 1~5', report)
+        self.assertEqual(report.splitlines()[-1], '99. 🔎 상세보기')
         detailed = group_report('반도체', tuple(q.stock for q in data),
                                 fetcher=lambda stock: lookup[stock.ticker], detailed=True)
         self.assertIn('99. ↩ 간략보기', detailed)
