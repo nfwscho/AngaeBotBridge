@@ -32,6 +32,9 @@
 30. 메뉴 점프는 정확한 숫자 경로를 실제 메뉴 선택으로 순회해 중간 시세 조회 없이 최종 명령만 실행한다.
 31. 그룹·종목·최근조회 메뉴의 동적 선택은 소유 채팅방/발신자 범위만 읽으며 CRUD·AI·임의 명령을 허용하지 않는다.
 32. 기존 주식 메뉴 및 0/00/5분 세션·단축어·기능·로그·DB 스키마는 모두 유지한다.
+49. 주식 메뉴 1~6번 위치·동작은 그대로 보존하고 7번 '메모리7 시세 상세 보기'를 읽기 전용 명령으로 추가한다.
+50. 2번 간략 목록은 프리/애프터 대표값만 한 행에 보여주며 7번은 정규/장외 가격·등락기준·출처·시각을 각각 표시한다.
+51. 두 시세 화면 모두 1~8 번호 분석/0 이전/00 홈/5분 만료/방·발신자 격리 및 기존 로그를 그대로 재사용한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -152,6 +155,7 @@ class StockSelectionMenus:
             MenuChoice('미국시총10 시세', command_argument='미국시총10'),
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
+            MenuChoice('메모리7 시세 상세 보기', command_argument='메모리7 상세'),
         )
 
     @staticmethod
@@ -222,7 +226,7 @@ class StockSelectionMenus:
             '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
-            '주 2 메모리7 시세 · 주 분 삼성전자 분석',
+            '주 2 간략 시세 · 주 7 시세 상세 보기 · 주 분 삼성전자 분석',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
             '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
         ))
@@ -247,7 +251,7 @@ class StockSelectionMenus:
                     detail = ' [본인 최근 조회 목록]'
                 elif choice.command_argument == '목록':
                     detail = ' [본인 관심그룹 목록]'
-                elif choice.command_argument in {'메모리7', '반도체', '미국시총10'}:
+                elif choice.command_argument in {'메모리7', '메모리7 상세', '반도체', '미국시총10'}:
                     detail = ' [조회 후 종목 선택]'
                 lines.append('  ' * len(prefix) + f'{number}. {choice.label}{detail}')
                 if choice.page == 'stock-root':
@@ -417,7 +421,7 @@ class StockSelectionMenus:
             if argument in seen:
                 continue
             if not (argument.startswith('분석 ') and argument[3:].strip() or
-                    argument in ('메모리7', '목록') or argument in groups):
+                    argument in ('메모리7', '메모리7 상세', '목록') or argument in groups):
                 continue
             if len(argument) > 100:
                 continue
