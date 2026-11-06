@@ -594,7 +594,7 @@ def _naver_after_market(data: dict, stock: Stock, now: datetime, regular_time: d
     # localTradedAt은 정규장 체결시각이 아니라 장외 응답 갱신시각일 수 있다.
     # 따라서 두 타임스탬프의 선후 관계가 아닌 실제 장외 시간대·날짜를 확인한다.
     hhmm = (at.hour, at.minute)
-    if period == 'AFTER_MARKET' and not (15, 30) <= hhmm < (20, 0):
+    if period == 'AFTER_MARKET' and not (15, 30) <= hhmm <= (20, 0):
         return None
     if period in ('BEFORE_MARKET', 'PRE_MARKET') and not (8, 0) <= hhmm < (9, 0):
         return None
@@ -1047,9 +1047,9 @@ def _domestic_after_text(item: Quote) -> str:
     arrow = '▲' if aft.percent > 0.00001 else ('▽' if aft.percent < -0.00001 else '－')
     status = '거래 중' if aft.status == 'OPEN' else ('마감' if aft.status == 'CLOSE' else '상태 미확인')
     exchange = 'NXT' if aft.exchange == 'NXT' else '시간외(거래소 미확인)'
-    session = '애프터(장후)' if aft.session == '장후' else '프리(장전)'
-    return (f'   └ {exchange} {session} {_formatted_price(aft.price, item.stock.currency)} '
-            f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
+    session_label = '애프터' if aft.session == '장후' else '프리'
+    return (f'   └ {exchange} {aft.session} {_formatted_price(aft.price, item.stock.currency)} '
+            f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status} · {session_label}')
 
 
 def _us_extended_text(item: Quote) -> str:
