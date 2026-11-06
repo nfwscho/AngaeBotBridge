@@ -9,6 +9,8 @@
  * 7. Android 기기/네트워크 없이 순수 Kotlin 테스트를 수행한다.
  * 8. v0.4.11 개인메모·일정/부동산/금융투자 소스 모듈과 기존 표시가 함께 유지됨을 검사한다.
  * 9. 날씨 응답은 별도 core/app/weather.py로 표시한다.
+ * 10. 기본 답장에서는 모듈·파일 경로를 생략하고 앙개야 모듈 단독 응답에서만 이전 모듈 상세를 복원한다.
+ * 11. 섹터 시세 core.sector_watchlists가 Python 연결로 잘못 표시되지 않는지, 방/발신자별 최근 모듈 격리/24시간 만료를 확인한다.
  */
 package kr.co.angaebot.bridge
 
@@ -48,4 +50,26 @@ class ModuleSourceFormatterTest {
         assertTrue(ModuleSourceFormatter.statusDeployment(null,false).contains("미확인"))
         assertTrue(ModuleSourceFormatter.statusDeployment(PythonOutcome.Failure("연결 없음"),true).contains("미확인"))
     }
+    @Test fun hiddenByDefaultInBridgeButDetailedApiRetained() {
+        val text="📊 반도체 19종목 시세"
+        assertEquals(text,ModuleSourceFormatter.append(text,"core.sector_watchlists",showDetails=false))
+        assertTrue(ModuleSourceFormatter.append(text,"core.sector_watchlists").contains("core/app/sector_watchlists.py"))
+        assertTrue(ModuleSourceFormatter.onDemandDetail("core.sector_watchlists").contains("🧩 기능 모듈: 주식 섹터 시세"))
+        assertTrue(ModuleSourceFormatter.onDemandDetail("core.sector_watchlists").contains("core/app/sector_watchlists.py"))
+        assertTrue(ModuleSourceFormatter.onDemandDetail(null).contains("이전 응답"))
+        assertTrue(ModuleSourceFormatter.append("원문","core.market",showDetails=false)=="원문")
+    }
+    @Test fun sourceHistoryScopedAndExpiresWithoutBodyPersistence() {
+        var now=100L
+        val history=LastModuleTracker(clockMs={now})
+        history.remember("방","나","core.sector_watchlists")
+        assertEquals("core.sector_watchlists",history.last("방","나"))
+        assertEquals(null,history.last("다른방","나"))
+        assertEquals(null,history.last("방","다른사람"))
+        now+=86_399_999L
+        assertEquals("core.sector_watchlists",history.last("방","나"))
+        now+=1L
+        assertEquals(null,history.last("방","나"))
+    }
+
 }

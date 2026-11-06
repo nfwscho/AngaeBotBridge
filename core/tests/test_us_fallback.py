@@ -12,6 +12,7 @@
 10. HTTP 요청 응답 크기/타임아웃과 무료 제공자 실패에 대한 요청 예절을 검증한다.
 11. 환경 변수/키/운영 SQLite/실제 네트워크 요청을 사용하지 않고 응답 모의 객체로만 검사한다.
 12. 기존 계산·질문·번호 선택·배터리·로그/DB/자동응답 경로에 영향이 없는지 전체 회귀 테스트와 함께 검증한다.
+13. 기존 Yahoo 정규장 단일 호출 검증은 장외 조회를 비활성화한 경로에서 그대로 검사하며, 장외 프리/애프터 HTTP 호출은 별도 전용 회귀 테스트가 검증한다.
 """
 from __future__ import annotations
 
@@ -63,7 +64,10 @@ class UsFallbackTests(unittest.TestCase):
         def opener(req,timeout):
             urls.append(req.full_url)
             return Response(json.dumps(yahoo(stock)).encode())
-        q=fetch_quote(stock,opener=opener,now=NOW)
+        # 이 기존 테스트는 정규장 시세와 기존 1회 요청 계약만 검증한다.
+        # 장외 추가 조회는 test_extended_sessions에서 실제 추가 호출과 응답까지 검증한다.
+        with patch('app.extended_sessions.should_fetch', return_value=False):
+            q=fetch_quote(stock,opener=opener,now=NOW)
         self.assertEqual(q.price,785)
         self.assertEqual(len(urls),1)
         self.assertTrue(urls[0].startswith('https://query1.finance.yahoo.com'))

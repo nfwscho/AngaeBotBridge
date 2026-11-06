@@ -146,6 +146,7 @@ class WeatherAPITests(unittest.TestCase):
         with patch("app.weather._get_json", return_value=sample_forecast()):
             week = self.post("경로 날씨 3").json()
         self.assertIn("7일 예보", week["reply"])
+        self.assertIn("날씨 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 00").json()["reply"])
 

@@ -41,6 +41,14 @@
  * 43. 부 매매/시세/전세/월세/지역 단축 조회를 '실거래' Python 명령에 연결하고 부 메뉴·번호·개인 기록을 보존한다.
  * 44. 지정된 부동산 동사 외의 일반 문장은 기존대로 무시하고 별도 임의 명령을 실행하지 않는다.
  * 45. 기존 로컬 도움말은 8줄로 유지하면서 부 3~5 실거래 기능을 안내한다.
+ * 46. 메모리7 직접 명령·반도체 개인그룹·주식 홈의 5개 시세에서는 99 상세 전환을 지원하고 주 1 99/주 2 99 등 안전한 번호 경로를 전달한다.
+ * 47. 주식 메뉴를 8개로 재정렬하면서 사용자 그룹 9/10번째 분석·0 이전/00 홈·8줄 로컬 도움말·인증/로그를 유지한다.
+ * 48. 주식 1~5 고정 시세의 1~19 분석/99 상세를 경로·활성 메뉴 입력에서 지원하고 구형 97/98 파싱·1~10/00 및 일상 숫자 채팅 거부를 보존한다.
+ * 49. 주 1/2/3/4/5 시세에서 전체 19/10/13/19/5종목을 한 번에 표시하고 섹터에 한해 1~19 분석·99 상세를 허용하며 구형 97/98 인식은 유지한다.
+ * 50. '앙개야 모듈'은 기존 접두어 인증을 사용하는 정확한 로컬 조회 명령으로, 다른 방의 답장 모듈이나 Python 토큰은 노출하지 않는다.
+ * 51. 기존 도움말 8줄·주 분·1~10 다른 메뉴·AI OFF/로그/숫자 게이트는 보존한다.
+ * 52. 주식홈 1 반도체주19·2 미국시총10·3 AI·4 반도체기자재·5 데센·6 최근·7 관심목록·8 분석 새 번호 체계를 8줄 로컬 도움말에 반영한다.
+ * 53. 과거 메모리7/반도체 개인그룹의 직접 명령과 인증·로그·종목 번호·다른 섹터 단축명령은 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -62,7 +70,7 @@ object CommandParser {
         val segments = message.split(Regex("\\s+"))
         val index = segments.firstOrNull().orEmpty()
         val numericPath = segments.size in 2..6 &&
-            segments.drop(1).all { it.matches(Regex("(?:00|10|[0-9])")) }
+            segments.drop(1).all { it.matches(Regex("(?:1[1-9]|97|98|99|00|10|[0-9])")) }
         if (message != prefix) {
             val root = when (index) {
                 "앙" -> "홈"
@@ -112,7 +120,7 @@ object CommandParser {
             val stockArgument = message.substring(1).trim()
             if (stockArgument.isEmpty()) return ParseResult.Command("주식", "메뉴")
             val parts = stockArgument.split(Regex("\\s+"))
-            if (parts.size in 1..5 && parts.all { it.matches(Regex("(?:00|10|[0-9])")) }) {
+            if (parts.size in 1..5 && parts.all { it.matches(Regex("(?:1[1-9]|97|98|99|00|10|[0-9])")) }) {
                 return ParseResult.Command("메뉴", "경로 주식 ${parts.joinToString(" ")}")
             }
             val action = stockArgument.takeWhile { !it.isWhitespace() }
@@ -135,7 +143,7 @@ object CommandParser {
         val argument = commandText.substringAfter(' ', "").trim()
         if (command == "메뉴" && argument.isEmpty()) return ParseResult.Command("메뉴", "홈")
         if (command == "메뉴" && argument.split(Regex("\\s+")).let { parts ->
-                parts.size in 1..5 && parts.all { it.matches(Regex("(?:00|10|[0-9])")) }
+                parts.size in 1..5 && parts.all { it.matches(Regex("(?:1[1-9]|97|98|99|00|10|[0-9])")) }
             }) return ParseResult.Command("메뉴", "경로 홈 $argument")
         return ParseResult.Command(command, argument)
     }
@@ -150,9 +158,9 @@ object LocalCommandExecutor {
             "부(부동산) · 금(금융·투자) · 개(개인 메모·일정)",
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
-            "주 2 메모리7 시세 · 주 분 삼성전자 분석",
+            "주 1 반도체주 · 2 미국시총10 · 3 AI · 4 반도체기자재 · 5 데센",
             "앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울",
-            "1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능"
+            "주 6 최근 · 7 관심목록 · 8 분석 · 주 분 삼성전자 · 1~19 · 99 · 0/00 · 앙개야 모듈"
         ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
     }

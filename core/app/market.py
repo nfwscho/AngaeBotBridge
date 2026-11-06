@@ -54,6 +54,55 @@
 47. 한국 네이버 KRX/NXT·일본 키오시아·기존 메모리7/관심그룹·숫자 메뉴·배터리·전체 SQLite·AI/운영 로그는 보존한다.
 48. 조회 실패가 전부인 경우에는 금액을 만들거나 직전 시세를 실시간인 양 표시하지 않고 종전 조회 불가를 유지한다.
 26. 카카오톡 간결 시세 목록은 상승 🔺 +, 하락 ▽ -, 보합 ➖로 구분하며 기존 가격·등락률·출처·로그는 유지한다.
+49. 미국 프리(04~09:30 ET)·정규(09:30~16 ET)·애프터(16~20 ET)를 Yahoo 1분봉/나스닥 보조 시세로 구분한다.
+50. 미국 장외 시세는 당일 거래일·시간·USD·실거래량(야후) 및 명시된 세션(나스닥)을 검증하고 정규 시세와 분리한다.
+51. 미국 장외 보조 조회 실패는 기존 무료 정규장 공급자 폴백·시세·오류 로그에 영향을 주지 않는다.
+52. 네이버 한국 장외 체결은 정규장 응답 갱신시각과 별도로 검증해 프리/애프터 가격 누락을 방지한다.
+53. 한국 KRX 장외 중 OPEN 응답을 KRX 본장 실시간으로 잘못 표기하지 않고 거래소 미확인 시 추정하지 않는다.
+54. 메모리7/관심그룹 간결 목록과 단일 종목 상세에 프리·정규·애프터 시세를 명시한다.
+55. 기존 DB·명령·UI·AI OFF·Android 배터리·인증·기존 운영 로그/시세 출처 표기를 유지한다.
+56. 2026-11-06 한국 네이버 afterMarket closePrice가 시간외 체결가로 바뀌는 경우를 확인하고 정규장 종가로 오표기하지 않는다.
+57. 한국 시간외 구간에서는 별도 Yahoo 정규장 종가를 시각·거래일 검증해 성공한 경우에만 정규 기준가로 표시한다.
+58. 미국 장외는 네이버 해외 폴링/기본시세를 추가 조회하고 Yahoo 분봉·Nasdaq 공개 시세를 종전 장애 보조로 유지한다.
+59. 미국 나스닥 SKHY ADR은 장외 전용 네이버 공급자에서만 허용하고 기존 해외 확정 일봉 검증 허용목록은 변경하지 않는다.
+60. 운영 로그에는 공급자별 조회 실패/조회 성공 진단 코드를 추가하며 기존 US_QUOTE_FAILED 등의 로그를 보존한다.
+61. 장외 미제공·정규장 종가 미확인 시 값을 꾸미지 않고 명시적으로 미확인을 출력한다.
+62. Yahoo 정규 종가 불일치/장애 시 네이버 KRX 당일 일봉 종가를 독립 검증하고 전일 기준가와 비교해 복구한다.
+63. 국내 네이버 root marketSessionType이 프리/애프터인데 overPriceInfo가 없어도 시각·상태 확인된 closePrice는 장외로만 표시한다.
+64. 국내 프리장에서는 직전 정규장 종가의 독립 검증만 허용하고 당일 정규장 값은 아직 없는 것으로 처리한다.
+65. 메모리7·관심그룹 기본 시세는 종목당 정확히 한 줄로 가격을 표시하고 프리/애프터 중 확인된 해당 세션 체결가를 대표값으로 선택한다.
+66. 국내 애프터 등락률은 당일 정규장 종가, 국내 프리는 직전 정규장 종가를 기준으로 계산하고 전일 종가 대비 변동률과 구별한다.
+67. 국내 기준 정규 종가 검증에 실패하면 장외 가격은 표시하지만 상승/하락률은 임의 계산하지 않고 기준가 미확인으로 표시한다.
+68. 미국 장외 시세는 세션과 현지 거래일을 확인하고 프리/애프터 최신 체결값만 대표가격으로 사용하며 지연·실시간을 보증하지 않는다.
+69. 메모리7 시세표의 99번 상세보기는 기존 원본 Quote/시각·공급자·정규장/장외 가격을 여러 줄로 보여주고 간략 화면에는 반복하지 않는다.
+70. 기존 1~8 번호 분석/메뉴/사용자 그룹/30초 기본 캐시 및 로그·DB·Android 하단 기능모듈·배터리·AI OFF를 보존한다.
+71. 간결 시세 출처 행은 활성 프리/애프터 공급자의 실제 출처를 표시해 정규장 Yahoo 공급자와 혼동하지 않는다.
+72. 구형 네이버 본장(15:30 확정)가와 별도 시간외 필드를 받는 경우도 현재 거래시간에는 장외 대표값과 정규장대비 상승률을 표시한다.
+73. 시장별 간략 출처 및 최근 거래시각은 실제 선택된 국내 프리/애프터 체결과 미국 세션 체결 시각을 기준으로 표시한다.
+74. 국내 장외 데이터는 현재 KST 거래일과 체결 날짜가 일치할 때만 대표 가격으로 사용해 이전 거래일 값을 당일 프리/애프터로 오표시하지 않는다.
+75. 메모리7과 관심그룹의 한 줄 간략 시세에서 프리·애프터 명칭을 P/A 단일 문자로 표시하여 카카오톡 자동 줄바꿈을 최소화한다.
+76. 메모리7 간략 요약은 공급자 설명을 상세보기로 이동하고 시장별 최신 현지시각 한 줄 및 짧은 주의문만 남겨 카카오톡 전체보기 접힘을 방지한다.
+77. 메모리7 본문 99번 상세보기/상세 99번 간략보기는 기존 1~8 종목분석·0 이전·5분 세션을 보존한다.
+78. 미국 정규장 도중에는 이전 프리 체결가가 존재해도 현재 대표가격을 프리로 오표시하지 않는다.
+79. 종목별 지연 거래일 꼬리표는 최신 검증 프리/애프터 시각을 기준으로 부착해 장외 당일가를 전일가로 잘못 표시하지 않는다.
+80. 메모리7/관심그룹 간략 시세에서 상승 🔺+/하락 ▽-/보합 ➖의 화살표 뒤 공백 한 글자를 제거하여 좁은 카카오톡 말풍선의 P/A 줄바꿈을 방지하고 상세 시세 형식은 유지한다.
+81. 메모리7 기본 간략 시세는 99번으로 상세보기로 이동한다. 99는 종목 번호 1~10 및 기존 0 이전/00 홈과 절대 충돌하지 않는다.
+82. 관심그룹도 공통 한 줄 시각 요약을 사용하고 상세 화면에만 시세 출처와 세션별 원문을 제공한다.
+83. 미국 SPCX(스페이스X) 신규 상장 티커는 검증된 나스닥 시세 공급자에 등록하고 NYSE LLY는 해외 프리 공급자의 LLY.N을 이용한다.
+84. 정규장 데이터가 Yahoo 외 Nasdaq/일봉 보조 공급자로 복구된 종목도 프리·애프터 거래시간에는 Yahoo 검증 분봉 조회를 추가 시도한다.
+85. 어떤 공급자도 검증된 장외 체결을 제공하지 않으면 P/A 및 시간외 가격을 임의 생성하지 않고 원래 정규장 가격과 오류 로그를 유지한다.
+86. 각 공급자별 조회 시간·응답 크기·인증·기존 DB/메뉴/로그·5분 그룹선택·Android Bridge 출력은 변경하지 않는다.
+87. 네이버 미국 장외 코드는 나스닥은 .O, NYSE는 검증된 bare 티커로 요청하며 불완전한 정규 시세를 프리 가격으로 오사용하지 않는다.
+88. 네이버·Yahoo 장외 데이터가 비어 있어도 Nasdaq secondaryData는 정규 primaryData 변동률 정보와 분리하여 검증된 정규 Quote 기준으로 재조회할 수 있다.
+89. 미국 NYSE·Nasdaq 프리/애프터 체결은 실제 당일 체결시각과 통화·티커·세션을 검증한 경우만 적용하며 기존 오류 로그와 인증·DB·메뉴는 유지한다.
+90. 금요일 한국 장후 20:00 이후 자정·토·일에도 마지막 한국 거래일의 15:30 정규종가를 기준으로 A 등락률을 복구한다.
+91. 기존 네이버 국내 afterMarket 검증·전일 종가·야후·KRX 일봉 보조 경로·메모리7/그룹 한 줄 UI·로그·선택 상태를 유지한다.
+92. 다음 평일 08:00부터는 전 거래일 장후 체결을 현재 시장의 A 대표가격으로 표시하지 않는 보수적인 만료 규칙을 적용한다.
+93. 별도 정규장 종가 출처가 실패하면 상승/하락률을 만들어내지 않으며 장외 실체결 A 여부와 기준가 미확인을 명확히 표시한다.
+94. 2026-11-06 외부 실제 API 대조에서 Daum 일별 시세는 삼성전자 188,700원·SK하이닉스 1,132,000원 정규장 종가와 일치, Daum 현재가는 19:59 시간외 최종가격으로 확인했다.
+95. Yahoo 정규장 종가가 불가하면 Daum *일별 확정 종가*의 날짜/종목코드/전일 종가/변동률을 검증해 보완하고, 다음 단계 기존 네이버 KRX 일봉의 필드 검증은 삭제하지 않는다.
+96. 네이버 일봉 dayCandle.closePrice는 애프터 20:00 가격일 수 있으므로 명시적 정규종가+15:30 증명 없이는 기준가로 쓰지 않고, 기존 보수적인 기준가 미확인 처리를 유지한다.
+97. 0·00·99 시세 메뉴/배터리·미국 주식/종목 분석/AI·DB/.env/조회실패/기존 공급자 진단 로그는 모두 보존한다.
 """
 from __future__ import annotations
 
@@ -103,7 +152,7 @@ _NASDAQ_QUOTE = 'https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stock
 _NASDAQ_DAILY = 'https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&limit=10'
 _NAVER_US_DAILY = 'https://api.stock.naver.com/chart/foreign/item/{reuters}?periodType=dayCandle'
 # 개별 티커의 상장 거래소를 추측하지 않는다. 확인 가능한 나스닥 상장 종목만 해외 차트에 연결한다.
-_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX'})
+_NAVER_NASDAQ_SYMBOLS = frozenset({'MU','SNDK','WDC','STX','NVDA','AAPL','MSFT','GOOGL','GOOG','AMZN','META','TSLA','AVGO','INTC','AMD','ADBE','COST','NFLX','SPCX'})
 _US_TICKER_RE = re.compile(r'^[A-Z]{1,5}(?:-[A-Z])?$')
 _MARKET_LOG = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
@@ -133,6 +182,11 @@ class DomesticQuoteMetadata:
     delay_minutes: int | None
     snapshot_time: datetime | None
     after_market: AfterMarketQuote | None = None
+    market_session: str = ''
+    regular_price: float | None = None
+    regular_percent: float | None = None
+    regular_time: datetime | None = None
+    regular_source: str = ''
 
 
 @dataclass(frozen=True)
@@ -145,6 +199,7 @@ class Quote:
     fetched_at: datetime
     domestic: DomesticQuoteMetadata | None = None
     source: str = ''
+    extended: tuple = ()
 
 
 def _timezone(name: str):
@@ -309,8 +364,10 @@ def parse_nasdaq_quote(stock: Stock, payload: dict, *, now: datetime | None = No
         if abs(pct_computed - pct_published) > 0.20 or abs(pct_computed) > 1000:
             raise StockQuoteError('나스닥 가격/등락률 정합성 오류')
         local = _nasdaq_local_time(info.get('lastTradeTimestamp'), stock, now)
-        return Quote(stock, price, previous, pct_computed, local,
-                     now.astimezone(timezone(timedelta(hours=9))), source='나스닥 웹')
+        result = Quote(stock, price, previous, pct_computed, local,
+                       now.astimezone(timezone(timedelta(hours=9))), source='나스닥 웹')
+        from .extended_sessions import parse_nasdaq
+        return replace(result, extended=parse_nasdaq(stock, data, result, now=now))
     except (KeyError, TypeError, IndexError, ValueError, OverflowError) as exc:
         if isinstance(exc, StockQuoteError):
             raise
@@ -580,8 +637,12 @@ def _naver_after_market(data: dict, stock: Stock, now: datetime, regular_time: d
         return None
     if at.date() < regular_time.date():
         return None
-    if period == 'AFTER_MARKET' and at <= regular_time:
-        # 본장 마감 전에 남은 과거 시간외 값을 최신 별도 체결가로 출력하지 않는다.
+    # localTradedAt은 정규장 체결시각이 아니라 장외 응답 갱신시각일 수 있다.
+    # 따라서 두 타임스탬프의 선후 관계가 아닌 실제 장외 시간대·날짜를 확인한다.
+    hhmm = (at.hour, at.minute)
+    if period == 'AFTER_MARKET' and not (15, 40) <= hhmm <= (20, 0):
+        return None
+    if period in ('BEFORE_MARKET', 'PRE_MARKET') and not (8, 0) <= hhmm <= (8, 50):
         return None
     pct = (price / previous_close - 1) * 100
     if not math.isfinite(pct) or not -99.9 < pct < 1000:
@@ -659,12 +720,26 @@ def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None,
         raise StockQuoteError('전일가 계산 실패')
     market_status = data.get('marketStatus')
     market_status = market_status.upper() if isinstance(market_status, str) else ''
+    session_name = str(data.get('marketSessionType') or '').lower()
+    after_quote = _naver_after_market(data, stock, now, trade_time, previous)
+    # 네이버 통합 시세가 marketSessionType=afterMarket/preMarket일 때는
+    # closePrice 자체가 해당 장외 세션 가격일 수 있다. overPriceInfo 미제공 시
+    # 본장 종가로 오표시하지 않고 확인 가능한 세션 시각의 장외가로만 인식한다.
+    if after_quote is None and trade_time.weekday() < 5:
+        hhmm = (trade_time.hour, trade_time.minute)
+        if session_name in ('aftermarket', 'after_market') and (15, 40) <= hhmm <= (20, 0):
+            after_quote = AfterMarketQuote(price, pct_value, trade_time, '장후',
+                                           market_status, '거래소 미확인')
+        elif session_name in ('premarket', 'pre_market', 'beforemarket', 'before_market') and (8, 0) <= hhmm <= (8, 50):
+            after_quote = AfterMarketQuote(price, pct_value, trade_time, '장전',
+                                           market_status, '거래소 미확인')
     meta = DomesticQuoteMetadata(
         provider=provider,
         market_status=market_status,
         delay_minutes=_naver_delay_minutes(data),
         snapshot_time=snapshot_time,
-        after_market=_naver_after_market(data, stock, now, trade_time, previous))
+        after_market=after_quote,
+        market_session=session_name)
     return Quote(stock, price, previous, pct_value, trade_time,
                  now.astimezone(timezone(timedelta(hours=9))), meta)
 
@@ -912,7 +987,80 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
     """한국: 네이버 2개 → Yahoo / 일본: Yahoo → Yahoo Japan / 미국: 기존 Yahoo 2개."""
     if stock.market == '한국':
         try:
-            return fetch_naver_quote(stock, opener=opener, now=now)
+            quote = fetch_naver_quote(stock, opener=opener, now=now)
+            meta = quote.domestic
+            # afterMarket 단계의 Naver closePrice는 15:30 KRX 종가가 아닌
+            # 시간외 마지막 체결가일 수 있다. 일치하는 시간외 응답을 정규가로 표시 금지.
+            if meta is not None and meta.market_session in ('aftermarket', 'after_market',
+                                                             'premarket', 'pre_market', 'beforemarket', 'before_market'):
+                is_pre = meta.market_session in ('premarket', 'pre_market', 'beforemarket', 'before_market')
+                try:
+                    regular = fetch_yahoo_quote(stock, opener=opener, now=now)
+                    local_time = regular.market_time.astimezone(_timezone(stock.timezone_name))
+                    date_ok = ((0 < (quote.market_time.date() - local_time.date()).days <= 4)
+                               if is_pre else local_time.date() == quote.market_time.date())
+                    if date_ok and (15, 20) <= (local_time.hour, local_time.minute) <= (15, 35):
+                        meta = replace(meta, regular_price=regular.price,
+                                       regular_percent=regular.percent,
+                                       regular_time=local_time, regular_source='Yahoo Finance')
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=Yahoo',stock.ticker)
+                    else:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNVERIFIED ticker=%s reason=market_time',stock.ticker)
+                except StockQuoteError as e:
+                    _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNAVAILABLE ticker=%s reason=%s',stock.ticker,e)
+                if meta.regular_price is None and not is_pre:
+                    # 다음금융 current quote는 19:59 장외 최종가가 될 수 있으므로
+                    # 11/06 실측에서 15:30 KRX 종가가 분리되어 확인된 *일별 종가*만
+                    # 별도 출처로 사용한다. 현재의 Naver 정규가 추정은 하지 않는다.
+                    from .domestic_regular import fetch_daum_regular
+                    try:
+                        result = fetch_daum_regular(
+                            stock, quote, opener=opener,
+                            now=now or datetime.now(timezone.utc),
+                            timeout=min(FETCH_TIMEOUT, 2.5),
+                            max_bytes=MAX_RESPONSE_BYTES,
+                            user_agent=_YAHOO_USER_AGENT)
+                        if result:
+                            reg_price, reg_pct, reg_time, reg_source = result
+                            meta = replace(meta, regular_price=reg_price,
+                                           regular_percent=reg_pct,
+                                           regular_time=reg_time, regular_source=reg_source)
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=DaumDaily',
+                                             stock.ticker)
+                        else:
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAUM_UNVERIFIED ticker=%s',
+                                             stock.ticker)
+                    except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAUM_UNAVAILABLE ticker=%s reason=%s',
+                                         stock.ticker, type(e).__name__)
+                if meta.regular_price is None and not is_pre:
+                    # 기존 Naver KRX 일봉 보조 경로도 보존하되 2026 애프터장부터는
+                    # dayCandle.closePrice만으로 15:30 종가를 증명할 수 없다.
+                    from .domestic_regular import fetch_daily_regular
+                    try:
+                        result = fetch_daily_regular(stock, quote, opener=opener,
+                                                     now=now or datetime.now(timezone.utc),
+                                                     timeout=FETCH_TIMEOUT,
+                                                     max_bytes=MAX_RESPONSE_BYTES,
+                                                     user_agent=_YAHOO_USER_AGENT)
+                        if result:
+                            reg_price, reg_pct, reg_time, reg_source = result
+                            meta = replace(meta, regular_price=reg_price, regular_percent=reg_pct,
+                                           regular_time=reg_time, regular_source=reg_source)
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=NaverDaily',
+                                             stock.ticker)
+                        else:
+                            # 자료를 받았지만 거래일/종가를 검증하지 못한 경우를
+                            # 연결 실패와 구분해 운영 로그에서 원인 추적한다.
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAILY_UNVERIFIED ticker=%s after_day=%s',
+                                             stock.ticker,
+                                             meta.after_market.market_time.date()
+                                             if meta.after_market is not None else 'none')
+                    except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAILY_UNAVAILABLE ticker=%s reason=%s',
+                                         stock.ticker, type(e).__name__)
+                quote = replace(quote, domestic=meta)
+            return quote
         except StockQuoteError:
             # 네이버 장애 시 기존 Yahoo 가격을 표시하되 실시간 인증 정보가 없음을 명시.
             quote = fetch_yahoo_quote(stock, opener=opener, now=now)
@@ -929,12 +1077,70 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                 return fetch_rakuten_quote(stock, opener=opener, now=now)
     if stock.market == '미국':
         errors=[]
+        now_us = now or datetime.now(timezone.utc)
         for supplier, lookup in (('Yahoo',fetch_yahoo_quote),
                                  ('Nasdaq info',fetch_nasdaq_quote),
                                  ('Nasdaq daily',fetch_nasdaq_daily_quote),
                                  ('Naver overseas daily',fetch_naver_us_daily_quote)):
             try:
                 quote=lookup(stock,opener=opener,now=now)
+                from .extended_sessions import fetch_yahoo, session_of, should_fetch
+                # 기존 Nasdaq 일봉/보조 복구는 추가 요청 없이 유지한다.
+                # 정규장 Yahoo 성공 시에는 마감 후에도 최종 애프터를 확인할 수 있고,
+                # 나머지 공급자 복구 시에는 *실제 장외 거래시간*에만 추가 호출한다.
+                us_extended_active = bool(session_of(now_us.astimezone(_timezone(stock.timezone_name))))
+                if should_fetch(stock, now_us) and (supplier == 'Yahoo' or us_extended_active):
+                    from .extended_naver import fetch_naver_extended
+                    extra = tuple(quote.extended)
+                    us_now_local = now_us.astimezone(_timezone(stock.timezone_name))
+                    desired = session_of(us_now_local)
+                    if not desired and us_now_local.hour >= 20:
+                        desired = '애프터'
+                    if desired and not any(p.session == desired for p in extra):
+                        try:
+                            from_naver = fetch_naver_extended(
+                                stock, quote, opener=opener, now=now_us,
+                                timeout=min(FETCH_TIMEOUT, 1.8), max_bytes=MAX_RESPONSE_BYTES,
+                                user_agent=_YAHOO_USER_AGENT)
+                            extra += tuple(p for p in from_naver if p.session not in {v.session for v in extra})
+                            if from_naver:
+                                _MARKET_LOG.info('US_EXTENDED_NAVER_OK ticker=%s sessions=%s',
+                                                 stock.ticker, ','.join(p.session for p in from_naver))
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_NAVER_FAILED ticker=%s reason=%s',
+                                             stock.ticker, str(e)[:160])
+                    if desired and not any(p.session == desired for p in extra):
+                        # 정규장 소스가 Yahoo 일봉/나스닥으로 폴백했더라도 별도
+                        # Yahoo 장외 분봉의 응답은 살아 있을 수 있으므로 빠뜨리지 않는다.
+                        try:
+                            from_yahoo = fetch_yahoo(stock, quote, opener=opener, now=now_us,
+                                                     timeout=min(FETCH_TIMEOUT, 2.5), max_bytes=MAX_RESPONSE_BYTES * 4,
+                                                     user_agent=_YAHOO_USER_AGENT)
+                            extra += tuple(p for p in from_yahoo if p.session not in {v.session for v in extra})
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_YAHOO_FAILED ticker=%s reason=%s',
+                                             stock.ticker, type(e).__name__)
+                    if desired and not any(p.session == desired for p in extra) and supplier != 'Nasdaq info':
+                        # Nasdaq 정규장 primaryData가 불완전하더라도 장외 secondaryData는
+                        # 유효할 수 있다. 이미 검증된 정규 Quote를 기준으로 독립 검증한다.
+                        try:
+                            from .extended_sessions import fetch_nasdaq_extended
+                            secondary = fetch_nasdaq_extended(
+                                stock, quote, opener=opener, now=now_us,
+                                timeout=min(FETCH_TIMEOUT, 2.0),
+                                max_bytes=MAX_RESPONSE_BYTES,
+                                user_agent=_YAHOO_USER_AGENT)
+                            extra += tuple(p for p in secondary if p.session not in {v.session for v in extra})
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s',
+                                             stock.ticker, type(e).__name__)
+                    if extra:
+                        quote = replace(quote, extended=tuple(
+                            next(p for p in extra if p.session == label)
+                            for label in ('프리', '애프터') if any(p.session == label for p in extra)))
+                    elif desired:
+                        _MARKET_LOG.info('US_EXTENDED_NO_TRADE ticker=%s requested=%s',
+                                         stock.ticker, desired)
                 if errors:
                     # 기존 오류 로그를 유지하면서 어떤 대체 제공처에서 복구됐는지도 식별한다.
                     _MARKET_LOG.info('US_QUOTE_FALLBACK_OK ticker=%s source=%s previous=%s',
@@ -967,7 +1173,12 @@ def _domestic_status_label(item: Quote) -> str:
     freshness = (0 <= delta <= 180)
     server_fresh = (meta.snapshot_time is not None and
                     -30 <= (item.fetched_at - meta.snapshot_time).total_seconds() <= 180)
-    if status in ('CLOSE', 'CLOSED', 'END'):
+    if meta.market_session in ('aftermarket', 'after_market','premarket','pre_market'):
+        label = ('정규장 종가 별도 확인' if meta.regular_price is not None
+                 else '장외 최종체결가 · 정규장 종가 미확인')
+    elif meta.market_session in ('premarket', 'pre_market', 'beforemarket', 'before_market'):
+        label = '개장 전 정규장 기준가'
+    elif status in ('CLOSE', 'CLOSED', 'END'):
         label = '장마감 종가'
     elif status == 'OPEN':
         if meta.provider == '폴링' and meta.delay_minutes == 0 and freshness and server_fresh:
@@ -991,6 +1202,11 @@ def _domestic_status_text(item: Quote) -> str:
     when = item.market_time.strftime('%m/%d %H:%M:%S')
     if meta is None:
         return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
+    if meta.market_session in ('aftermarket', 'after_market', 'premarket', 'pre_market', 'beforemarket', 'before_market'):
+        if meta.regular_price is not None and meta.regular_time is not None:
+            return (f'   └ 정규장 기준 {meta.regular_time:%m/%d %H:%M} KST '
+                    f'· {meta.regular_source} 확인 · 네이버 장외 응답 {when}')
+        return f'   └ 정규장 종가 미확인 · 네이버 장외 응답 {when} · {meta.provider}'
     return f'   └ KRX {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
 
 
@@ -1001,17 +1217,63 @@ def _domestic_after_text(item: Quote) -> str:
     if aft is None:
         return ''
     when = aft.market_time.strftime('%m/%d %H:%M:%S')
-    arrow = '▲' if aft.percent > 0.00001 else ('▽' if aft.percent < -0.00001 else '－')
+    relative = _domestic_session_percent(item)
+    if relative is None:
+        change_label = '정규장 기준가 미확인'
+    else:
+        arrow = '▲' if relative > 0.00001 else ('▽' if relative < -0.00001 else '－')
+        change_label = f'{arrow}{abs(relative):.2f}% 정규장 대비'
     status = '거래 중' if aft.status == 'OPEN' else ('마감' if aft.status == 'CLOSE' else '상태 미확인')
     exchange = 'NXT' if aft.exchange == 'NXT' else '시간외(거래소 미확인)'
+    session_label = '애프터' if aft.session == '장후' else '프리'
     return (f'   └ {exchange} {aft.session} {_formatted_price(aft.price, item.stock.currency)} '
-            f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
+            f'({change_label}) · {when} · {status} · {session_label}'
+            f' · 전일 종가 대비 {aft.percent:+.2f}%')
+
+
+def _us_extended_text(item: Quote) -> str:
+    """프리/애프터를 정규가와 혼동하지 않도록 거래시각·출처와 함께 별도 행 표시."""
+    if item.stock.market != '미국' or not item.extended:
+        return ''
+    lines = []
+    for extra in item.extended:
+        arrow = '▲' if extra.percent > 0.00001 else ('▽' if extra.percent < -0.00001 else '－')
+        lines.append(f'   └ {extra.session} {_formatted_price(extra.price, item.stock.currency)} '
+                     f'({arrow}{abs(extra.percent):.2f}%) · '
+                     f'{extra.market_time:%m/%d %H:%M} ET · {extra.source} · 지연 여부 미확인')
+    return '\n'.join(lines)
+
+
+def _latest_market_time(item: Quote) -> datetime:
+    """정규장뿐 아니라 확인된 한국 시간외/미국 분봉 거래시각을 요약에 반영한다."""
+    points = [item.market_time, *(extra.market_time for extra in item.extended)]
+    if item.domestic is not None and item.domestic.after_market is not None:
+        points.append(item.domestic.after_market.market_time)
+    return max(points)
 
 
 def quote_line(item: Quote, *, source_details: bool = True) -> str:
     """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
-    body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    domestic_extra = item.stock.market == '한국' and item.domestic is not None and (
+        item.domestic.market_session in ('aftermarket', 'after_market', 'premarket', 'pre_market', 'beforemarket', 'before_market')
+        and item.domestic.after_market is not None)
+    if domestic_extra and item.domestic.regular_price is None:
+        body = f'{item.stock.name} : 정규장 종가 미확인'
+    else:
+        display_price = (item.domestic.regular_price if domestic_extra else None)
+        display_pct = (item.domestic.regular_percent if domestic_extra else None)
+        display_price = display_price if display_price is not None else item.price
+        display_pct = display_pct if display_pct is not None else item.percent
+        arrow = '▲' if display_pct > 0.00001 else ('▽' if display_pct < -0.00001 else '－')
+        body = f'{item.stock.name} : {_formatted_price(display_price, item.stock.currency)} ({arrow}{abs(display_pct):.2f}%)'
+        if domestic_extra:
+            body += ' [정규·별도 확인]'
+    if item.stock.market == '미국' and item.extended:
+        body += ' [정규]'
+        extra_us = _us_extended_text(item)
+        if extra_us:
+            body += '\n' + extra_us
     if not source_details:
         # 시간외 가격은 본장과 다른 가격이므로 기존처럼 해당 종목에 별도 표시한다.
         extra = _domestic_after_text(item) if item.stock.market == '한국' else ''
@@ -1051,38 +1313,126 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
                 provider = ('나스닥 공개 시세' if q.source == '나스닥 웹'
                             else q.source if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
                             else 'Yahoo Finance')
+                if q.extended:
+                    provider += '+장외'
                 status = ('최근 정규장 확정 종가(실시간 아님)'
                           if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
                           else '지연 여부 미확인')
             else:
                 provider = q.source or 'Yahoo Finance'
                 status = '지연 여부 미확인'
+            if region == '미국' and q.extended:
+                status += ' · 프리/애프터 별도(지연 여부 미확인)'
             if provider not in providers:
                 providers.append(provider)
             if status not in statuses:
                 statuses.append(status)
-        latest = max(q.market_time for q in region_quotes)
+        latest = max(_latest_market_time(q) for q in region_quotes)
         when = latest.strftime('%m/%d %H:%M:%S') if region == '한국' else latest.strftime('%m/%d %H:%M')
-        zone = 'KRX ' if region == '한국' else ('ET ' if region == '미국' else 'JST ')
+        zone = ('KST ' if region == '한국' and any(q.domestic and q.domestic.market_session in ('aftermarket','after_market') for q in region_quotes)
+                else 'KRX ' if region == '한국' else 'ET ' if region == '미국' else 'JST ')
         time_difference = ' (종목별 거래시각 상이)' if len({q.market_time for q in region_quotes}) > 1 else ''
         result.append(f'  {title}: {" / ".join(providers)} · {zone}{when} (최신){time_difference} · {" / ".join(statuses)}')
     return ('시세 출처 · 기준시각:', *result) if result else ()
 
 
+def _domestic_session_percent(item: Quote) -> float | None:
+    """장외 거래 당일 정규장(프리는 직전 정규장) 종가 대비. 기준가 미확인 시 None."""
+    meta = item.domestic
+    aft = meta.after_market if meta else None
+    if aft is None:
+        return None
+    reference = meta.regular_price
+    reference_time = meta.regular_time
+    if reference is None and meta.market_session not in (
+        'aftermarket', 'after_market', 'premarket', 'pre_market',
+        'beforemarket', 'before_market'
+    ):
+        # 구형 Naver 본장 응답 + 별도 overMarketPriceInfo:
+        # 실제 KRX 마감시각의 기준가격이므로 이 값만 비교 기준으로 허용한다.
+        local = item.market_time.astimezone(_timezone(item.stock.timezone_name))
+        if (15, 20) <= (local.hour, local.minute) <= (15, 35):
+            reference = item.price
+            reference_time = local
+    if reference is None or reference <= 0 or reference_time is None:
+        return None
+    if aft.session == '장후' and reference_time.date() != aft.market_time.date():
+        return None
+    if aft.session == '장전' and not (0 < (aft.market_time.date() - reference_time.date()).days <= 4):
+        return None
+    percent = (aft.price / reference - 1.0) * 100.0
+    return percent if math.isfinite(percent) and -99.9 < percent < 1000 else None
+
+
+def _display_session(item: Quote) -> tuple[float, float | None, str]:
+    """간략 화면의 대표 세션을 하나만 고른다. 원본 Quote 값은 변경하지 않는다."""
+    if item.stock.market == '한국' and item.domestic is not None:
+        meta = item.domestic
+        aft = meta.after_market
+        period = meta.market_session
+        expected = ('장후' if period in ('aftermarket', 'after_market')
+                    else '장전' if period in ('premarket', 'pre_market', 'beforemarket', 'before_market')
+                    else '')
+        if aft is not None:
+            local = item.fetched_at.astimezone(_timezone(item.stock.timezone_name))
+            clock = (local.hour, local.minute)
+            on_session_day = local.weekday() < 5 and aft.market_time.date() == local.date()
+            market_in_session = (
+                (aft.session == '장후' and (15, 40) <= clock <= (23, 59)) or
+                (aft.session == '장전' and (8, 0) <= clock < (9, 0))
+            )
+            from .domestic_regular import last_after_displayable
+            latest_after = (aft.session == '장후' and
+                            last_after_displayable(aft, now=item.fetched_at))
+            if (on_session_day or latest_after) and (expected == aft.session or market_in_session):
+                label = '애프터' if aft.session == '장후' else '프리'
+                return aft.price, _domestic_session_percent(item), label
+            # 이전 거래일 통합 응답 closePrice가 여전히 장외 가격인 경우,
+            # 그 값을 오늘 정규장 시세인 것처럼 보여주지 않는다.
+            if expected and not on_session_day:
+                if meta.regular_price is not None:
+                    return meta.regular_price, meta.regular_percent, '정규'
+                return aft.price, None, '이전 장외'
+    if item.stock.market == '미국' and item.extended:
+        from .extended_sessions import session_of
+        # 공급자의 검증된 장외체결 중 현재 현지 세션을 우선.
+        et_now = item.fetched_at.astimezone(_timezone(item.stock.timezone_name))
+        desired = session_of(et_now)
+        if not desired and et_now.weekday() < 5 and et_now.hour >= 20:
+            desired = '애프터'
+        # 장중(09:30~16:00 ET) 및 장외 이전에는 프리 기록을 대표가격으로 사용하지 않는다.
+        if desired:
+            verified = [e for e in item.extended
+                        if e.session == desired and e.market_time.date() == et_now.date()]
+            if verified:
+                chosen = max(verified, key=lambda e: e.market_time)
+                return chosen.price, chosen.percent, chosen.session
+    return item.price, item.percent, '정규'
+
+
+def _compact_price(value: float, currency: str, *, extended: bool = False) -> str:
+    if currency == 'KRW':
+        return f'{value / 10000:.1f}만' if value < 1_000_000 else f'{value / 10000:,.0f}만'
+    if currency == 'JPY':
+        return f'¥{value:,.0f}'
+    # 장외 미국 가격은 소수점까지 표시해 체결가가 변한 것을 확인할 수 있게 한다.
+    return f'\u0024{value:,.2f}' if extended or value < 500 else f'\u0024{value:,.0f}'
+
+
 def compact_quote_line(item: Quote) -> str:
-    """카카오톡 목록 전용: 가격 정밀도를 최소화하되 원본 Quote는 변경하지 않는다."""
+    """메모리7/관심그룹: 종목 하나를 반드시 한 줄로, 선택한 세션 가격만 보여준다."""
     stock = item.stock
     aliases = {'웨스턴디지털': 'WDC', '웬디': 'WDC', 'SK하이닉스': '하이닉스'}
     name = aliases.get(stock.name, stock.name)
-    if stock.currency == 'KRW':
-        price = f'{item.price / 10000:.1f}만' if item.price < 1_000_000 else f'{item.price / 10000:,.0f}만'
-    elif stock.currency == 'JPY':
-        price = f'¥{item.price:,.0f}'
-    else:
-        price = f'${item.price:,.0f}' if item.price >= 500 else f'${item.price:,.2f}'
-    arrow = '🔺' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '➖')
-    sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
-    return f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
+    value, change, session = _display_session(item)
+    price = _compact_price(value, stock.currency, extended=(session != '정규'))
+    suffix = ' P' if session == '프리' else (' A' if session == '애프터' else '')
+    if change is None:
+        # 정규장 기준가 없이 전일비 하락을 '장후 하락'으로 오표시하지 않는다.
+        return f'{name} {price}{suffix} 기준가?'
+    arrow = '🔺' if change > 0.00001 else ('▽' if change < -0.00001 else '➖')
+    sign = '+' if change > 0.00001 else ('-' if change < -0.00001 else '')
+    return f'{name} {price} {arrow}{sign}{abs(change):.2f}%{suffix}'
 
 
 def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
@@ -1095,7 +1445,19 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
         providers = []
         for q in items:
             if region == '한국':
-                source = '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일') else (q.domestic.provider if q.domestic else '야후')
+                _selected_price, _selected_change, selected_session = _display_session(q)
+                source = ('네이버·장외 통합' if selected_session in ('프리', '애프터')
+                          else '네이버·KRX' if q.domestic and q.domestic.provider in ('폴링', '모바일')
+                          else (q.domestic.provider if q.domestic else '야후'))
+            elif region == '미국' and q.extended:
+                active_price, _active_percent, active_session = _display_session(q)
+                active = next((entry for entry in q.extended
+                               if entry.session == active_session and entry.price == active_price), None)
+                if active is not None:
+                    source = active.source.replace('Yahoo 1분봉', '야후 장외').replace(
+                        'Yahoo 메타', '야후 장외')
+                else:
+                    source = q.source or '야후'
             elif q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가'):
                 source = '나스닥 종가' if q.source.startswith('나스닥') else '네이버 종가'
             elif q.source == '나스닥 웹':
@@ -1105,22 +1467,54 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
                 source = source.replace('Yahoo Finance', '야후')
             if source not in providers:
                 providers.append(source)
-        latest = max(q.market_time for q in items)
+        latest = max(_latest_market_time(q) for q in items)
         zone = 'ET' if region == '미국' else ('JST' if region == '일본' else 'KST')
         line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M} {zone}'
         if len({q.market_time for q in items}) > 1:
             line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
             line += ' · 확정 종가'
+        if region == '한국' and any(q.domestic and q.domestic.after_market for q in items):
+            line += (' · 장외 별도/정규 종가 검증'
+                     if all(_domestic_session_percent(q) is not None
+                            for q in items if q.domestic and q.domestic.after_market)
+                     else ' · 장외 시세/일부 정규 종가 미확인')
+        if region == '미국' and any(q.extended for q in items):
+            line += ' · 장외 별도·지연 미확인'
+        if region == '미국' and any(not q.extended for q in items):
+            from .extended_sessions import session_of
+            if any(session_of(q.fetched_at.astimezone(_timezone(q.stock.timezone_name)))
+                   for q in items if not q.extended):
+                line += ' · 일부 장외 시세 미제공'
         lines.append(line)
     return tuple(lines)
 
 
-def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cache: bool = True) -> str:
-    """8개 결과를 고정 순서로 표시. 실패 종목은 조회 불가로 명확히 처리한다."""
+def _memory7_brief_clock(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> str:
+    """카카오톡 한 화면용 각국 현지 거래 기준시각. 출처 원문은 상세보기에서만 제공."""
+    regions = (('한국', 'KR'), ('미국', 'US'), ('일본', 'JP'))
+    points = []
+    for country, label in regions:
+        eligible = [item for item in quotes if item is not None and item.stock.market == country]
+        if eligible:
+            latest = max(_latest_market_time(item) for item in eligible)
+            points.append((label, latest.strftime('%m/%d'), latest.strftime('%H:%M')))
+    if not points:
+        return ''
+    days = {day for _label, day, _clock in points}
+    if len(days) == 1:
+        # 대부분의 동시 조회는 날짜가 같으므로 날짜를 한 번만 사용한다.
+        return f'📡 {points[0][1]} ' + ' · '.join(f'{label}{clock}' for label, _, clock in points)
+    # 혼합 거래일의 날짜는 반드시 국가마다 표기한다(하루 차이를 현재가로 오인하지 않음).
+    return '📡 ' + ' · '.join(f'{label}{day} {clock}' for label, day, clock in points)
+
+
+def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None,
+                   use_cache: bool = True, detailed: bool = False) -> str:
+    """기본 종목당 1행, 상세 메뉴는 정규/프리/애프터 가격·시각·출처·등락기준 표시."""
     global _CACHE
     started = time.monotonic()
-    if use_cache and fetcher is fetch_quote:
+    if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
             if _CACHE is not None and started - _CACHE[0] < CACHE_SECONDS:
                 return _CACHE[1]
@@ -1133,43 +1527,64 @@ def memory7_report(*, fetcher=fetch_quote, now: datetime | None = None, use_cach
 
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix='AngaeBotStock') as pool:
         quotes = list(pool.map(get_one, WATCHLIST))
-    lines = ['💾 메모리7 시세 요약']
+    lines = ['🔎 메모리7 시세 상세 보기' if detailed else '💾 메모리7 시세 요약']
     dates: dict[str, str] = {}
     success = 0
     latest_dates = {}
     for item in quotes:
         if item is not None:
-            day = item.market_time.date()
+            day = _latest_market_time(item).date()
             latest_dates[item.stock.market] = max(day, latest_dates.get(item.stock.market, day))
     for index, (stock, item) in enumerate(zip(WATCHLIST, quotes), start=1):
         if item is None:
             lines.append(f'{index}. {stock.name} : 조회 불가')
         else:
             success += 1
-            line = compact_quote_line(item)
-            if item.market_time.date() < latest_dates[stock.market]:
-                line += ' [거래일 ' + item.market_time.strftime('%m/%d') + ']'
+            line = quote_line(item, source_details=True) if detailed else compact_quote_line(item)
+            latest_trade = _latest_market_time(item)
+            if latest_trade.date() < latest_dates[stock.market]:
+                line += (' [거래일 ' + latest_trade.strftime('%m/%d') + ']' if detailed
+                         else ' (' + latest_trade.strftime('%m/%d') + ')')
             lines.append(f'{index}. {line}')
-            dates[stock.market] = item.market_time.strftime('%m/%d')
+            dates[stock.market] = latest_trade.strftime('%m/%d')
     if not success:
         raise StockQuoteError('8개 종목 시세를 가져오지 못했습니다. 시세 제공처의 접속/요청 제한을 확인하세요.')
     # 서로 다른 현지 거래일을 '오늘'이라는 단일 날짜로 오해하지 않도록 분리한다.
-    lines.append('')
-    lines.extend(compact_source_summary(quotes))
+    if detailed:
+        lines.append('')
+        lines.extend(market_source_summary(quotes))
+        lines.append('※ 장외 등락 기준: 프리=직전 정규장 종가 대비 / 애프터=당일 정규장 종가 대비')
+        lines.append('※ 한국 장외 전일비는 별도 표기되며 정규장 대비 상승률과 다를 수 있습니다.')
+    else:
+        # 원래 3개 시장의 장문 출처는 상세보기에서 보존하고 기본 화면은 1행 시각 요약만 남긴다.
+        lines.append('')
+        line = _memory7_brief_clock(quotes)
+        if line:
+            lines.append(line)
     if success < len(WATCHLIST):
-        lines.append(f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.')
-    lines.append('※ 무료·지연 가능·실시간 아님')
-    lines.append('※ 5분 내 1~8: 종목 분석')
+        lines.append((f'※ {len(WATCHLIST)-success}종목 조회 실패'
+                      if not detailed else f'※ {len(WATCHLIST)-success}종목 조회 실패. 값은 임의 보충하지 않았습니다.'))
+    lines.append('※ 무료·지연 가능·실시간 아님' if detailed else '※ 무료·지연·실시간 아님')
+    lines.append('※ 5분 내 1~8: 종목 분석' if detailed else '※ 5분 내 1~8: 분석')
+    lines.append('99. ↩ 간략보기' if detailed else '99. 🔎 상세보기')
     result = '\n'.join(lines)
-    if use_cache and fetcher is fetch_quote:
+    if use_cache and fetcher is fetch_quote and not detailed:
         with _CACHE_LOCK:
             _CACHE = (time.monotonic(), result)
     return result
 
 
 def execute_stock_command(command: str, argument: str) -> str:
-    if command == '주식' and argument.strip() == '메모리7':
-        return memory7_report()
-    if command == '메모리7' and not argument.strip():
-        return memory7_report()
-    raise StockQuoteError('사용법: 앙개야 주식 메모리7 (또는 앙개야 메모리7)')
+    """기존 메모리7 조회를 보존하고 '메모리7 상세' 읽기 전용 보기만 추가한다."""
+    mode = argument.strip()
+    if command == '주식':
+        if mode == '메모리7':
+            return memory7_report()
+        if mode in ('메모리7 상세', '상세'):
+            return memory7_report(detailed=True)
+    if command == '메모리7':
+        if not mode:
+            return memory7_report()
+        if mode == '상세':
+            return memory7_report(detailed=True)
+    raise StockQuoteError('사용법: 앙개야 주식 메모리7 / 주식 메모리7 상세')

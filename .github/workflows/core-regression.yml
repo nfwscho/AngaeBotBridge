@@ -9,6 +9,7 @@
 # 8. push 이벤트에서만 전체 CI를 수행해 기능 PR의 push/PR 중복 실행과 메일을 줄인다.
 # 9. 기능 SHA 검증과 승인된 main 병합 후 테스트, workflow_dispatch 수동 실행은 유지한다.
 # 10. S20+ MOLIT 인증키 안전 등록 스크립트를 PowerShell 7/Windows 5.1 양쪽에서 구문 검증한다.
+# 11. 주식 장외 공개 공급자 상태를 INFO-only 진단하며 네트워크 차단 시 회귀검사 결과는 영향을 받지 않는다.
 name: AngaeBot Core regression
 on:
   push:
@@ -40,6 +41,10 @@ jobs:
       - name: Run all Python Core regression tests
         working-directory: core
         run: python -m unittest discover -s tests -v
+      - name: Inspect public US pre/after-market quote providers (informational)
+        if: always()
+        continue-on-error: true
+        run: python core/scripts/probe_extended_quotes.py
 
   windows-powershell-51:
     runs-on: windows-latest

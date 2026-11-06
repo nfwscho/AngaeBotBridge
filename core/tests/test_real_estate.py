@@ -212,7 +212,10 @@ class RealEstateAPITests(unittest.TestCase):
         self.assertEqual(self.post("메뉴", "경로 부동산 1").json()["menu_active"], True)
         listing = self.post("메뉴", "선택 1").json()
         self.assertIn("실거주", listing["reply"])
-        self.assertEqual(self.post("메뉴", "선택 0").json()["menu_active"], True)
+        previous_list = self.post("메뉴", "선택 0").json()
+        self.assertTrue(previous_list["menu_active"])
+        self.assertIn("최근 메모", previous_list["reply"])
+        self.assertIn("부동산 메뉴", self.post("메뉴", "선택 0").json()["reply"])
         self.assertIn("메인 메뉴", self.post("메뉴", "선택 0").json()["reply"])
         self.assertEqual(self.post("메뉴", "선택 00").json()["menu_active"], True)
 

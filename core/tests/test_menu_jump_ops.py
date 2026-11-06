@@ -10,6 +10,7 @@
 8. 네트워크 연결·장치·서버 재시작·외부 파일 변경 없이 임시 SQLite DB와 mock만 사용한다.
 9. 설정 메뉴의 8번 도움말을 기존 1~7 항목과 함께 읽기 전용 회귀 검증한다.
 10. v0.7.1 홈 설정 경로는 10, 날씨는 8로 변경하고 직접 설 경로·기존 통계 조회를 보존한다.
+11. 주식 1번 19종목 반도체주와 7번 관심목록 속 기존 메모리7을 구분하며 여러 단계 종목 분석·중간 HTTP 생략·dedup을 유지한다.
 """
 from __future__ import annotations
 
@@ -49,9 +50,9 @@ class MenuJumpCoreTests(unittest.TestCase):
                                       "room": room, "sender": sender})
 
     def test_direct_jump_single_then_numeric_selection_still_works(self):
-        with patch("app.main.execute_stock_command", return_value="메모리7 시세 표") as quote:
-            result = self.post("경로 주식 2").json()
-            self.assertEqual(result["reply"], "메모리7 시세 표")
+        with patch("app.main.sector_report", return_value="📊 반도체주 시세 (19종목)") as quote:
+            result = self.post("경로 주식 1").json()
+            self.assertEqual(result["reply"], "📊 반도체주 시세 (19종목)")
             self.assertTrue(result["menu_active"])
             quote.assert_called_once()
         with patch("app.main.fetch_history") as history, patch(
@@ -62,7 +63,7 @@ class MenuJumpCoreTests(unittest.TestCase):
             self.assertEqual(history.call_args.args[0].ticker, "000660.KS")
 
     def test_direct_jump_two_and_three_levels_skip_quote_fetch(self):
-        for route in ("경로 주식 2 2", "경로 홈 1 2 2", "경로 주식 5 1 2"):
+        for route in ("경로 주식 1 2", "경로 홈 1 1 2", "경로 주식 7 1 2"):
             with self.subTest(route=route), patch(
                 "app.main.execute_stock_command", side_effect=AssertionError("intermediate quote called")
             ), patch("app.main.fetch_history") as history, patch(
@@ -70,7 +71,7 @@ class MenuJumpCoreTests(unittest.TestCase):
                 answer = self.post(route).json()
                 self.assertTrue(answer["ok"], answer)
                 self.assertEqual(answer["reply"], "SK하이닉스 분석")
-                self.assertFalse(answer["menu_active"])
+                self.assertTrue(answer["menu_active"])  # 0은 바로 이전 시세/그룹 목록으로 복귀
                 self.assertEqual(history.call_args.args[0].ticker, "000660.KS")
 
     def test_jump_to_nested_menu_and_back(self):
@@ -96,6 +97,7 @@ class MenuJumpCoreTests(unittest.TestCase):
         self.assertNotIn("타인방", report["reply"])
         self.assertNotIn("타인", report["reply"])
         self.assertNotIn("경로 주식 6", report["reply"])
+        self.assertIn("설정·운영 메뉴", self.post("선택 0").json()["reply"])
         self.assertIn("메인 메뉴", self.post("선택 0").json()["reply"])
 
     def test_settings_subsections_readonly(self):
@@ -114,7 +116,7 @@ class MenuJumpCoreTests(unittest.TestCase):
     def test_jump_rejects_invalid_path_and_other_scope(self):
         self.assertFalse(self.post("경로 주식 11").json()["ok"])
         self.assertFalse(self.post("경로 주식 2 12").json()["ok"])
-        self.assertFalse(self.post("경로 주식 2 2 2").json()["ok"])
+        self.assertFalse(self.post("경로 주식 1 2 2").json()["ok"])
         self.assertFalse(self.post("경로 주식 1 1 1 1 1 1").json()["ok"])
         self.post("홈")
         self.assertFalse(self.post("선택 1", sender="다른사람").json()["ok"])
@@ -123,8 +125,8 @@ class MenuJumpCoreTests(unittest.TestCase):
         request_id = "menujump_duplicate_request_001"
         with patch("app.main.fetch_history") as history, patch(
                 "app.main.individual_report", return_value="분석"):
-            first = self.post("경로 주식 2 2", request_id=request_id).json()
-            second = self.post("경로 주식 2 2", request_id=request_id).json()
+            first = self.post("경로 주식 1 2", request_id=request_id).json()
+            second = self.post("경로 주식 1 2", request_id=request_id).json()
         self.assertTrue(first["ok"])
         self.assertTrue(second["duplicate"])
         self.assertEqual(history.call_count, 1)

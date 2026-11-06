@@ -24,10 +24,18 @@
  * 22. 주식 전용 숫자 게이트를 통합 메뉴 게이트로 활용하며 앙/주/민/요/여/종/영을 같은 인증·로그 경로로 처리한다.
  * 23. 상/도는 기존 로컬 상태·도움말로 처리하고 일반 카톡 문장 및 비허용 방·발신자는 그대로 차단한다.
  * 24. Core menu_active 확인과 RemoteInput 전송 요청 후에만 숫자 메뉴를 열고 기존 세션 제한을 보존한다.
- * 25. v0.4.9 모든 답장과 기존 S20+ 배터리 사이에 실제 담당 모듈명·파일 경로를 표시한다.
+ * 25. v0.4.9 기존 담당 모듈 식별과 경로 기록을 유지하되 기본 카카오톡 화면에는 숨기고 '앙개야 모듈'로 직전 경로를 한 번 조회한다.
  * 26. 로컬 상 명령의 기존 본문에 인증 Core health의 실제 배포 브랜치/커밋을 덧붙인다.
  * 27. Core OFF/장애/기록 누락 시 미확인 표시, GitHub main을 배포 브랜치라고 추정하지 않는다.
  * 28. 기존 RECEIVE/COMMAND/PYTHON/REPLY 로그·SQLite·RemoteInput·인증·AI OFF·UI·배터리 유지.
+ * 29. 모든 일반 답장의 두 줄 모듈/파일경로 자동 노출을 제거하되 기존 소스 식별·jobs/events·SQLite의 원본 로그는 보존한다.
+ * 30. '앙개야 모듈' 명시 조회에 한해 동일한 방/발신자의 직전 성공적으로 전송 요청한 답장의 실제 모듈·경로를 출력한다.
+ * 31. 모듈 조회만으로 기존 주식 5분 숫자 선택 세션을 닫지 않고 다른 방/발신자에게 이력을 공개하지 않는다.
+ * 32. 짧은 🔋/⚡ 잔량만 응답 마지막 한 줄에 표시하고 ACTION_BATTERY_CHANGED 상태 판정/오류·20% 알림을 유지한다.
+ * 33. 고정 섹터 13/19/5종목의 간략보기에서만 99 상세보기와 배터리 잔량을 같은 줄에 합쳐 시각 줄 다음 1줄로 완료한다.
+ * 34. 종목별 1~19 분석, 99 상세, 다른 메뉴/오류/모듈 조회에는 기존 배터리 분리 표기를 유지한다.
+ * 35. 개인 '반도체' 그룹과 미국시총10 등 core.watchlists/core.market의 간략 시세도 99 뒤 배터리를 한 줄로 합치고 정규장·프리/애프터 상세는 원본 유지한다.
+ * 36. 메뉴·오류·일반 답장에는 같은 줄 배터리를 붙이지 않으며 해당 응답의 정확한 모듈 식별과 작업 로그를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -43,6 +51,7 @@ class KakaoNotificationListener : NotificationListenerService() {
     private lateinit var logger: LogRepository
     private lateinit var pythonConfig: PythonBridgeConfig
     private val menuGate = MenuSelectionGate()
+    private val lastModules = LastModuleTracker()
 
     override fun onCreate() {
         super.onCreate()
@@ -104,8 +113,11 @@ class KakaoNotificationListener : NotificationListenerService() {
                 logger.log("INFO", "IGNORE_PREFIX", "호출어 없음", message.room, message.sender)
                 return
             }
-            // 메뉴가 열린 상태에서 다른 명령으로 전환하면 기존 번호 선택을 즉시 무효화한다.
-            if (numericSelection == null && !(parsed.name == "주식" && parsed.argument == "메뉴")) {
+            val isModuleLookup = parsed.name == "모듈" && parsed.argument.isBlank()
+            // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
+            // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
+            if (numericSelection == null && !isModuleLookup &&
+                !(parsed.name == "주식" && parsed.argument == "메뉴")) {
                 menuGate.setActive(message.room, message.sender, false)
             }
             val identity = "${sbn.key}|${message.room}|${message.sender}|${message.messageTime}|${message.text}"
@@ -122,7 +134,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             logger.log("INFO", "COMMAND", "command=${parsed.name} arg=${parsed.argument}", message.room, message.sender)
             // 명시적으로 켠 자연어 모드에서만 미등록 명령을 AI 질문으로 전달한다.
             // 기존 로컬 명령 및 기존 Python 3개 명령의 우선순위는 그대로 보존한다.
-            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help")
+            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help") || isModuleLookup
             val explicitPython = parsed.name in PythonBridgeClient.supportedCommands
             val freeform = if (!isLocal && !explicitPython) {
                 try { val p = pythonConfig.load(); p.enabled && p.freeformEnabled } catch (_: Exception) { false }
@@ -133,7 +145,10 @@ class KakaoNotificationListener : NotificationListenerService() {
             } else parsed.argument
             var nextMenuActive = false
             var sourceModule = ModuleSourceFormatter.localCommandSource(parsed.name)
-            val response = if (explicitPython || freeform) {
+            val response = if (isModuleLookup) {
+                // 사용자가 명시한 경우에만 직전 화면 출처를 표시. 가격·본문은 저장하지 않음.
+                ModuleSourceFormatter.onDemandDetail(lastModules.last(message.room, message.sender))
+            } else if (explicitPython || freeform) {
                 try {
                     val p = pythonConfig.load()
                     if (!p.enabled) {
@@ -185,12 +200,25 @@ class KakaoNotificationListener : NotificationListenerService() {
                 return
             }
             // 실제로 전송할 답장에만 배터리 정보를 추가해 기존 Python/로컬 명령 결과를 수정하지 않는다.
-            val replyWithSource = ModuleSourceFormatter.append(response, sourceModule)
-            val replyWithBattery = BatteryStatusReporter.append(this, replyWithSource)
+            val replyWithSource = ModuleSourceFormatter.append(response, sourceModule, showDetails = false)
+            // 고정 주식 섹터 간략 시세만 시각/99+배터리 두 줄로 출력한다.
+            // 상세보기/오류/타 메뉴의 기존 배터리 단독 줄은 변경하지 않는다.
+            val inlineSectorBattery =
+                response.startsWith("📊 ") &&
+                response.trimEnd().endsWith("99. 🔎 상세보기") &&
+                (sourceModule == "core.sector_watchlists" ||
+                 sourceModule == "core.watchlists" ||
+                 sourceModule == "core.market")
+            val replyWithBattery = BatteryStatusReporter.append(
+                this, replyWithSource, inlineSectorFooter = inlineSectorBattery)
             logger.log("INFO", "REPLY_ATTEMPT", replyWithBattery, message.room, message.sender)
             when (val outcome = ReplyManager.reply(this, sbn.notification, replyWithBattery)) {
                 ReplyOutcome.Requested -> {
                     logger.log("INFO", "REPLY_REQUESTED", "PendingIntent.send 요청 성공(실제 수신 확인 불가)", message.room, message.sender)
+                    if (!isModuleLookup) {
+                        // 알림 응답 요청에 성공한 화면의 모듈 ID만 최근 이력으로 기억한다.
+                        lastModules.remember(message.room, message.sender, sourceModule)
+                    }
                     // 새 시세 요약도 다음 숫자 선택 메뉴이므로 인증 Core의 menu_active가 true일 때 열어준다.
                     // 기존 메뉴와 숫자 선택의 종료 규칙은 유지하고 외부 응답/실패는 메뉴를 열지 않는다.
                     if ((parsed.name == "주식" && parsed.argument == "메뉴") || parsed.name == "메뉴" || nextMenuActive || numericSelection != null) {

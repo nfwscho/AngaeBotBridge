@@ -6,6 +6,9 @@
  * 4. 잘못된 배터리 값이 오면 숫자를 날조하지 않고 '확인 불가'를 출력한다.
  * 5. 원래 주식 분석/메뉴/오류 답장 본문을 그대로 보존하고 맨 아래에 배터리 상태를 추가한다.
  * 6. 기존 Kotlin 단축어/번호 선택/권한·로그·UI 기능은 그대로 유지한다.
+ * 7. 새 기본 한 줄 🔋/⚡ 표시가 충전 여부에 따라 바뀌고 모든 퍼센트/저전력 경계가 원본 상세 푸터와 동일함을 확인한다.
+ * 8. 기존 footer/append 상세 배터리 표시 API 테스트는 하나도 제거하지 않고 원본 반환 문자열도 유지한다.
+ * 9. 섹터 간략보기 99 상세보기 뒤에 🔋/⚡를 같은 줄에 붙이고 일반 오류·상세보기는 별도 배터리 줄을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -42,4 +45,32 @@ class BatteryStatusFormatterTest {
     @Test fun unknownBatteryState() {
         assertEquals("🔋 S20+ 배터리 45% · 충전 상태 미확인", BatteryStatusFormatter.footer(45, 100, BatteryChargeState.UNKNOWN))
     }
+    @Test fun compactBatteryOnlyAndChargingIcon() {
+        assertEquals("🔋 79%", BatteryStatusFormatter.compactFooter(79, 100, BatteryChargeState.DISCHARGING))
+        assertEquals("⚡ 79%", BatteryStatusFormatter.compactFooter(79, 100, BatteryChargeState.CHARGING))
+        assertEquals("⚡ 100%", BatteryStatusFormatter.compactFooter(100, 100, BatteryChargeState.FULL))
+        assertEquals("🔋 67%", BatteryStatusFormatter.compactFooter(2, 3, BatteryChargeState.UNKNOWN))
+        assertEquals("🔋 확인 불가", BatteryStatusFormatter.compactFooter(-1, 100, BatteryChargeState.UNKNOWN))
+        assertEquals("🔋 20% ⚠️", BatteryStatusFormatter.compactFooter(20, 100, BatteryChargeState.NOT_CHARGING))
+        assertEquals("⚡ 20%", BatteryStatusFormatter.compactFooter(20, 100, BatteryChargeState.CHARGING))
+        assertEquals("메시지\n⚡ 100%", BatteryStatusFormatter.compactAppend("메시지\n", 100, 100, BatteryChargeState.FULL))
+    }
+
+    @Test fun stockCompactFooterOnSameLineOnly() {
+        val summary = "📊 반도체 및 기자재 (19종목)\n19. WDC USD 259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기"
+        val merged = BatteryStatusFormatter.appendCompactSectorFooter(summary, "⚡ 100%")
+        assertEquals("📊 반도체 및 기자재 (19종목)\n19. WDC USD 259.91 ▽-2.88%\n📡 11/06 US11:19\n99. 🔎 상세보기 ⚡ 100%", merged)
+        assertEquals(4, merged.lines().size)
+        assertEquals("99. 🔎 상세보기 ⚡ 100%", merged.lines().last())
+        val details = "🔎 반도체 및 기자재 상세 (19종목)\n99. ↩ 간략보기"
+        assertEquals(details + "\n🔋 88%",
+            BatteryStatusFormatter.appendCompactSectorFooter(details, "🔋 88%"))
+        assertEquals("⚠️ 오류\n⚡ 99%",
+            BatteryStatusFormatter.appendCompactSectorFooter("⚠️ 오류", "⚡ 99%"))
+        assertEquals("📊 다른 사용자 그룹\n99. 🔎 상세보기 🔋 50%",
+            BatteryStatusFormatter.appendCompactSectorFooter(
+                "📊 다른 사용자 그룹\n99. 🔎 상세보기", "🔋 50%"))
+    }
+
+
 }

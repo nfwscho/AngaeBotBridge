@@ -1,7 +1,7 @@
 /*
  * 앙개봇 Android Bridge v0.4.4 배터리 응답 문구 — 전체 기능 및 기존 기능 보존
  * 1. 기존 카카오톡 알림 수신, 방/발신자 허용, 자동응답 ON/OFF, 호출어, 숫자 메뉴와 분석 명령을 유지한다.
- * 2. 원래 명령의 응답 본문을 변경하지 않고 하단에 S20+ 배터리 잔량과 충전 상태만 덧붙인다.
+ * 2. 원래 명령의 응답 본문은 보존하고 기본 하단에는 🔋 잔량 또는 ⚡ 충전 아이콘만 한 줄에 표시한다. 상세 상태 문자열은 기존 footer로 보존한다.
  * 3. 배터리 백분율은 level/scale 비율로 계산하고 음수/잘못된 값은 추정하지 않고 '확인 불가' 처리한다.
  * 4. 충전 중/충전 완료/방전 중/충전 안 함/알 수 없음을 구분하여 한국어로 표시한다.
  * 5. 잔량이 20% 이하이며 실제 충전 중 또는 충전 완료가 아닐 때에만 충전을 권고한다.
@@ -10,6 +10,11 @@
  * 8. 숫자, 상태, 긴 원문 등을 외부 전송하지 않으며 기존 허용 채팅방/발신자 외에는 응답하지 않는다.
  * 9. 새 앱 권한이나 별도 네트워크 호출 없이 Android 기기의 현재 배터리 정보만 활용한다.
  * 10. 순수 Kotlin 코드이므로 단위 테스트로 응답 본문 보존, 퍼센트, 경고 경계를 검증한다.
+ * 11. Android 실제 답장에는 🔋 79%, 충전/완충 중에는 ⚡ 79% 한 줄만 붙여 공간을 절약한다.
+ * 12. 기존 footer/append의 상세 충전 상태 문자열과 배터리 오차/20% 저전력 알림은 삭제하지 않고 명시 조회·테스트용으로 보존한다.
+ * 13. 알 수 없는 잔량은 추정하지 않으며 배터리 상태 수집/RemoteInput/SQLite/운영 로그·설정·UI는 변경하지 않는다.
+ * 14. 섹터 간략 시세표의 '99. 🔎 상세보기' 뒤에는 현재 배터리 상태를 한 칸 띄워 같은 줄에 표시한다.
+ * 15. 다른 답장/상세 시세/단축명령에서는 기존 배터리 단독 줄을 그대로 유지하며 배터리 정보 수집과 상세 API는 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -34,6 +39,34 @@ object BatteryStatusFormatter {
         return "🔋 S20+ 배터리 ${percent}% · $status$warning"
     }
 
+    /** 자동응답의 한 줄 기본 배터리 표시. 충전/완충 상태는 ⚡로 구분. */
+    fun compactFooter(level: Int, scale: Int, state: BatteryChargeState): String {
+        if (level < 0 || scale <= 0 || level > scale) return "🔋 확인 불가"
+        val percent = ((level.toLong() * 100L + scale / 2L) / scale.toLong()).toInt()
+        val icon = if (state == BatteryChargeState.CHARGING || state == BatteryChargeState.FULL) "⚡" else "🔋"
+        val warning = if (percent <= 20 && state !in setOf(BatteryChargeState.CHARGING, BatteryChargeState.FULL)) {
+            " ⚠️"
+        } else ""
+        return "$icon $percent%$warning"
+    }
+
+    fun compactAppend(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
+        reply.trimEnd('\n') + "\n" + compactFooter(level, scale, state)
+
+    /** 고정 섹터의 간략 시세표에서만 99 상세보기와 배터리를 한 줄에 결합한다.
+     * 상세 모드와 다른 일반 명령, 오류 및 모듈 요청에서는 항상 원래 줄바꿈을 유지한다.
+     */
+    fun appendCompactSectorFooter(reply: String, shortFooter: String): String {
+        val original = reply.trimEnd('\n')
+        return if (original.startsWith("📊 ") &&
+                   original.endsWith("99. 🔎 상세보기")) {
+            original + " " + shortFooter
+        } else {
+            original + "\n" + shortFooter
+        }
+    }
+
+    // API 호환성: 기존 상세 표시기를 제거하거나 반환 문자열을 변경하지 않는다.
     fun append(reply: String, level: Int, scale: Int, state: BatteryChargeState): String =
         reply + "\n" + footer(level, scale, state)
 }

@@ -10,7 +10,11 @@
 8. 모든 테스트는 임시 SQLite 파일에서만 수행하고 실제 Termux 로그/DB/토큰은 변경하지 않는다.
 9. v0.5.1 그룹당 최대 10종목과 고정 미국시총10 프리셋/기존 그룹 보호를 추가 검사한다.
 10. v0.5.3 유명 종목의 정확한 한글 이름·동의어 해석, 사용자별 저장 별칭·모호성 및 삭제를 검증한다.
-11. 관심종목 시세의 상승 🔺 +, 하락 ▽ - 표시와 실제 변동률을 검증한다.
+11. 관심종목 시세의 상승 🔺+, 하락 ▽- 표시와 실제 변동률을 검증한다.
+12. 카카오톡 관심그룹의 한 줄 간략 시세에서 상승·하락 화살표 뒤 한 글자 공백을 제거하고 그룹 목록/권한/로그를 유지한다.
+13. 반도체·미국시총10·사용자 그룹은 한 줄 간략 시세/짧은 시장별 기준시각을 기본으로 하고 99 상세보기에서만 정규장과 제공처 원문을 표시한다.
+14. 상세/간략 조회의 그룹 등록·소유자/종목 순서/조회실패/1~10 분석은 그대로 유지한다.
+15. 모든 그룹의 간략 시세는 기존 무료·지연/분석 안내 2줄을 생략하지만 시각 줄에 조회 실패 건수를 병기하고 99 전환/상세 원문은 그대로 둔다.
 """
 from __future__ import annotations
 
@@ -165,18 +169,40 @@ class WatchlistUnitTests(unittest.TestCase):
             price, previous = (221500, 219500) if s.currency=='KRW' else (800, 830)
             return Quote(s, price, previous, (price/previous-1)*100, timestamp, timestamp)
         report = group_report('지수', load_group(self.db,self.room,self.sender,'지수'),fetcher=fake)
-        self.assertIn('삼성전자 22.1만 🔺 +0.91%', report)
-        self.assertIn('마이크론 $800 ▽ -3.61%', report)
+        self.assertIn('삼성전자 22.1만 🔺+0.91%', report)
+        self.assertIn('마이크론 $800 ▽-3.61%', report)
         self.assertIn('키오시아 : 조회 불가', report)
         self.assertIn('1. 삼성전자 ',report)
         self.assertIn('2. 마이크론 ',report)
         self.assertIn('3. 키오시아 : 조회 불가',report)
-        self.assertIn('5분 내 1~3',report)
-        self.assertIn('📡 한국', report)
+        self.assertNotIn('5분 내 1~3',report)
+        self.assertIn('1종목 조회 실패',report.splitlines()[-2])
+        self.assertIn('📡 11/04 KR', report)
+        self.assertIn('99. 🔎 상세보기', report)
+        self.assertNotIn('시세 출처 · 기준시각:', report)
         self.assertTrue(report.index('삼성전자') < report.index('마이크론') < report.index('키오시아'))
         with self.assertRaisesRegex(StockQuoteError, '모든 시세'):
             group_report('지수', load_group(self.db,self.room,self.sender,'지수'),
                          fetcher=lambda _: (_ for _ in ()).throw(StockQuoteError('blocked')))
+
+    def test_group_detailed_99_retains_full_session_and_source_metadata(self):
+        self.run_cmd('그룹생성 반도체')
+        self.run_cmd('추가 반도체 005930 삼성전자')
+        self.run_cmd('추가 반도체 MU 마이크론')
+        stamp = datetime(2026, 11, 6, 5, 0, tzinfo=timezone.utc)
+        def fake(stock):
+            return Quote(stock, 1000 if stock.currency == 'KRW' else 100,
+                         980 if stock.currency == 'KRW' else 98, 2.04, stamp, stamp)
+        stocks = load_group(self.db,self.room,self.sender,'반도체')
+        compact = group_report('반도체',stocks,fetcher=fake)
+        detail = group_report('반도체',stocks,fetcher=fake,detailed=True)
+        self.assertIn('99. 🔎 상세보기',compact)
+        self.assertIn('99. ↩ 간략보기',detail)
+        self.assertIn('시세 출처 · 기준시각:', detail)
+        self.assertIn('1. 삼성전자 :', detail)
+        self.assertIn('2. 마이크론 :',detail)
+        self.assertNotIn('시세 출처 · 기준시각:',compact)
+        self.assertNotIn('   └ ',compact)
 
     def test_group_quote_tenth_row_numbered_no_network(self):
         from app.watchlists import US_MARKET_CAP_PRESET
@@ -191,7 +217,8 @@ class WatchlistUnitTests(unittest.TestCase):
         report=group_report('십종목',stocks,fetcher=fake)
         self.assertIn('1. 엔비디아 ',report)
         self.assertIn('10. 일라이릴리 ',report)
-        self.assertIn('5분 내 1~10',report)
+        self.assertNotIn('5분 내 1~10',report)
+        self.assertEqual(report.splitlines()[-1], '99. 🔎 상세보기')
 
     def test_reads_and_writes_do_not_call_network(self):
         with patch('app.watchlists.fetch_quote') as network:

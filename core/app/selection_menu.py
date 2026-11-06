@@ -32,6 +32,38 @@
 30. 메뉴 점프는 정확한 숫자 경로를 실제 메뉴 선택으로 순회해 중간 시세 조회 없이 최종 명령만 실행한다.
 31. 그룹·종목·최근조회 메뉴의 동적 선택은 소유 채팅방/발신자 범위만 읽으며 CRUD·AI·임의 명령을 허용하지 않는다.
 32. 기존 주식 메뉴 및 0/00/5분 세션·단축어·기능·로그·DB 스키마는 모두 유지한다.
+49. 주식 메뉴는 8개 번호로 재정렬하고 과거 임시 7번 메모리7 상세보기는 제거하며 시세표 내부 99로 통일한다.
+50. 메모리7 및 모든 관심그룹의 기본 시세는 한 행, 99 상세화면은 정규/장외 가격·등락기준·출처·시각을 분리한다.
+51. 메모리7은 1~8, 그룹은 1~10 종목 분석이며 모두 99 상세/간략, 0 이전, 00 홈, 5분 격리·로그를 유지한다.
+52. 모든 시세 화면에서 99는 상세/간략 보기 전환이고 상세 화면에서 0을 누르면 이전 간략 화면으로 돌아간다.
+53. 99는 9/10번째 종목 분석 번호와 독립적으로 처리하며 유효한 5분 시세 선택 세션에서만 실행한다.
+54. 주식 메인 메뉴의 8개 선택지는 요청 순서로 재정렬하고 0/00·방/발신자·5분 제한과 단축명령·도움말은 보존한다.
+55. 설정 도움말에 메모리7과 모든 관심그룹 시세표의 99번 상세/간략 전환을 안내한다.
+56. 설정 도움말은 원래 8줄 이내를 유지하고 99번 시세 전환을 기존 주식 안내 한 줄에 통합한다.
+57. 모든 메뉴에서 0은 고정 홈이 아니라 5분 이내에 실제 열었던 직전 화면의 메뉴 상태로 복귀하며, 00은 계속 홈으로 이동한다.
+58. 메모리7·그룹 간략 → 99 상세 → 0 간략, 상세 → 99 간략 → 0 상세처럼 실제 조회 순서대로 뒤로간다.
+59. 홈→주식→반도체주/미국시총10/기타 섹터/관심목록/메모리7 직행/설정/날씨/기록 등 화면의 경로는 짧은 안전 스냅샷으로 보관한다.
+60. 화면 이력은 채팅방/발신자별로만 최대 8단계·5분 TTL까지 메모리에 저장하고 메뉴 원문/시세/인증키/DB/로그는 새로 저장하지 않는다.
+61. 사용자 그룹 1~10과 고정 섹터 1~19 분석·99 상세·5분 만료·세션 격리·인증·중복방지·운영 로그·배터리 표기를 유지한다.
+62. 연속 번호 경로 탐색에서도 중간 시세 HTTP 조회 없이 직전 메뉴 상태를 이어받아 0으로 한 단계씩 복귀한다.
+63. 종목 분석 등 메뉴에서 선택한 읽기 전용 결과 화면도 가격/본문을 세션에 저장하지 않고 직전 메뉴로 돌아갈 수 있는 0번 전용 상태만 유지한다.
+64. 뒤로가기로 복원된 날씨/기록/설정 화면은 기존 정적 안내문까지 동일하게 재구성하며 개인정보 및 상세 결과 본문을 이력에 저장하지 않는다.
+65. 직접 경로의 관심그룹 조회와 최근 조회 내역이 비어 있는 경우에도 직전 메뉴로 복귀할 수 있는 0번 상태를 유지한다.
+66. 과거 7번 메모리7 전용 상세보기 메뉴는 제거하고 메모리7 자체는 직접 명령으로 보존하며 새 1~8번 구성으로 재정렬한다.
+67. 메모리7·반도체·미국시총10·모든 사용자 그룹 시세에서 종목 분석은 1~10번, 상세/간략 전환은 독립 99번으로만 선택한다.
+68. 기존 카카오톡 9번은 종목이 9개 이상인 그룹의 9번째 종목 분석에 사용하며 시세 상세 명령과 충돌하지 않는다.
+69. 그룹 상세 조회 명령은 소유 그룹명만 사용하고 0으로 실제 이전 시세표에, 00으로 홈에 복귀하도록 5분 이력·스코프를 유지한다.
+70. 주식 메뉴 1 반도체주(19), 2 미국시총10(10), 3 AI(13), 4 반도체기자재(19), 5 데센(5) 읽기 전용 시세와 6 최근·7 관심·8 분석을 표시한다.
+71. AI 주도주 13종목, 반도체 및 기자재 19종목, 데센 및 네트워크 5종목 모두 한 화면에 전체를 출력하고 98 다음 버튼은 표시하지 않는다.
+72. 읽기 전용 섹터에서는 1~19번째의 정확한 티커를 분석하고 다른 메뉴의 1~10 제한은 유지하며, 99 상세·0 이전·00 홈·5분·방/발신자 분리·로그를 보존한다.
+73. 섹터 목록은 운영 DB에 등록하지 않는 읽기 전용 상수이며 기존 사용자 그룹 10개×10종목 제한과 CRUD는 유지한다.
+74. 주식 섹터 한 페이지 11~19번은 Android/파이썬 공통 메뉴의 기존 보안 상태 검증 후에만 허용하고 일반 메뉴에는 없는 번호로 거부한다.
+75. 구형 97/98 입력은 하위 호환으로 인식하지만 새 섹터는 모두 한 페이지이므로 앞·뒤 이동 없이 경고하고, 99 상세는 계속 사용한다.
+76. 주식 홈을 사용자 지정 8개 메뉴(1 반도체주 19, 2 미국 시총10, 3 AI 주도주, 4 반도체 및 기자재, 5 데센, 6 최근조회, 7 관심목록, 8 분석)로 교체한다.
+77. 메모리7 원본과 기존 사용자 '반도체' 그룹 조회는 주식 메모리7/주식 반도체 직접 명령 및 관심목록에서 유지해 데이터·로그를 삭제하지 않는다.
+78. 새 섹터의 1~19 번호/99 상세/0 이전·00 홈은 유지하고 8개 홈 선택 번호만 변경, 개인 기록·설정 메뉴는 그대로 둔다.
+79. 주식 홈에서는 1~5 시세와 6~8 조회·목록·분석 사이에 빈 줄 하나만 삽입하고 다른 메뉴 출력/이전 화면 복구는 변경하지 않는다.
+80. 미국 시총10 홈 2번은 개인 DB 그룹 사전 생성이 필요 없는 고정 US_MARKET_CAP_PRESET 10종목 조회로 연결하며 기존 직접 '주식 미국시총10'·그룹 CRUD는 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
 34. 트리는 홈·주식·설정·콘텐츠·종목분석의 실제 선택지 정의를 재사용해 번호 경로를 구성한다.
 35. 사용자별 관심그룹/최근 명령/선택 시세의 구체적 내용은 노출하지 않고 동적 목록이라고 표시한다.
@@ -58,7 +90,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from .market import Stock, StockQuoteError
+from .market import Stock, StockQuoteError, WATCHLIST
 from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
                                get_record, list_records, record_preview, record_detail, help_text)
 
@@ -79,6 +111,8 @@ class MenuAnswer:
     execute_argument: str = ''
     menu_active: bool = False
     back: str = 'menu'
+    previous: 'MenuState | None' = None
+    restored: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,6 +121,8 @@ class MenuState:
     choices: tuple[MenuChoice, ...]
     back: str = 'menu'
     origin: str = 'menu'
+    title: str = ''
+    previous: 'MenuState | None' = None
 
 
 # 카카오톡 대메뉴와 하위 콘텐츠는 텍스트 라벨이 아니라 고정된 내부 카테고리 키로 분리한다.
@@ -113,17 +149,53 @@ class StockSelectionMenus:
 
     @staticmethod
     def _render(title: str, choices: tuple[MenuChoice, ...]) -> str:
-        return '\n'.join([title, *(f'{i}. {choice.label}' for i, choice in enumerate(choices, 1)),
+        # 주식 메뉴는 1~5 시세와 6~8 관리/분석 사이만 한 줄 구분.
+        # 번호 및 선택 흐름은 바꾸지 않고 다른 모든 기존 메뉴 레이아웃은 보존한다.
+        body = []
+        for i, choice in enumerate(choices, 1):
+            if title == '📊 주식 메뉴' and i == 6:
+                body.append('')
+            body.append(f'{i}. {choice.label}')
+        return '\n'.join([title, *body,
                           '※ 번호 입력 · 0: 이전 · 00: 홈 · 5분 유효'])
 
-    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *, back: str = 'menu', origin: str = 'menu') -> None:
+    @staticmethod
+    def _history(state: 'MenuState | None', *, limit: int = 8) -> 'MenuState | None':
+        """유효한 메뉴 선택지와 이전 단계만 복사. 사용자 시세/본문/인증정보는 저장하지 않는다."""
+        if state is None or limit <= 0:
+            return None
+        return MenuState(state.expire_at, state.choices, state.back, state.origin,
+                         state.title, StockSelectionMenus._history(state.previous, limit=limit-1))
+
+    @classmethod
+    def _restore_menu_reply(cls, state: MenuState) -> str:
+        """복귀 화면의 기존 안내문까지 복원하되 시세·개인 기록 본문은 보관하지 않는다."""
+        rendered = cls._render(state.title or '📂 이전 메뉴', state.choices)
+        if state.origin.startswith('category:'):
+            category = state.origin.split(':', 1)[1]
+            rendered += ('\n※ 지역 변경: 날 지역 서울' if category == '날씨'
+                         else '\n※ 하위 기능은 순차적으로 개발됩니다.')
+        elif state.origin.startswith('records-sector:'):
+            sector = state.origin.split(':', 1)[1]
+            alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
+            rendered += f'\n※ 등록: {alias} 추가 제목 | 내용'
+            if sector == '부동산':
+                rendered += '\n※ 조회 지역: 부 지역 강남구'
+        elif state.origin == 'settings':
+            rendered += '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만'
+        return rendered
+
+    def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *,
+              back: str = 'menu', origin: str = 'menu', title: str = '',
+              previous: 'MenuState | None' = None) -> None:
         now = self._clock()
         with self._lock:
             self._states = {k: v for k, v in self._states.items() if v.expire_at > now}
             if len(self._states) >= MAX_MENU_SESSIONS and key not in self._states:
                 oldest = min(self._states, key=lambda k: self._states[k].expire_at)
                 self._states.pop(oldest, None)
-            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin)
+            prior = self._history(previous) if previous is not None and previous.expire_at > now else None
+            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin, title, prior)
 
 
     @staticmethod
@@ -146,10 +218,12 @@ class StockSelectionMenus:
     def _stock_choices() -> tuple[MenuChoice, ...]:
         """주식 메뉴의 단일 정의."""
         return (
+            MenuChoice('반도체주 시세', command_argument='섹터시세 chip 1 간략'),
+            MenuChoice('미국 시총10 시세', command_argument='섹터시세 us10 1 간략'),
+            MenuChoice('AI 주도주', command_argument='섹터시세 ai 1 간략'),
+            MenuChoice('반도체 및 기자재', command_argument='섹터시세 semi 1 간략'),
+            MenuChoice('데센 및 네트워크', command_argument='섹터시세 dc 1 간략'),
             MenuChoice('최근 사용한 주식 조회', page='recent'),
-            MenuChoice('메모리7 현재 시세', command_argument='메모리7'),
-            MenuChoice('반도체 그룹 시세', command_argument='반도체'),
-            MenuChoice('미국시총10 시세', command_argument='미국시총10'),
             MenuChoice('관심종목 목록', command_argument='목록'),
             MenuChoice('종목별 분석', page='analysis'),
         )
@@ -222,9 +296,9 @@ class StockSelectionMenus:
             '부(부동산) · 금(금융·투자) · 개(개인 메모·일정)',
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
-            '주 2 메모리7 시세 · 주 분 삼성전자 분석',
+            '주 1 반도체주 · 주 2 미국시총10 · 주 3 AI · 주 4 반도체기자재',
             '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
-            '1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능',
+            '주 5 데센 · 주 6 최근 · 주 7 관심목록 · 주 8 분석 · 주 분 삼성전자',
         ))
 
     @classmethod
@@ -247,7 +321,7 @@ class StockSelectionMenus:
                     detail = ' [본인 최근 조회 목록]'
                 elif choice.command_argument == '목록':
                     detail = ' [본인 관심그룹 목록]'
-                elif choice.command_argument in {'메모리7', '반도체', '미국시총10'}:
+                elif choice.command_argument in {'메모리7', '메모리7 상세', '반도체', '미국시총10'} or choice.command_argument.startswith('섹터시세 '):
                     detail = ' [조회 후 종목 선택]'
                 lines.append('  ' * len(prefix) + f'{number}. {choice.label}{detail}')
                 if choice.page == 'stock-root':
@@ -274,25 +348,25 @@ class StockSelectionMenus:
     def open_home(self, room: str, sender: str) -> MenuAnswer:
         key = self._key(room, sender)
         choices = self._home_choices()
-        self._save(key, choices, back='home', origin='home')
+        self._save(key, choices, back='home', origin='home', title='🤖 앙개봇 메인 메뉴')
         return MenuAnswer(self._render('🤖 앙개봇 메인 메뉴', choices), menu_active=True)
 
-    def open_category(self, room: str, sender: str, category: str) -> MenuAnswer:
+    def open_category(self, room: str, sender: str, category: str, *, previous: 'MenuState | None' = None) -> MenuAnswer:
         key = self._key(room, sender)
         items = CONTENT_ITEMS.get(category)
         if items is None:
             raise StockQuoteError('등록되지 않은 콘텐츠 메뉴입니다.')
         choices = self._category_choices(category)
-        self._save(key, choices, back='home', origin='category:' + category)
+        self._save(key, choices, back='home', origin='category:' + category, title='📂 ' + category + ' 메뉴', previous=previous)
         footer = '\n※ 지역 변경: 날 지역 서울' if category == '날씨' else '\n※ 하위 기능은 순차적으로 개발됩니다.'
         return MenuAnswer(self._render('📂 ' + category + ' 메뉴', choices)
                           + footer, menu_active=True)
 
-    def open_record_sector(self, room: str, sender: str, sector: str) -> MenuAnswer:
+    def open_record_sector(self, room: str, sender: str, sector: str, *, previous: 'MenuState | None' = None) -> MenuAnswer:
         """홈 개인 기록 분야. 제목 목록은 선택 때만 DB에서 읽고 내용은 저장하지 않는다."""
         key = self._key(room, sender)
         choices = self._record_sector_choices(sector)
-        self._save(key, choices, back='home', origin='records-sector:' + sector)
+        self._save(key, choices, back='home', origin='records-sector:' + sector, title='📂 ' + sector + ' 메뉴', previous=previous)
         alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
         return MenuAnswer(self._render('📂 ' + sector + ' 메뉴', choices)
                           + f'\n※ 등록: {alias} 추가 제목 | 내용'
@@ -300,27 +374,28 @@ class StockSelectionMenus:
                           menu_active=True)
 
     def open_record_results(self, room: str, sender: str,
-                            rows, *, sector: str = '개인', heading: str = '최근 기록') -> MenuAnswer:
+                            rows, *, sector: str = '개인', heading: str = '최근 기록',
+                            previous: 'MenuState | None' = None) -> MenuAnswer:
         """기록을 삭제/수정하지 않는 번호 선택용 목록. 세션에는 본문을 넣지 않는다."""
         key = self._key(room, sender)
         if sector not in PERSONAL_SECTORS and sector != '전체':
             raise StockQuoteError('지원하지 않는 개인 기록 메뉴입니다.')
         if not rows:
             if sector in PERSONAL_SECTORS:
-                parent = self.open_record_sector(room, sender, sector)
+                parent = self.open_record_sector(room, sender, sector, previous=previous)
                 return MenuAnswer('📭 저장된 기록이 없습니다.\n\n' + parent.reply, menu_active=True)
             return MenuAnswer('📭 검색된 기록이 없습니다.\n※ 앙 또는 메로 다시 검색하세요.')
         choices = tuple(MenuChoice(record_preview(item), page=f'records:view:{item.id}:{sector}')
                         for item in rows[:10])
         self._save(key, choices, back='records-sector:' + sector if sector in PERSONAL_SECTORS else 'home',
-                   origin='records-results')
+                   origin='records-results', title='🗂 ' + heading, previous=previous)
         return MenuAnswer(self._render('🗂 ' + heading, choices), menu_active=True)
 
-    def open_settings(self, room: str, sender: str) -> MenuAnswer:
+    def open_settings(self, room: str, sender: str, *, previous: 'MenuState | None' = None) -> MenuAnswer:
         """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
         key = self._key(room, sender)
         choices = self._settings_choices()
-        self._save(key, choices, back='home', origin='settings')
+        self._save(key, choices, back='home', origin='settings', title='⚙️ 설정·운영 메뉴', previous=previous)
         return MenuAnswer(self._render('⚙️ 설정·운영 메뉴', choices)
                           + '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만', menu_active=True)
 
@@ -328,15 +403,15 @@ class StockSelectionMenus:
                       root: str, numbers: tuple[str, ...]) -> MenuAnswer:
         """메뉴 점프: 실제 메뉴 정의를 단계별로 따라가며 최종 선택만 실행한다.
 
-        경로 전체는 1~10, 0, 00 중 최대 다섯 단계만 허용한다.
+        경로 전체는 일반 메뉴 1~10/섹터 1~19, 99 상세, 0 이전, 00 홈 중 최대 다섯 단계만 허용한다.
         중간 메모리7/그룹 선택은 실제 시세 HTTP를 중복 호출하지 않고
         기존 정확한 종목 메뉴를 준비한다. 마지막 종목 분석은 main.py가
         기존 인증·dedup·DB 잠금 외부의 조회 루틴으로만 실행한다.
         """
         if not numbers or len(numbers) > 5 or any(
-            re.fullmatch(r'(?:00|10|[0-9])', number) is None for number in numbers
+            re.fullmatch(r'(?:1[1-9]|97|98|99|00|10|[0-9])', number) is None for number in numbers
         ):
-            raise StockQuoteError('메뉴 점프는 번호 1~10을 공백으로 최대 5개 입력하세요.')
+            raise StockQuoteError('메뉴 점프는 1~19(섹터), 99 상세를 최대 5단계로 입력하세요.')
         if root == '홈':
             answer = self.open_home(room, sender)
         elif root == '주식':
@@ -358,16 +433,34 @@ class StockSelectionMenus:
             if answer.execute_argument:
                 arg = answer.execute_argument.strip()
                 from .watchlists import is_group_quote_request, load_group
-                if arg == '메모리7':
+                if arg in ('메모리7', '메모리7 상세'):
                     from .market import WATCHLIST
-                    self.open_quotes(room, sender, WATCHLIST, back=answer.back)
+                    self.open_quotes(room, sender, WATCHLIST, back=answer.back,
+                                     memory7_view='detail' if arg == '메모리7 상세' else 'compact',
+                                     previous=answer.previous)
+                elif arg.startswith('섹터시세 '):
+                    from .sector_watchlists import parse_sector_request
+                    parsed = parse_sector_request(arg)
+                    if parsed is None:
+                        raise StockQuoteError('섹터 시세 경로가 잘못되었습니다.')
+                    key, page, detailed = parsed
+                    self.open_sector_quotes(room, sender, key, page, detailed,
+                                            back=answer.back, previous=answer.previous)
                 elif arg == '목록':
-                    self.open_groups(db, room, sender)
+                    self.open_groups(db, room, sender, previous=answer.previous)
+                elif arg.startswith('상세시세 '):
+                    name = arg.split(' ', 1)[1]
+                    group = load_group(db, room, sender, name)
+                    if not group:
+                        raise StockQuoteError('빈 관심그룹은 상세조회할 수 없습니다.')
+                    self.open_quotes(room, sender, group, back=answer.back,
+                                     previous=answer.previous, group_name=name, group_view='detail')
                 elif is_group_quote_request(arg):
                     group = load_group(db, room, sender, arg)
                     if not group:
                         raise StockQuoteError('빈 관심그룹에는 추가 숫자 선택이 없습니다.')
-                    self.open_quotes(room, sender, group, back=answer.back)
+                    self.open_quotes(room, sender, group, back=answer.back,
+                                     previous=answer.previous, group_name=arg)
                 else:
                     raise StockQuoteError('이 메뉴는 마지막 선택 단계입니다. 이후 번호를 제거하세요.')
             elif not answer.menu_active:
@@ -376,31 +469,66 @@ class StockSelectionMenus:
                 raise StockQuoteError('개발 예정 기능에서는 추가 번호를 선택할 수 없습니다.')
         raise StockQuoteError('메뉴 점프 경로를 확인하세요.')
 
-    def open(self, room: str, sender: str, *, back: str = 'menu') -> MenuAnswer:
+    def open(self, room: str, sender: str, *, back: str = 'menu', previous: 'MenuState | None' = None) -> MenuAnswer:
         key = self._key(room, sender)
         choices = self._stock_choices()
-        self._save(key, choices, back=back)
+        self._save(key, choices, back=back, origin='stock', title='📊 주식 메뉴', previous=previous)
         return MenuAnswer(self._render('📊 주식 메뉴', choices), menu_active=True)
 
-    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *, back: str = 'menu') -> None:
-        """현재 시세표 번호와 정확히 같은 순서로 종목분석 선택 목록을 5분간 보관한다."""
+    def open_quotes(self, room: str, sender: str, stocks: tuple[Stock, ...], *,
+                    back: str = 'menu', memory7_view: str = '',
+                    previous: 'MenuState | None' = None, group_name: str = '',
+                    group_view: str = 'compact') -> None:
+        """메모리7/그룹 시세의 1~10 종목 분석 및 별도 99번 상세/간략 전환을 안전하게 보관."""
         key = self._key(room, sender)
         if not stocks or len(stocks) > 10:
             raise StockQuoteError('선택 가능한 시세 종목 수는 1~10개여야 합니다.')
-        # 별칭이나 표시 이름이 중복돼도 고정된 허용 티커로만 분석한다.
-        # 메시지 본문과 공급자 가격은 저장하지 않고 원래 조회 결과의 종목만 5분간 보관한다.
+        if memory7_view not in ('', 'compact', 'detail') or group_view not in ('compact', 'detail'):
+            raise StockQuoteError('지원되지 않는 시세 보기 모드입니다.')
+        if memory7_view and (len(stocks) != len(WATCHLIST) or
+                             tuple(s.ticker for s in stocks) != tuple(s.ticker for s in WATCHLIST)):
+            raise StockQuoteError('99번 메모리7 상세 전환에는 고정된 8종목만 사용할 수 있습니다.')
+        if memory7_view and group_name:
+            raise StockQuoteError('메모리7과 사용자 그룹을 동시에 지정할 수 없습니다.')
+        # 실제 9/10번은 9/10번째 종목 분석으로만 사용한다. 99번은 별도 선택 처리.
+        # 선택지는 고정된 티커만 보관하고 메시지 원문이나 가격은 메모리에 저장하지 않는다.
         choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
                         for stock in stocks)
-        self._save(key, choices, back=back)
+        quote_origin = ('quotes:memory7:' + memory7_view if memory7_view
+                        else 'quotes:group:' + group_name + ':' + group_view if group_name
+                        else 'quotes')
+        self._save(key, choices, back=back, origin=quote_origin, previous=previous)
 
-    def open_groups(self, db: sqlite3.Connection, room: str, sender: str) -> None:
+    def open_sector_quotes(self, room: str, sender: str, key_name: str, page: int,
+                           detailed: bool = False, *, back: str = 'menu',
+                           previous: 'MenuState | None' = None) -> None:
+        """고정 섹터의 전체 종목 1~19 분석, 99 상세/간략 및 0 직전 이동을 등록한다."""
+        from .sector_watchlists import get_page
+        stocks = get_page(key_name, page)
+        choices = tuple(MenuChoice(stock.name, command_argument='분석 ' + stock.ticker)
+                        for stock in stocks)
+        mode = 'detail' if detailed else 'compact'
+        self._save(self._key(room, sender), choices, back=back,
+                   origin=f'quotes:sector:{key_name}:{page}:{mode}', previous=previous)
+
+    def open_readonly_result(self, room: str, sender: str, *,
+                             previous: 'MenuState | None') -> bool:
+        """종목 분석 등 읽기 전용 결과도 0으로 호출 직전 메뉴에 복귀하도록 짧은 상태만 저장."""
+        if previous is None or previous.expire_at <= self._clock():
+            return False
+        key = self._key(room, sender)
+        self._save(key, (), back=previous.back, origin='readonly-result',
+                   previous=previous)
+        return True
+
+    def open_groups(self, db: sqlite3.Connection, room: str, sender: str, *, previous: 'MenuState | None' = None) -> None:
         """관심그룹 목록에 표시된 번호를 동일 순서의 시세 조회 명령으로 연결한다."""
         key = self._key(room, sender)
         rows = db.execute("""SELECT name FROM stock_groups
             WHERE room=? AND sender=? ORDER BY created_at,rowid""", (room, sender)).fetchall()
         choices = (MenuChoice('메모리7', command_argument='메모리7'),) + tuple(
             MenuChoice(name, command_argument=name) for (name,) in rows)
-        self._save(key, choices, back='menu', origin='groups')
+        self._save(key, choices, back='menu', origin='groups', title='📂 관심그룹', previous=previous)
 
     @staticmethod
     def _recent(db: sqlite3.Connection, room: str, sender: str) -> tuple[MenuChoice, ...]:
@@ -417,7 +545,7 @@ class StockSelectionMenus:
             if argument in seen:
                 continue
             if not (argument.startswith('분석 ') and argument[3:].strip() or
-                    argument in ('메모리7', '목록') or argument in groups):
+                    argument in ('메모리7', '메모리7 상세', '목록') or argument in groups):
                 continue
             if len(argument) > 100:
                 continue
@@ -429,8 +557,8 @@ class StockSelectionMenus:
 
     def choose(self, db: sqlite3.Connection, room: str, sender: str, number: str) -> MenuAnswer:
         key = self._key(room, sender)
-        if re.fullmatch(r'(?:00|10|[0-9])', number) is None:
-            raise StockQuoteError('메뉴 번호는 1~10 중에서 선택하세요. 이전 메뉴는 0을 입력하세요.')
+        if re.fullmatch(r'(?:1[1-9]|97|98|99|00|10|[0-9])', number) is None:
+            raise StockQuoteError('메뉴 번호는 1~10(섹터 1~19), 상세 99, 이전 0을 사용하세요.')
         with self._lock:
             state = self._states.get(key)
             if state is None or state.expire_at <= self._clock():
@@ -441,6 +569,33 @@ class StockSelectionMenus:
                 return self.open_home(room, sender)
             if number == '0':
                 self._states.pop(key, None)
+                # 실제 이전 단계가 있으면 고정 메뉴가 아닌 그 화면의 선택지·번호·상태를 복원.
+                # 시세 본문은 세션에 저장하지 않고 기존 안전한 시세 조회 경로로 재구성한다.
+                prior = state.previous
+                if prior is not None and prior.expire_at > self._clock():
+                    restored = MenuState(self._clock() + MENU_TTL_SECONDS, prior.choices,
+                                         prior.back, prior.origin, prior.title, prior.previous)
+                    self._states[key] = restored
+                    if prior.origin.startswith('quotes:sector:'):
+                        from .sector_watchlists import sector_argument
+                        _, _, key_name, page_text, mode = prior.origin.split(':')
+                        return MenuAnswer(execute_argument=sector_argument(
+                            key_name, int(page_text), mode == 'detail'),
+                            menu_active=True, back=prior.back, restored=True)
+                    if prior.origin.startswith('quotes:memory7:'):
+                        mode = prior.origin.rsplit(':', 1)[-1]
+                        return MenuAnswer(execute_argument='메모리7 상세' if mode == 'detail' else '메모리7',
+                                          menu_active=True, back=prior.back, restored=True)
+                    if prior.origin.startswith('quotes:group:'):
+                        name, mode = prior.origin.split(':', 2)[2].rsplit(':', 1)
+                        return MenuAnswer(execute_argument='상세시세 ' + name if mode == 'detail' else name,
+                                          menu_active=True, back=prior.back, restored=True)
+                    if prior.origin == 'groups':
+                        from .watchlists import execute_group_command
+                        return MenuAnswer(execute_group_command(db, room, sender, '목록'),
+                                          menu_active=True, back=prior.back, restored=True)
+                    return MenuAnswer(self._restore_menu_reply(prior),
+                                      menu_active=True, back=prior.back, restored=True)
                 back = state.back
                 if back == 'home':
                     return self.open_home(room, sender)
@@ -453,6 +608,37 @@ class StockSelectionMenus:
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
                 return self.open(room, sender, back='home')
+            if number in ('97', '98', '99') and state.origin.startswith('quotes:sector:'):
+                from .sector_watchlists import page_count, sector_argument
+                _, _, key_name, page_text, mode = state.origin.split(':')
+                page = int(page_text)
+                detailed = mode == 'detail'
+                if number == '99':
+                    detailed = not detailed
+                elif number == '98':
+                    if page >= page_count(key_name):
+                        raise StockQuoteError('이미 마지막 종목 페이지입니다.')
+                    page += 1
+                else:
+                    if page <= 1:
+                        raise StockQuoteError('이미 첫 종목 페이지입니다.')
+                    page -= 1
+                self._states.pop(key, None)
+                return MenuAnswer(execute_argument=sector_argument(key_name, page, detailed),
+                                  back=state.back, previous=state)
+            if number in ('97', '98'):
+                raise StockQuoteError('97/98은 여러 페이지가 있는 섹터 시세에서만 사용할 수 있습니다.')
+            if number == '99':
+                if state.origin.startswith('quotes:memory7:'):
+                    mode = state.origin.rsplit(':', 1)[-1]
+                    argument = '메모리7 상세' if mode == 'compact' else '메모리7'
+                elif state.origin.startswith('quotes:group:'):
+                    name, mode = state.origin.split(':', 2)[2].rsplit(':', 1)
+                    argument = '상세시세 ' + name if mode == 'compact' else name
+                else:
+                    raise StockQuoteError('99번은 시세표에서만 상세/간략 전환할 수 있습니다.')
+                self._states.pop(key, None)
+                return MenuAnswer(execute_argument=argument, back=state.back, previous=state)
             index = int(number) - 1
             if index >= len(state.choices):
                 raise StockQuoteError(f'메뉴에 없는 번호입니다. 1~{len(state.choices)}번 중 선택하세요.')
@@ -460,53 +646,56 @@ class StockSelectionMenus:
             # 하나를 선택하면 재선택/이중 실행 방지를 위해 현재 페이지를 즉시 닫는다.
             self._states.pop(key, None)
         if choice.page == 'stock-root':
-            return self.open(room, sender, back='home')
+            return self.open(room, sender, back='home', previous=state)
         if choice.page == 'settings-root':
-            return self.open_settings(room, sender)
+            return self.open_settings(room, sender, previous=state)
         if choice.page.startswith('records:root:'):
-            return self.open_record_sector(room, sender, choice.page.split(':', 2)[2])
+            return self.open_record_sector(room, sender, choice.page.split(':', 2)[2], previous=state)
         if choice.page.startswith('records:list:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
                     list_records(db, room, sender, category=sector, kind='note'),
-                    sector=sector, heading=sector + ' 최근 메모')
+                    sector=sector, heading=sector + ' 최근 메모', previous=state)
         if choice.page.startswith('records:upcoming:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
                     list_records(db, room, sender, category=sector, kind='schedule', upcoming=True),
-                    sector=sector, heading='다가오는 개인 일정')
+                    sector=sector, heading='다가오는 개인 일정', previous=state)
         if choice.page.startswith('records:help:'):
             target = choice.page.split(':', 2)[2]
             sector = '개인' if target == '일정' else target
             command = '일정' if target == '일정' else '메모' if target == '개인' else '부동산' if target == '부동산' else '투자'
-            parent = self.open_record_sector(room, sender, sector)
+            parent = self.open_record_sector(room, sender, sector, previous=state)
             return MenuAnswer(help_text(command) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('records:view:'):
             _, _, id_text, sector = choice.page.split(':', 3)
             record = get_record(db, room, sender, int(id_text),
                                 category=sector if sector in PERSONAL_SECTORS else None)
-            parent = self.open_record_sector(room, sender, record.category)
+            parent = self.open_record_sector(room, sender, record.category, previous=state)
             return MenuAnswer(record_detail(record) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('ops:'):
             return MenuAnswer(execute_argument='설정보기 ' + choice.page.split(':', 1)[1],
-                              back='settings')
+                              back='settings', previous=state)
         if choice.page.startswith('category:'):
-            return self.open_category(room, sender, choice.page.split(':', 1)[1])
+            return self.open_category(room, sender, choice.page.split(':', 1)[1], previous=state)
         if choice.page.startswith('pending:'):
             _, category, name = choice.page.split(':', 2)
             # 단독 '준비 중' 응답으로 메뉴가 닫히지 않도록 동일 카테고리 메뉴를 다시 보여준다.
-            menu = self.open_category(room, sender, category)
+            menu = self.open_category(room, sender, category, previous=state)
             return MenuAnswer(f'🛠 {category} / {name}: 개발 예정입니다.\n\n{menu.reply}',
                               menu_active=True)
         if choice.page == 'recent':
             choices = self._recent(db, room, sender)
             if not choices:
-                return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.')
-            self._save(key, choices, back='menu')
+                self.open_readonly_result(room, sender, previous=state)
+                return MenuAnswer('📋 최근 성공한 주식 조회 명령이 없습니다. 주 분 삼성전자처럼 먼저 조회해 보세요.',
+                                  menu_active=True)
+            self._save(key, choices, back='menu', origin='recent', title='📋 내 최근 주식 조회 명령', previous=state)
             return MenuAnswer(self._render('📋 내 최근 주식 조회 명령', choices), menu_active=True)
         if choice.page == 'analysis':
             choices = self._analysis_choices()
-            self._save(key, choices, back='menu')
+            self._save(key, choices, back='menu', origin='analysis', title='📈 분석할 종목 선택', previous=state)
             return MenuAnswer(self._render('📈 분석할 종목 선택', choices), menu_active=True)
         return MenuAnswer(execute_argument=choice.command_argument,
-                          back='groups' if state.origin == 'groups' else 'menu')
+                          back='groups' if state.origin == 'groups' else 'menu',
+                          previous=state)
