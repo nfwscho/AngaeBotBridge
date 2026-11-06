@@ -54,6 +54,13 @@
 47. 한국 네이버 KRX/NXT·일본 키오시아·기존 메모리7/관심그룹·숫자 메뉴·배터리·전체 SQLite·AI/운영 로그는 보존한다.
 48. 조회 실패가 전부인 경우에는 금액을 만들거나 직전 시세를 실시간인 양 표시하지 않고 종전 조회 불가를 유지한다.
 26. 카카오톡 간결 시세 목록은 상승 🔺 +, 하락 ▽ -, 보합 ➖로 구분하며 기존 가격·등락률·출처·로그는 유지한다.
+49. 미국 프리(04~09:30 ET)·정규(09:30~16 ET)·애프터(16~20 ET)를 Yahoo 1분봉/나스닥 보조 시세로 구분한다.
+50. 미국 장외 시세는 당일 거래일·시간·USD·실거래량(야후) 및 명시된 세션(나스닥)을 검증하고 정규 시세와 분리한다.
+51. 미국 장외 보조 조회 실패는 기존 무료 정규장 공급자 폴백·시세·오류 로그에 영향을 주지 않는다.
+52. 네이버 한국 장외 체결은 정규장 응답 갱신시각과 별도로 검증해 프리/애프터 가격 누락을 방지한다.
+53. 한국 KRX 장외 중 OPEN 응답을 KRX 본장 실시간으로 잘못 표기하지 않고 거래소 미확인 시 추정하지 않는다.
+54. 메모리7/관심그룹 간결 목록과 단일 종목 상세에 프리·정규·애프터 시세를 명시한다.
+55. 기존 DB·명령·UI·AI OFF·Android 배터리·인증·기존 운영 로그/시세 출처 표기를 유지한다.
 """
 from __future__ import annotations
 
@@ -133,6 +140,7 @@ class DomesticQuoteMetadata:
     delay_minutes: int | None
     snapshot_time: datetime | None
     after_market: AfterMarketQuote | None = None
+    market_session: str = ''
 
 
 @dataclass(frozen=True)
@@ -145,6 +153,7 @@ class Quote:
     fetched_at: datetime
     domestic: DomesticQuoteMetadata | None = None
     source: str = ''
+    extended: tuple = ()
 
 
 def _timezone(name: str):
@@ -309,8 +318,10 @@ def parse_nasdaq_quote(stock: Stock, payload: dict, *, now: datetime | None = No
         if abs(pct_computed - pct_published) > 0.20 or abs(pct_computed) > 1000:
             raise StockQuoteError('나스닥 가격/등락률 정합성 오류')
         local = _nasdaq_local_time(info.get('lastTradeTimestamp'), stock, now)
-        return Quote(stock, price, previous, pct_computed, local,
-                     now.astimezone(timezone(timedelta(hours=9))), source='나스닥 웹')
+        result = Quote(stock, price, previous, pct_computed, local,
+                       now.astimezone(timezone(timedelta(hours=9))), source='나스닥 웹')
+        from .extended_sessions import parse_nasdaq
+        return replace(result, extended=parse_nasdaq(stock, data, result, now=now))
     except (KeyError, TypeError, IndexError, ValueError, OverflowError) as exc:
         if isinstance(exc, StockQuoteError):
             raise
@@ -580,8 +591,12 @@ def _naver_after_market(data: dict, stock: Stock, now: datetime, regular_time: d
         return None
     if at.date() < regular_time.date():
         return None
-    if period == 'AFTER_MARKET' and at <= regular_time:
-        # 본장 마감 전에 남은 과거 시간외 값을 최신 별도 체결가로 출력하지 않는다.
+    # localTradedAt은 정규장 체결시각이 아니라 장외 응답 갱신시각일 수 있다.
+    # 따라서 두 타임스탬프의 선후 관계가 아닌 실제 장외 시간대·날짜를 확인한다.
+    hhmm = (at.hour, at.minute)
+    if period == 'AFTER_MARKET' and not (15, 30) <= hhmm < (20, 0):
+        return None
+    if period in ('BEFORE_MARKET', 'PRE_MARKET') and not (8, 0) <= hhmm < (9, 0):
         return None
     pct = (price / previous_close - 1) * 100
     if not math.isfinite(pct) or not -99.9 < pct < 1000:
@@ -664,7 +679,8 @@ def parse_naver_quote(stock: Stock, data: dict, *, now: datetime | None = None,
         market_status=market_status,
         delay_minutes=_naver_delay_minutes(data),
         snapshot_time=snapshot_time,
-        after_market=_naver_after_market(data, stock, now, trade_time, previous))
+        after_market=_naver_after_market(data, stock, now, trade_time, previous),
+        market_session=str(data.get('marketSessionType') or '').lower())
     return Quote(stock, price, previous, pct_value, trade_time,
                  now.astimezone(timezone(timedelta(hours=9))), meta)
 
@@ -929,12 +945,33 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                 return fetch_rakuten_quote(stock, opener=opener, now=now)
     if stock.market == '미국':
         errors=[]
+        now_us = now or datetime.now(timezone.utc)
         for supplier, lookup in (('Yahoo',fetch_yahoo_quote),
                                  ('Nasdaq info',fetch_nasdaq_quote),
                                  ('Nasdaq daily',fetch_nasdaq_daily_quote),
                                  ('Naver overseas daily',fetch_naver_us_daily_quote)):
             try:
                 quote=lookup(stock,opener=opener,now=now)
+                if supplier == 'Yahoo':
+                    from .extended_sessions import fetch_yahoo, should_fetch
+                    if should_fetch(stock, now_us):
+                        extra = ()
+                        try:
+                            extra = fetch_yahoo(stock, quote, opener=opener, now=now_us,
+                                                timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
+                                                user_agent=_YAHOO_USER_AGENT)
+                        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                            _MARKET_LOG.info('US_EXTENDED_YAHOO_FAILED ticker=%s reason=%s',
+                                             stock.ticker, type(e).__name__)
+                        if not extra:
+                            try:
+                                # 나스닥의 정규장 가격은 덮어쓰지 않고 검증된 장외 필드만 취한다.
+                                extra = fetch_nasdaq_quote(stock, opener=opener, now=now_us).extended
+                            except StockQuoteError as e:
+                                _MARKET_LOG.info('US_EXTENDED_NASDAQ_FAILED ticker=%s reason=%s',
+                                                 stock.ticker, e)
+                        if extra:
+                            quote = replace(quote, extended=extra)
                 if errors:
                     # 기존 오류 로그를 유지하면서 어떤 대체 제공처에서 복구됐는지도 식별한다.
                     _MARKET_LOG.info('US_QUOTE_FALLBACK_OK ticker=%s source=%s previous=%s',
@@ -967,7 +1004,11 @@ def _domestic_status_label(item: Quote) -> str:
     freshness = (0 <= delta <= 180)
     server_fresh = (meta.snapshot_time is not None and
                     -30 <= (item.fetched_at - meta.snapshot_time).total_seconds() <= 180)
-    if status in ('CLOSE', 'CLOSED', 'END'):
+    if meta.market_session in ('aftermarket', 'after_market'):
+        label = '정규장 기준가(장외거래 시각의 응답)'
+    elif meta.market_session in ('premarket', 'pre_market'):
+        label = '개장 전 정규장 기준가'
+    elif status in ('CLOSE', 'CLOSED', 'END'):
         label = '장마감 종가'
     elif status == 'OPEN':
         if meta.provider == '폴링' and meta.delay_minutes == 0 and freshness and server_fresh:
@@ -991,6 +1032,8 @@ def _domestic_status_text(item: Quote) -> str:
     when = item.market_time.strftime('%m/%d %H:%M:%S')
     if meta is None:
         return f'   └ KRX {when} · 지연 여부 미확인(대체 시세)'
+    if meta.market_session in ('aftermarket', 'after_market', 'premarket', 'pre_market'):
+        return f'   └ KRX 정규장 가격 · 응답시각 {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
     return f'   └ KRX {when} · {_domestic_status_label(item)} · 네이버 {meta.provider}'
 
 
