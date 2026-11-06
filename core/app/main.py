@@ -89,6 +89,9 @@
 84. Android UI/배터리·주식/날씨/AI 및 기존 SQLite 테이블은 수정/초기화하지 않는다.
 85. 주식 메뉴 7번의 '메모리7 상세'는 기존 시세 조회와 동일 인증·중복방지·로그·번호 선택 흐름에서 읽기 전용 실행한다.
 86. 기본 메모리7과 사용자 그룹은 한 종목 한 줄로 표기하고 상세는 원본 시세/장외/출처를 별도 표기하지만 DB와 선택 세션 구조는 유지한다.
+87. 메모리7 간략 화면의 9번 상세보기 및 상세 화면 9번 간략보기는 기존 메뉴 choose 경로로 전환한다.
+88. 메모리7의 기존 1~8 분석과 5분 선택 권한·중복방지·jobs/events 로그·모듈명·배터리 표시를 보존한다.
+89. 메모리7 이외의 관심그룹 1~10 번호와 주식 메인 메뉴 번호는 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -345,8 +348,11 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     stock_reply = execute_stock_command("주식" if request.command == "메뉴" else request.command, resolved_argument)
                     # 기존 메모리7 8개 줄과 같은 순서로 숫자 선택 -> 종목 분석을 연결.
                     if request.room.strip() and request.sender.strip():
+                        mode = resolved_argument.strip()
+                        detail_view = mode in ('메모리7 상세', '상세')
                         selection_menus.open_quotes(request.room, request.sender, WATCHLIST,
-                                                    back=selection_back)
+                                                    back=selection_back,
+                                                    memory7_view='detail' if detail_view else 'compact')
                         stock_menu_active = True
                 elif request.command in {"주식", "메뉴"} and is_analysis_request(resolved_argument):
                     parts = resolved_argument.split()
