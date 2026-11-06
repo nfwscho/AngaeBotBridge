@@ -18,6 +18,7 @@
 16. 공통 99번 선택의 사용자 관심그룹 상세 응답은 실제 renderer watchlists.py로 표기하고 기존 메모리7/core.market 표시를 유지한다.
 17. 메모리7 7번 메뉴 제거는 소스 식별기를 변경하지 않으며 다른 종목 분석·설정·날씨 모듈 귀속은 보존한다.
 18. AI/반도체·기자재/데센 섹터 고정 시세(97/98/99 페이지) 응답은 실제 core.sector_watchlists.py로 식별하고 기존 사용자 관심그룹 core.watchlists와 구별한다.
+19. 신규 반도체주 시세와 미국 시총10 고정 섹터의 중복 응답/번호 경로도 본문 제목으로 core.sector_watchlists를 식별해 원래 Python 연결/공통 메뉴로 잘못 기록하지 않는다.
 """
 from __future__ import annotations
 
@@ -64,7 +65,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
         if arg.startswith('섹터시세 ') or (
             reply.startswith(('📊 ', '🔎 ')) and any(
                 title in reply.split('\n', 1)[0]
-                for title in ('AI 주도주 (', '반도체 및 기자재 (', '데센 및 네트워크 (')
+                for title in ('반도체주 시세', '미국 시총10 시세', 'AI 주도주 (',
+                              '반도체 및 기자재 (', '데센 및 네트워크 (')
             )):
             return 'core.sector_watchlists'
         if arg.startswith('상세시세 ') or (
