@@ -8,6 +8,7 @@
 6. '메모리7 상세'만 정규/프리/애프터를 여러 줄로, 기본 조회는 종목마다 정확히 한 줄로 표시한다.
 7. 상세 보기에서 한국 장후 정규장 대비 및 전일비의 기준을 명시하고 검증된 정규 종가를 제공한다.
 8. 모든 검사는 네트워크, 실제 SQLite, Android Bridge, .env, AI 설정, 운영 로그에 영향을 주지 않는 모의 데이터만 사용한다.
+9. 구형 Naver 정규장 15:30 값과 overMarketPriceInfo를 별도로 제공한 경우에도 현재 장외 세션의 대표값·정규장대비 부호를 검증한다.
 """
 from __future__ import annotations
 
@@ -72,6 +73,18 @@ class CompactSessionQuoteTests(unittest.TestCase):
         q = korean_after(WATCHLIST[1], 1130000, 1180000, 1264000)
         self.assertEqual(compact_quote_line(q), '하이닉스 118만 🔺 +4.42% [애프터]')
         self.assertNotIn('\n', compact_quote_line(q))
+
+    def test_legacy_krx_regular_close_plus_nxt_after_is_positive(self):
+        now = datetime(2026, 11, 6, 20, 0, tzinfo=KST)
+        close = datetime(2026, 11, 6, 15, 30, tzinfo=KST)
+        aft = AfterMarketQuote(231500, -0.43, now, '장후', 'CLOSE', 'NXT')
+        meta = DomesticQuoteMetadata('폴링', 'CLOSE', None, now, aft)
+        quote = Quote(WATCHLIST[0], 230000, 231000, -0.43, close, now, domestic=meta)
+        rendered = compact_quote_line(quote)
+        self.assertEqual(rendered, '삼성전자 23.1만 🔺 +0.65% [애프터]')
+        self.assertNotIn('\n', rendered)
+        self.assertIn('NXT 장후 231,500원', quote_line(quote))
+        self.assertIn('▲0.65% 정규장 대비', quote_line(quote))
 
     def test_unknown_regular_never_invents_direction(self):
         q = korean_after(WATCHLIST[0], 188600, 193800, 201500, known=False)
