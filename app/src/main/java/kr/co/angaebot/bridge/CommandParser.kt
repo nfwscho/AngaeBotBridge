@@ -43,6 +43,7 @@
  * 45. 기존 로컬 도움말은 8줄로 유지하면서 부 3~5 실거래 기능을 안내한다.
  * 46. 메모리7/반도체/미국시총10 등 모든 시세표에서 99 상세 전환을 지원하고 주 2 99 등 안전한 번호 경로도 전달한다.
  * 47. 기존 주식 메뉴 1~6번 및 그룹 9/10번째 분석·0 이전/00 홈·8줄 로컬 도움말·인증/로그를 유지한다.
+ * 48. 주식 7/8/9 섹터 메뉴의 97·98 페이지와 99 상세를 경로·활성 메뉴 입력에서 지원하고 기존 1~10/00 및 일상 숫자 채팅 거부를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -64,7 +65,7 @@ object CommandParser {
         val segments = message.split(Regex("\\s+"))
         val index = segments.firstOrNull().orEmpty()
         val numericPath = segments.size in 2..6 &&
-            segments.drop(1).all { it.matches(Regex("(?:99|00|10|[0-9])")) }
+            segments.drop(1).all { it.matches(Regex("(?:97|98|99|00|10|[0-9])")) }
         if (message != prefix) {
             val root = when (index) {
                 "앙" -> "홈"
@@ -114,7 +115,7 @@ object CommandParser {
             val stockArgument = message.substring(1).trim()
             if (stockArgument.isEmpty()) return ParseResult.Command("주식", "메뉴")
             val parts = stockArgument.split(Regex("\\s+"))
-            if (parts.size in 1..5 && parts.all { it.matches(Regex("(?:99|00|10|[0-9])")) }) {
+            if (parts.size in 1..5 && parts.all { it.matches(Regex("(?:97|98|99|00|10|[0-9])")) }) {
                 return ParseResult.Command("메뉴", "경로 주식 ${parts.joinToString(" ")}")
             }
             val action = stockArgument.takeWhile { !it.isWhitespace() }
@@ -137,7 +138,7 @@ object CommandParser {
         val argument = commandText.substringAfter(' ', "").trim()
         if (command == "메뉴" && argument.isEmpty()) return ParseResult.Command("메뉴", "홈")
         if (command == "메뉴" && argument.split(Regex("\\s+")).let { parts ->
-                parts.size in 1..5 && parts.all { it.matches(Regex("(?:99|00|10|[0-9])")) }
+                parts.size in 1..5 && parts.all { it.matches(Regex("(?:97|98|99|00|10|[0-9])")) }
             }) return ParseResult.Command("메뉴", "경로 홈 $argument")
         return ParseResult.Command(command, argument)
     }
@@ -152,7 +153,7 @@ object LocalCommandExecutor {
             "부(부동산) · 금(금융·투자) · 개(개인 메모·일정)",
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
-            "주 2 메모리7 시세 · 주 3 반도체 · 시세표 99 상세 · 주 분 삼성전자",
+            "주 2 메모리7 시세 · 주 7 AI · 8 반도체 · 9 데센 · 97/98 페이지 · 99 상세",
             "앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울",
             "1~10 선택 · 0 이전 · 00 홈 · 5분 유효 · ※ 시세 지연 가능"
         ).joinToString("\n")
