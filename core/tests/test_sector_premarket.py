@@ -11,6 +11,7 @@
 9. 모든 테스트는 독립 메모리 객체·주입 HTTP opener만 사용하며 외부 인터넷, 운영 DB, GitHub 앱 설정을 변경하지 않는다.
 10. GitHub Actions 실네트워크 확인: NYSE의 .N 폴링 응답은 빈 datas, 접미사 없는 티커는 종목 data가 있어 NYSE 쿼리는 bare 코드만 사용한다.
 11. 정규 Reuters RIC .N과 공급자 특화 조회 코드가 다름을 엄격히 테스트하고 임의 코드의 확장을 금지한다.
+12. NYSE ORCL/ANET/DELL 공개 폴링 datas=[]에서 기본 API bare 코드로 실거래가를 복구하고 1차 실패/2차 성공·P 표시를 검증한다.
 """
 from __future__ import annotations
 
@@ -138,6 +139,32 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
             with self.subTest(traded=traded):
                 self.assertFalse(parse_naver_extended(
                     stock, _polling(stock, traded=traded), base, now=NOW))
+
+    def test_nyse_empty_polling_recovers_from_bare_basic(self):
+        # 일부 NYSE 종목의 polling datas=[]에서 종료하지 않고 basic을 사용한다.
+        for ticker in ('ORCL', 'ANET', 'DELL'):
+            stock = next(s for group in SECTORS for s in group.stocks
+                         if s.ticker == ticker)
+            with self.subTest(ticker=ticker):
+                urls = []
+                def opener(req, timeout):
+                    url = req.full_url
+                    urls.append(url)
+                    if 'interval=1d' in url and 'query1.finance.yahoo.com' in url:
+                        return _Reply(_regular(stock))
+                    if '/api/polling/worldstock' in url:
+                        return _Reply({'pollingInterval': 7000, 'datas': []})
+                    if '/api/securityService/stock/' in url and '/basic' in url:
+                        return _Reply(_polling(stock, explicit=True))
+                    raise AssertionError('unexpected provider call: ' + url)
+                quote = fetch_quote(stock, opener=opener, now=NOW)
+                self.assertEqual(len(quote.extended), 1)
+                self.assertAlmostEqual(quote.extended[0].price, 104.25)
+                self.assertIn(' P', compact_quote_line(quote))
+                self.assertEqual(len(urls), 3)
+                self.assertIn('reutersCodes=' + ticker, urls[1])
+                self.assertIn('/stock/' + ticker + '/basic', urls[2])
+                self.assertNotIn('.N', urls[1] + urls[2])
 
     def test_naver_403_preserves_regular_quote_and_yahoo_backup(self):
         stock = next(s for g in SECTORS for s in g.stocks if s.ticker == 'GLW')
