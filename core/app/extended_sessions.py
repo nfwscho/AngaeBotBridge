@@ -47,7 +47,10 @@ def should_fetch(stock, now: datetime) -> bool:
     if stock.market != '미국' or stock.currency != 'USD':
         return False
     local = now.astimezone(ZoneInfo('America/New_York'))
-    return local.weekday() < 5 and (4, 0) <= (local.hour, local.minute) < (20, 10)
+    # 정규장 동안에는 기존 시세를 그대로 사용해 호출 수와 카카오톡 지연을 늘리지 않는다.
+    # 장외 장마감 후에도 같은 거래일의 최종 애프터 체결은 조회할 수 있다.
+    return (local.weekday() < 5 and
+            (bool(session_of(local)) or (20, 0) <= (local.hour, local.minute) <= (23, 59)))
 
 
 def _positive(value) -> float | None:
