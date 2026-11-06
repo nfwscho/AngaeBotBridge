@@ -67,6 +67,7 @@
 59. 미국 나스닥 SKHY ADR을 확인된 종목으로 허용하며 임의 거래소 심볼은 자동으로 추측하지 않는다.
 60. 운영 로그에는 공급자별 조회 실패/조회 성공 진단 코드를 추가하며 기존 US_QUOTE_FAILED 등의 로그를 보존한다.
 61. 장외 미제공·정규장 종가 미확인 시 값을 꾸미지 않고 명시적으로 미확인을 출력한다.
+62. Yahoo 정규 종가 불일치/장애 시 네이버 KRX 당일 일봉 종가를 독립 검증하고 전일 기준가와 비교해 복구한다.
 """
 from __future__ import annotations
 
@@ -956,6 +957,24 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                         _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNVERIFIED ticker=%s reason=market_time',stock.ticker)
                 except StockQuoteError as e:
                     _MARKET_LOG.info('KRX_REGULAR_CLOSE_UNAVAILABLE ticker=%s reason=%s',stock.ticker,e)
+                if meta.regular_price is None:
+                    # Yahoo 현재가가 장외 세션과 섞인 경우 KRX 당일 일봉의 '종가'를 확인.
+                    from .domestic_regular import fetch_daily_regular
+                    try:
+                        result = fetch_daily_regular(stock, quote, opener=opener,
+                                                     now=now or datetime.now(timezone.utc),
+                                                     timeout=FETCH_TIMEOUT,
+                                                     max_bytes=MAX_RESPONSE_BYTES,
+                                                     user_agent=_YAHOO_USER_AGENT)
+                        if result:
+                            reg_price, reg_pct, reg_time, reg_source = result
+                            meta = replace(meta, regular_price=reg_price, regular_percent=reg_pct,
+                                           regular_time=reg_time, regular_source=reg_source)
+                            _MARKET_LOG.info('KRX_REGULAR_CLOSE_RECOVERED ticker=%s provider=NaverDaily',
+                                             stock.ticker)
+                    except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
+                        _MARKET_LOG.info('KRX_REGULAR_CLOSE_DAILY_UNAVAILABLE ticker=%s reason=%s',
+                                         stock.ticker, type(e).__name__)
                 quote = replace(quote, domestic=meta)
             return quote
         except StockQuoteError:
