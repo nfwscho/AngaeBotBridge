@@ -2,6 +2,7 @@
 앙개봇 v0.5.5 주식 숫자 선택 메뉴 회귀 테스트 — 검증 기능 전체 안내
 1. 메인 메뉴 1~6번, 최근 조회·분석 서브메뉴 생성과 1~10 번호 입력을 검증한다.
 18. 주식 메뉴의 기존 1~6번 동작을 유지하면서 7번 상세 시세 보기, 1~8 종목 분석, 0 이전, 독립 채팅방·사용자 격리를 검증한다.
+19. '주 7'에 대응하는 메뉴 경로 주식 7의 직접 실행·정확한 모듈 표기·기존 jobs/events 로그를 검증한다.
 2. 기존 jobs 이력을 재활용하고 동일 채팅방·발신자에 한해서만 성공한 읽기 명령을 표시한다.
 3. 실패/등록/삭제/그룹삭제/프리셋/AI/외부 명령은 최근 선택에 포함하지 않는다.
 4. 방·발신자별 메뉴 격리, 번호 범위 검증, 5분 만료, 기존 코드 및 영구 DB 무변경을 확인한다.
@@ -191,6 +192,7 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertTrue(detail['ok'])
             self.assertTrue(detail['menu_active'])
             self.assertIn('시세 상세 보기', detail['reply'])
+            self.assertEqual(detail['module_source'], 'core.market')
             renderer.assert_called_once_with('주식', '메모리7 상세')
         # 상세 결과의 1~8번은 기존 종목 분석 선택 범위를 그대로 유지한다.
         self.assertFalse(self.post('선택 3',room='다른방').json()['ok'])
@@ -211,6 +213,27 @@ class MenuSelectionAPITests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM jobs WHERE argument='선택 7' AND ok=1"
             ).fetchone()[0],2)
+
+    def test_seventh_stock_menu_direct_jump_preserves_logging(self):
+        with patch('app.main.execute_stock_command', return_value='🔎 메모리7 시세 상세 보기') as renderer:
+            self.sequence += 1
+            payload = {
+                'request_id': f'menus_{self.sequence:011d}',
+                'command': '메뉴', 'argument': '경로 주식 7',
+                'room': '방', 'sender': '나',
+            }
+            response = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
+            self.assertTrue(response['ok'])
+            self.assertTrue(response['menu_active'])
+            self.assertEqual(response['module_source'], 'core.market')
+            self.assertIn('메모리7 시세 상세 보기', response['reply'])
+            renderer.assert_called_once_with('주식', '메모리7 상세')
+            repeated = self.client.post('/v1/commands', headers=self.headers, json=payload).json()
+            self.assertTrue(repeated['duplicate'])
+            self.assertEqual(repeated['module_source'], 'core.market')
+        with closing(sqlite3.connect(self.dbpath)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],1)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],1)
 
     def test_recent_reexecution_dedup_and_isolation(self):
         with patch('app.main.fetch_history') as fetched, patch('app.main.individual_report',return_value='마이크론 5일 분석'):
