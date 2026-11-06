@@ -20,6 +20,7 @@
 18. KRX 정규장 15:30 시세를 확인할 수 있는 공개 5분봉/분봉 엔드포인트 응답의 시계열 구조·행 키만 점검하고 실제 가격은 인쇄하지 않는다.
 19. 네이버 레거시 SERVICE_ITEM 폴링에서 15:30 현재가 필드 nv가 공식 정규종가와 일치하는지 참/거짓만 점검하고 NXT 시간외 필드와 별도 여부를 검증한다.
 20. 네이버 일봉이 20:00 종가를 반영하는 경우를 대비해 다음금융 고정 A005930/A000660 공개 quote의 15:30 체결시각 및 공시 종가 일치 여부를 가격 원문 출력 없이 확인한다.
+21. Daum 2026-11-06 일별·분봉 quote 보조 API가 15:30 정규장 기준 체결을 구분해 반환하는지 시간과 공시 정규종가의 일치 여부로만 검사한다.
 """
 from __future__ import annotations
 
@@ -48,6 +49,10 @@ ENDPOINTS = (
     ('KR_HYNIX_LEGACY', 'https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:000660'),
     ('KR_SAMSUNG_DAUM', 'https://finance.daum.net/api/quotes/A005930'),
     ('KR_HYNIX_DAUM', 'https://finance.daum.net/api/quotes/A000660'),
+    ('KR_SAMSUNG_DAUM_DAYS', 'https://finance.daum.net/api/quote/A005930/days?symbolCode=A005930&page=1&perPage=10&pagination=true'),
+    ('KR_HYNIX_DAUM_DAYS', 'https://finance.daum.net/api/quote/A000660/days?symbolCode=A000660&page=1&perPage=10&pagination=true'),
+    ('KR_SAMSUNG_DAUM_MINUTES', 'https://finance.daum.net/api/quotes/A005930/minutes?symbolCode=A005930&page=1&perPage=100&pagination=true'),
+    ('KR_HYNIX_DAUM_MINUTES', 'https://finance.daum.net/api/quotes/A000660/minutes?symbolCode=A000660&page=1&perPage=100&pagination=true'),
 )
 # 기존 CI에서는 원래 세 개의 진단 요청만 실행한다. 확대 실측은 --full 명령으로
 # 명시적으로 선택한 경우에만 수행해 요청 제한/공급자 부하/CI 지연을 방지한다.
@@ -86,8 +91,8 @@ def main(*, full: bool = False):
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0 Safari/537.36',
                        'Accept': 'application/json',
-                       'Referer': ('https://finance.daum.net/quotes/A005930' if label == 'KR_SAMSUNG_DAUM'
-                                   else 'https://finance.daum.net/quotes/A000660' if label == 'KR_HYNIX_DAUM'
+                       'Referer': ('https://finance.daum.net/quotes/A005930' if label.startswith('KR_SAMSUNG_DAUM')
+                                   else 'https://finance.daum.net/quotes/A000660' if label.startswith('KR_HYNIX_DAUM')
                                    else 'https://stock.naver.com/')}
             with urlopen(Request(url, headers=headers), timeout=3.0) as response:
                 raw = response.read(180001)
@@ -118,6 +123,23 @@ def main(*, full: bool = False):
                                        if isinstance(extended, dict) and k in extended)
             root_keys = ','.join(list(payload.keys())[:8]) if isinstance(payload, dict) else ''
             item_count = len(rows) if isinstance(rows, list) else 0
+            if label.endswith(('_DAUM_DAYS','_DAUM_MINUTES')) and isinstance(payload, dict):
+                rows = payload.get('data', [])
+                if not isinstance(rows, list):
+                    rows = []
+                expected = 188700 if 'SAMSUNG' in label else 1132000
+                found = []
+                for item in rows:
+                    if not isinstance(item, dict):
+                        continue
+                    day = str(item.get('date') or item.get('tradeDate') or '')
+                    if day[:10] == '2026-11-06':
+                        try:
+                            same = float(item.get('tradePrice')) == expected
+                        except (TypeError, ValueError):
+                            same = False
+                        found.append((day[:22], str(item.get('tradeTime'))[:8], same))
+                print(f'{label}_TIMES: records={len(rows)} matching_day={found[:6]}')
             if label.endswith('_DAUM') and isinstance(payload, dict):
                 expected = {'KR_SAMSUNG_DAUM':188700, 'KR_HYNIX_DAUM':1132000}[label]
                 raw = payload.get('tradePrice')
