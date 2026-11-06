@@ -1051,10 +1051,32 @@ def _domestic_after_text(item: Quote) -> str:
             f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status}')
 
 
+def _us_extended_text(item: Quote) -> str:
+    """프리/애프터를 정규가와 혼동하지 않도록 거래시각·출처와 함께 별도 행 표시."""
+    if item.stock.market != '미국' or not item.extended:
+        return ''
+    lines = []
+    for extra in item.extended:
+        arrow = '▲' if extra.percent > 0.00001 else ('▽' if extra.percent < -0.00001 else '－')
+        lines.append(f'   └ {extra.session} {_formatted_price(extra.price, item.stock.currency)} '
+                     f'({arrow}{abs(extra.percent):.2f}%) · '
+                     f'{extra.market_time:%m/%d %H:%M} ET · {extra.source} · 지연 여부 미확인')
+    return '\n'.join(lines)
+
+
+def _latest_market_time(item: Quote) -> datetime:
+    return max((item.market_time, *(extra.market_time for extra in item.extended)))
+
+
 def quote_line(item: Quote, *, source_details: bool = True) -> str:
     """단일 종목 상세 출력은 유지하며 목록에서만 출처 중복을 감춘다."""
     arrow = '▲' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '－')
     body = f'{item.stock.name} : {_formatted_price(item.price, item.stock.currency)} ({arrow}{abs(item.percent):.2f}%)'
+    if item.stock.market == '미국':
+        body += ' [정규]'
+        extra_us = _us_extended_text(item)
+        if extra_us:
+            body += '\n' + extra_us
     if not source_details:
         # 시간외 가격은 본장과 다른 가격이므로 기존처럼 해당 종목에 별도 표시한다.
         extra = _domestic_after_text(item) if item.stock.market == '한국' else ''
@@ -1094,17 +1116,21 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
                 provider = ('나스닥 공개 시세' if q.source == '나스닥 웹'
                             else q.source if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
                             else 'Yahoo Finance')
+                if q.extended:
+                    provider += '+장외'
                 status = ('최근 정규장 확정 종가(실시간 아님)'
                           if q.source in ('나스닥 확정 종가','네이버 해외 확정 종가')
                           else '지연 여부 미확인')
             else:
                 provider = q.source or 'Yahoo Finance'
                 status = '지연 여부 미확인'
+            if region == '미국' and q.extended:
+                status += ' · 프리/애프터 별도(지연 여부 미확인)'
             if provider not in providers:
                 providers.append(provider)
             if status not in statuses:
                 statuses.append(status)
-        latest = max(q.market_time for q in region_quotes)
+        latest = max(_latest_market_time(q) for q in region_quotes)
         when = latest.strftime('%m/%d %H:%M:%S') if region == '한국' else latest.strftime('%m/%d %H:%M')
         zone = 'KRX ' if region == '한국' else ('ET ' if region == '미국' else 'JST ')
         time_difference = ' (종목별 거래시각 상이)' if len({q.market_time for q in region_quotes}) > 1 else ''
@@ -1125,7 +1151,18 @@ def compact_quote_line(item: Quote) -> str:
         price = f'${item.price:,.0f}' if item.price >= 500 else f'${item.price:,.2f}'
     arrow = '🔺' if item.percent > 0.00001 else ('▽' if item.percent < -0.00001 else '➖')
     sign = '+' if item.percent > 0.00001 else ('-' if item.percent < -0.00001 else '')
-    return f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
+    line = f'{name} {price} {arrow} {sign}{abs(item.percent):.2f}%'
+    if stock.market == '미국':
+        line += ' [정규]'
+        detail = _us_extended_text(item)
+        if detail:
+            line += '\n' + detail
+    elif stock.market == '한국':
+        line += ' [정규]'
+        detail = _domestic_after_text(item)
+        if detail:
+            line += '\n' + detail
+    return line
 
 
 def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
@@ -1148,13 +1185,20 @@ def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]
                 source = source.replace('Yahoo Finance', '야후')
             if source not in providers:
                 providers.append(source)
-        latest = max(q.market_time for q in items)
+        latest = max(_latest_market_time(q) for q in items)
         zone = 'ET' if region == '미국' else ('JST' if region == '일본' else 'KST')
         line = f'📡 {region} {latest:%m/%d} {"·".join(providers)} {latest:%H:%M} {zone}'
         if len({q.market_time for q in items}) > 1:
             line += ' · 시각 상이'
         if any(q.source in ('나스닥 확정 종가', '네이버 해외 확정 종가') for q in items):
             line += ' · 확정 종가'
+        if region == '미국' and any(q.extended for q in items):
+            line += ' · 장외 별도·지연 미확인'
+        if region == '미국' and any(not q.extended for q in items):
+            from .extended_sessions import session_of
+            if any(session_of(q.fetched_at.astimezone(_timezone(q.stock.timezone_name)))
+                   for q in items if not q.extended):
+                line += ' · 일부 장외 시세 미제공'
         lines.append(line)
     return tuple(lines)
 
