@@ -10,6 +10,9 @@
 8. 모든 검사는 네트워크, 실제 SQLite, Android Bridge, .env, AI 설정, 운영 로그에 영향을 주지 않는 모의 데이터만 사용한다.
 9. 구형 Naver 정규장 15:30 값과 overMarketPriceInfo를 별도로 제공한 경우에도 현재 장외 세션의 대표값·정규장대비 부호를 검증한다.
 10. 다른 KST 거래일의 장외 데이터를 현재 체결가로 오표시하지 않고 정규장 값으로 복귀한다.
+11. 카카오톡 좁은 말풍선에서 P/A 한 글자 표시, 8개 종목·9번 상세 메뉴·짧은 현지시각 요약으로 전체보기 접힘을 최소화한다.
+12. 미국 정규장 중 과거 프리 체결은 대표 시세를 덮지 않으며 장외 시간에는 실제 세션의 P/A 가격만 보인다.
+13. 메모리7 간략 보기와 상세 보기 사이에 원본 정규·프리·애프터 데이터, 거래일과 출처가 누락되지 않음을 검증한다.
 """
 from __future__ import annotations
 
@@ -61,7 +64,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
     def test_samsung_after_rises_versus_today_regular_even_if_yesterday_negative(self):
         q = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         text = compact_quote_line(q)
-        self.assertEqual(text, '삼성전자 19.4만 🔺 +2.76% [애프터]')
+        self.assertEqual(text, '삼성전자 19.4만 🔺 +2.76% A')
         self.assertNotIn('\n', text)
         self.assertNotIn('▽', text)
         self.assertAlmostEqual(q.percent, (193800 / 201500 - 1) * 100)
@@ -73,7 +76,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
 
     def test_hynix_after_rises_relative_to_regular(self):
         q = korean_after(WATCHLIST[1], 1130000, 1180000, 1264000)
-        self.assertEqual(compact_quote_line(q), '하이닉스 118만 🔺 +4.42% [애프터]')
+        self.assertEqual(compact_quote_line(q), '하이닉스 118만 🔺 +4.42% A')
         self.assertNotIn('\n', compact_quote_line(q))
 
     def test_legacy_krx_regular_close_plus_nxt_after_is_positive(self):
@@ -84,7 +87,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
         meta = DomesticQuoteMetadata('폴링', 'CLOSE', None, now, aft)
         quote = Quote(WATCHLIST[0], 230000, 231000, -0.43, close, now, domestic=meta)
         rendered = compact_quote_line(quote)
-        self.assertEqual(rendered, '삼성전자 23.1만 🔺 +0.65% [애프터]')
+        self.assertEqual(rendered, '삼성전자 23.1만 🔺 +0.65% A')
         self.assertNotIn('\n', rendered)
         self.assertIn('NXT 장후 231,500원', quote_line(quote))
         self.assertIn('▲0.65% 정규장 대비', quote_line(quote))
@@ -93,7 +96,7 @@ class CompactSessionQuoteTests(unittest.TestCase):
         q = korean_after(WATCHLIST[0], 188600, 193800, 201500, known=False)
         text = compact_quote_line(q)
         self.assertIn('19.4만', text)
-        self.assertIn('[애프터·기준가 미확인]', text)
+        self.assertIn('A 기준가?', text)
         self.assertNotIn('\n', text)
         self.assertNotIn('▽', text)
         self.assertIn('정규장 기준가 미확인', quote_line(q))
@@ -101,18 +104,18 @@ class CompactSessionQuoteTests(unittest.TestCase):
     def test_prior_day_korean_after_does_not_override_current_regular_quote(self):
         old = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         stale = replace(old, fetched_at=old.fetched_at + timedelta(days=1))
-        self.assertNotIn('[애프터]', compact_quote_line(stale))
+        self.assertNotIn(' A', compact_quote_line(stale))
         self.assertIn('18.9만', compact_quote_line(stale))
         self.assertNotIn('19.4만', compact_quote_line(stale))
         self.assertNotIn('\n', compact_quote_line(stale))
 
     def test_premarket_compares_previous_regular(self):
         q = korean_after(WATCHLIST[0], 188600, 192000, 201500, session='장전')
-        self.assertEqual(compact_quote_line(q), '삼성전자 19.2만 🔺 +1.80% [프리]')
+        self.assertEqual(compact_quote_line(q), '삼성전자 19.2만 🔺 +1.80% P')
 
     def test_us_premarket_one_line_and_exact_price(self):
         q = us_sessions()
-        self.assertEqual(compact_quote_line(q), '마이크론 $707.11 🔺 +7.73% [프리]')
+        self.assertEqual(compact_quote_line(q), '마이크론 $707.11 🔺 +7.73% P')
         self.assertNotIn('\n', compact_quote_line(q))
         self.assertIn('프리 $707.11', quote_line(q))
         self.assertEqual(q.price, 656.0)
@@ -124,17 +127,57 @@ class CompactSessionQuoteTests(unittest.TestCase):
                     market_time=datetime(2026, 11, 6, 15, 59, tzinfo=ET),
                     extended=(*q.extended, SessionPrice('애프터', 669.50, 2.06,
                                                         after - timedelta(minutes=5), 'Yahoo 분봉')))
-        self.assertEqual(compact_quote_line(q), '마이크론 $669.50 🔺 +2.06% [애프터]')
+        self.assertEqual(compact_quote_line(q), '마이크론 $669.50 🔺 +2.06% A')
 
     def test_group_quote_one_line_per_item_and_ids_unchanged(self):
         kr = korean_after(WATCHLIST[0], 188600, 193800, 201500)
         us = us_sessions()
         report = group_report('반도체', (WATCHLIST[0], WATCHLIST[2]),
                               fetcher=lambda stock: kr if stock.ticker == WATCHLIST[0].ticker else us)
-        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% [애프터]', report)
-        self.assertIn('2. 마이크론 $707.11 🔺 +7.73% [프리]', report)
+        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% A', report)
+        self.assertIn('2. 마이크론 $707.11 🔺 +7.73% P', report)
         self.assertNotIn('   └ ', report)
         self.assertIn('※ 5분 내 1~2', report)
+
+    def test_us_regular_session_does_not_show_stale_premarket(self):
+        quote = us_sessions()
+        midday = datetime(2026, 11, 6, 12, 45, tzinfo=ET)
+        quote = replace(quote, fetched_at=midday,
+                        market_time=midday - timedelta(minutes=2))
+        rendered = compact_quote_line(quote)
+        self.assertEqual(rendered, '마이크론 $656 ▽ -17.46%')
+        self.assertNotIn(' P', rendered)
+        self.assertNotIn(' A', rendered)
+
+    def test_full_watchlist_mobile_concise_message_stays_under_limit(self):
+        k1 = korean_after(WATCHLIST[0], 188600, 193800, 201500)
+        k2 = korean_after(WATCHLIST[1], 1130000, 1180000, 1264000)
+        mu = us_sessions()
+        all_quotes = [k1, k2]
+        usa_prices = {'SKHY': 129.30, 'SNDK': 877.09, 'STX': 491.00, 'WDC': 281.50}
+        for stock in WATCHLIST[2:]:
+            if stock.ticker == '285A.T':
+                current = datetime(2026, 11, 6, 15, 30, tzinfo=ZoneInfo('Asia/Tokyo'))
+                all_quotes.append(Quote(stock, 8511, 9330, -8.72, current, current))
+            elif stock.ticker == 'MU':
+                all_quotes.append(mu)
+            else:
+                base = replace(mu, stock=stock)
+                extra = SessionPrice('프리', usa_prices[stock.ticker], 5.18,
+                                     mu.extended[0].market_time, '네이버 해외')
+                all_quotes.append(replace(base, extended=(extra,)))
+        lookups = {q.stock.ticker:q for q in all_quotes}
+        report = memory7_report(fetcher=lambda stock:lookups[stock.ticker], use_cache=False)
+        lines = report.splitlines()
+        # 한 종목은 한 행, 전체 카카오톡 본문은 대략 400자 이내를 목표로 한다.
+        self.assertEqual(len([line for line in lines if line[:2] in (
+            '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.'))]), 8)
+        self.assertLessEqual(len(report), 430)
+        self.assertLessEqual(len(lines), 15)
+        self.assertTrue(any(line == '9. 🔎 상세보기' for line in lines))
+        self.assertEqual(len([line for line in lines if line.startswith('📡 ')]), 1)
+        self.assertNotIn('[프리]',report)
+        self.assertNotIn('[애프터]',report)
 
     def test_default_memory7_single_row_and_detail_separate(self):
         quotes = {
@@ -143,17 +186,17 @@ class CompactSessionQuoteTests(unittest.TestCase):
         }
         fetcher = lambda stock: quotes.get(stock.ticker)
         brief = memory7_report(fetcher=fetcher, use_cache=False)
-        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% [애프터]', brief)
-        self.assertIn('3. 마이크론 $707.11 🔺 +7.73% [프리]', brief)
+        self.assertIn('1. 삼성전자 19.4만 🔺 +2.76% A', brief)
+        self.assertIn('3. 마이크론 $707.11 🔺 +7.73% P', brief)
         self.assertNotIn('   └', brief)
-        self.assertIn('※ 주 7:', brief)
+        self.assertIn('9. 🔎 상세보기', brief)
         long = memory7_report(fetcher=fetcher, use_cache=False, detailed=True)
         self.assertIn('🔎 메모리7 시세 상세 보기', long)
         self.assertIn('1. 삼성전자 : 188,600원', long)
         self.assertIn('   └ 시간외(거래소 미확인) 장후 193,800원', long)
         self.assertIn('   └ 프리 $707.11', long)
         self.assertIn('시세 출처 · 기준시각:', long)
-        self.assertIn('※ 주 2:', long)
+        self.assertIn('9. ↩ 간략보기', long)
 
     def test_command_dispatch_to_readonly_detailed_view(self):
         with patch('app.market.memory7_report', return_value='detail') as rendering:
