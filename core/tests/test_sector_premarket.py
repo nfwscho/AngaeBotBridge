@@ -12,6 +12,7 @@
 10. GitHub Actions 실네트워크 확인: NYSE의 .N 폴링 응답은 빈 datas, 접미사 없는 티커는 종목 data가 있어 NYSE 쿼리는 bare 코드만 사용한다.
 11. 정규 Reuters RIC .N과 공급자 특화 조회 코드가 다름을 엄격히 테스트하고 임의 코드의 확장을 금지한다.
 12. NYSE ORCL/ANET/DELL 공개 폴링 datas=[]에서 기본 API bare 코드로 실거래가를 복구하고 1차 실패/2차 성공·P 표시를 검증한다.
+13. NYSE 3종목 네이버·Yahoo 장외가 미제공이고 Nasdaq primaryData가 불완전해도 independent secondaryData의 실제 당일 프리 체결가와 USD를 검증해 P를 보완한다.
 """
 from __future__ import annotations
 
@@ -165,6 +166,55 @@ class VerifiedSectorPremarketTests(unittest.TestCase):
                 self.assertIn('reutersCodes=' + ticker, urls[1])
                 self.assertIn('/stock/' + ticker + '/basic', urls[2])
                 self.assertNotIn('.N', urls[1] + urls[2])
+
+    def test_nyse_nasdaq_secondary_premarket_with_incomplete_primary(self):
+        # 야후 정규가만 확보한 상태에서 Nasdaq primaryData의 순변동률이
+        # 미제공이어도 secondaryData의 독립 검증된 체결을 사용한다.
+        for ticker in ('ORCL', 'ANET', 'DELL'):
+            stock = next(s for group in SECTORS for s in group.stocks
+                         if s.ticker == ticker)
+            with self.subTest(ticker=ticker):
+                urls = []
+                secondary = {
+                    'data': {
+                        'symbol': ticker, 'assetClass': 'STOCKS',
+                        'marketStatus': 'Pre-Market',
+                        'primaryData': {
+                            'lastSalePrice': 'N/A',
+                            'netChange': 'N/A',
+                            'percentageChange': 'N/A',
+                        },
+                        'secondaryData': {
+                            'lastSalePrice': '$103.75',
+                            'lastTradeTimestamp': 'Nov 06, 2026 09:03 AM ET',
+                            'currency': 'USD',
+                        },
+                    },
+                }
+                def opener(req, timeout):
+                    url = req.full_url
+                    urls.append(url)
+                    if 'query1.finance.yahoo.com' in url and 'interval=1d' in url:
+                        return _Reply(_regular(stock))
+                    if 'stock.naver.com' in url:
+                        return _Reply({'datas': []})
+                    if 'interval=1m' in url:
+                        return _Reply({'chart': {'result': [{
+                            'meta': {'symbol': ticker, 'currency': 'USD'},
+                            'timestamp': [], 'indicators': {
+                                'quote': [{'close': [], 'volume': []}]},
+                        }]}})
+                    if 'api.nasdaq.com' in url:
+                        return _Reply(secondary)
+                    raise AssertionError('unexpected provider ' + url)
+                quote = fetch_quote(stock, opener=opener, now=NOW)
+                self.assertEqual(quote.price, 100.0)
+                self.assertEqual([p.session for p in quote.extended], ['프리'])
+                self.assertEqual(quote.extended[0].source, '나스닥 웹')
+                self.assertAlmostEqual(quote.extended[0].price, 103.75)
+                self.assertAlmostEqual(quote.extended[0].percent, 3.75)
+                self.assertIn('🔺+3.75% P', compact_quote_line(quote))
+                self.assertTrue(any('api.nasdaq.com' in u for u in urls))
 
     def test_naver_403_preserves_regular_quote_and_yahoo_backup(self):
         stock = next(s for g in SECTORS for s in g.stocks if s.ticker == 'GLW')
