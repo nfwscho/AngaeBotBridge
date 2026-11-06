@@ -14,6 +14,7 @@
 12. 조회 실패 원인은 새 줄을 추가하지 않고 시각 줄에 합쳐 기존 오류 건수와 조회 불가 표시를 보존한다.
 13. 반도체주 시세는 사용자 지정 19종목(KR 2/JP 1/US 16) 순서와 EWY/DRAM ETF를 정확히 구별해 조회한다.
 14. 주식 홈 1~8 선택 순서와 실제 섹터·미국시총10 연결을 검증하고 기존 메모리7은 직접 명령에서 유지한다.
+15. 미국 시총10 홈 2번은 운영 DB에 사용자그룹이 없어도 기존 고정 프리셋 10종목을 보여주는지 검증한다.
 """
 from __future__ import annotations
 
@@ -51,9 +52,10 @@ class SectorCatalogTests(unittest.TestCase):
     def test_counts_order_and_verified_tickers(self):
         self.assertEqual(PAGE_SIZE, 19)
         self.assertEqual([(s.key, len(s.stocks)) for s in SECTORS],
-                         [('chip', 19), ('ai', 13), ('semi', 19), ('dc', 5)])
+                         [('chip', 19), ('us10', 10), ('ai', 13), ('semi', 19), ('dc', 5)])
         expected = {
             'chip': ('005930.KS 000660.KS MU SNDK 285A.T WDC STX SKHY EWY DRAM NVDA TSM AMD INTC AVGO MRVL ARM QCOM ASML').split(),
+            'us10': ('NVDA AAPL MSFT GOOGL AMZN SPCX AVGO META TSLA LLY').split(),
             'ai': ('NVDA AAPL MSFT GOOGL AMZN META TSLA PLTR NOW CRM ORCL IBM SPCX').split(),
             'semi': ('ARM AVGO MRVL QCOM AMD INTC TSM TXN MU SKHY ASML AMAT LRCX KLAC CBRS SIMO SNDK STX WDC').split(),
             'dc': ('LITE ANET VRT DELL GLW').split(),
@@ -69,11 +71,12 @@ class SectorCatalogTests(unittest.TestCase):
         self.assertEqual([s.name for s in get_page('semi', 1)][14], '세레브라스')
 
     def test_pages_and_rejected_injected_arguments(self):
-        self.assertEqual([page_count(k) for k in ('chip', 'ai', 'semi', 'dc')], [1, 1, 1, 1])
+        self.assertEqual([page_count(k) for k in ('chip', 'us10', 'ai', 'semi', 'dc')], [1, 1, 1, 1, 1])
         self.assertEqual(len(get_page('semi', 1)), 19)
         self.assertEqual(len(get_page('ai', 1)), 13)
         self.assertEqual(len(get_page('dc', 1)), 5)
         self.assertEqual(len(get_page('chip', 1)), 19)
+        self.assertEqual(len(get_page('us10', 1)), 10)
         for arg in ('섹터시세 ai 0 간략', '섹터시세 ai 2 상세', '섹터시세 ai 3 상세',
                     '섹터시세 ai 1 매수', '섹터시세 ../../x 1 간략',
                     '섹터시세 dc 2 간략', '섹터시세 semi 1 전체'):
@@ -110,7 +113,7 @@ class SectorCatalogTests(unittest.TestCase):
         self.assertIn('99. ↩ 간략보기',detail)
 
     def test_first_and_last_page_navigation_cues_and_short_dc(self):
-        for name,count in (('ai',13),('semi',19),('dc',5)):
+        for name,count in (('us10',10),('ai',13),('semi',19),('dc',5)):
             with self.subTest(name=name):
                 brief=sector_report(name,1,fetcher=fake_quote)
                 self.assertIn('99. 🔎 상세보기',brief)
@@ -148,9 +151,9 @@ class SectorCatalogTests(unittest.TestCase):
             '반도체 및 기자재', '데센 및 네트워크',
             '최근 사용한 주식 조회', '관심종목 목록', '종목별 분석',
         ])
-        for i, key in ((1,'chip'),(3,'ai'),(4,'semi'),(5,'dc')):
+        for i, key in ((1,'chip'),(2,'us10'),(3,'ai'),(4,'semi'),(5,'dc')):
             self.assertEqual(choices[i-1].command_argument, sector_argument(key,1,False))
-        self.assertEqual(choices[1].command_argument, '미국시총10')
+        self.assertEqual(choices[1].command_argument, sector_argument('us10',1,False))
         tree = StockSelectionMenus.menu_tree()
         for i, choice in enumerate(choices, start=1):
             self.assertIn(f'1-{i}. {choice.label}', tree)
