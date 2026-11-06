@@ -162,16 +162,16 @@ class KakaoNotificationListener : NotificationListenerService() {
                     when (imageAutoStart) {
                         ImageAutoStart.Queued -> {
                             logger.log("INFO", "IMAGE_UI_START_ACCEPTED", "카카오톡 사진 공유 UI 실험 예약(실제 수신 미확인)", message.room, message.sender)
-                            "🖼️ 이미지 자동전송 시험 시작\\nS20+의 카카오톡 화면에서 대상 방과 사진을 확인합니다.\\n※ 실제 사진 말풍선이 도착했는지 확인하세요."
+                            "🖼️ 이미지 자동전송 시험 시작\nS20+의 카카오톡 화면에서 대상 방과 사진을 확인합니다.\n※ 실제 사진 말풍선이 도착했는지 확인하세요."
                         }
                         is ImageAutoStart.Rejected -> {
                             logger.log("WARN", "IMAGE_UI_START_REJECTED", imageAutoStart.reason, message.room, message.sender)
-                            "⚠️ 이미지 자동전송 시험 불가\\n${imageAutoStart.reason}\\n※ 기존 텍스트 자동응답은 정상 유지됩니다."
+                            "⚠️ 이미지 자동전송 시험 불가\n${imageAutoStart.reason}\n※ 기존 텍스트 자동응답은 정상 유지됩니다."
                         }
                         null -> "⚠️ 이미지 자동전송 상태를 확인하지 못했습니다."
                     }
                 } else if (!isImageTest) {
-                    "🖼️ 이미지 진단: 앙개야 이미지 테스트 / 앙개야 이미지 자동시험\\n※ 자동시험은 Android 접근성 서비스와 별도 설정이 필요합니다."
+                    "🖼️ 이미지 진단: 앙개야 이미지 테스트 / 앙개야 이미지 자동시험\n※ 자동시험은 Android 접근성 서비스와 별도 설정이 필요합니다."
                 } else if (imageMime == null) {
                     logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "카카오톡 알림에 이미지 MIME RemoteInput 액션 없음", message.room, message.sender)
                     "🖼️ 이미지 직접 전송 미지원\n현재 카카오톡 알림은 사진 첨부 입력을 제공하지 않습니다.\n※ 텍스트 자동응답은 정상 유지됩니다."
