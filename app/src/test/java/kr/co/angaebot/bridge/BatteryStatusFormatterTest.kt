@@ -52,7 +52,7 @@ class BatteryStatusFormatterTest {
         assertEquals("🔋 확인 불가", BatteryStatusFormatter.compactFooter(-1, 100, BatteryChargeState.UNKNOWN))
         assertEquals("🔋 20% ⚠️", BatteryStatusFormatter.compactFooter(20, 100, BatteryChargeState.NOT_CHARGING))
         assertEquals("⚡ 20%", BatteryStatusFormatter.compactFooter(20, 100, BatteryChargeState.CHARGING))
-        assertEquals("메시지\\n⚡ 100%", BatteryStatusFormatter.compactAppend("메시지\\n", 100, 100, BatteryChargeState.FULL))
+        assertEquals("메시지\n⚡ 100%", BatteryStatusFormatter.compactAppend("메시지\n", 100, 100, BatteryChargeState.FULL))
     }
 
 }
