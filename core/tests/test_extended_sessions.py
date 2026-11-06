@@ -30,6 +30,9 @@
 28. 한국 금요일 11/06 장후체결을 토요일 11/07 00:14에 조회할 때 KRX 일봉 기준일은 11/06, 표시 A 및 정규장 대비 %를 유지한다.
 29. KRX 정규 기준가 복구가 전부 실패한 경우에도 실제 장후 A 표시는 남기고 등락률을 추측하지 않는다.
 30. 주말을 넘어 월요일 정규장이 시작되면 금요일 장후 A가 새로운 현재가로 보이지 않는지 확인한다.
+31. 다음금융 2026-11-06 정규 일봉 188,700/1,132,000원과 전일종가 검증 후 토요일 00:14에도 삼성/하이닉스 장후 A 상승률을 올바르게 표시한다.
+32. 네이버 KRX dayCandle의 20:00 closePrice가 공식 15:30 KRX 종가와 다르면 명시적 정규장 필드가 없는 한 기준가로 복구하지 않는다.
+33. Yahoo/다음금융 장애 시 실제 장외가는 보존하고 종가를 추측하지 않으며 기존 로그·시세 메뉴·미국·일본 종목은 유지한다.
 """
 from __future__ import annotations
 
@@ -418,7 +421,9 @@ class ExtendedSessionTests(unittest.TestCase):
         base = {'datas': [naver_after_payload()], 'time': '20261106172656'}
         candle = {'priceInfos': [
             {'localDate':'20261105','closePrice':201500},
-            {'localDate':'20261106','closePrice':188600}
+            {'localDate':'20261106','closePrice':193000,
+             'regularClosePrice':188600,
+             'regularCloseAt':'2026-11-06T15:30:00+09:00'}
         ]}
         calls = []
         def opener(req, timeout):
@@ -448,7 +453,9 @@ class ExtendedSessionTests(unittest.TestCase):
         base = {'datas': [naver_after_payload()], 'time': '20261106200000'}
         candle = {'code': '005930', 'stockExchangeType': 'KRX',
                   'priceInfos': [{'localDate': '20261105', 'closePrice': 201500},
-                                 {'localDate': '20261106', 'closePrice': 188600}]}
+                                 {'localDate': '20261106', 'closePrice': 190000,
+                                  'regularClosePrice': 188600,
+                                  'regularCloseAt': '2026-11-06T15:30:00+09:00'}]}
         urls = []
         def opener(req, timeout):
             urls.append(req.full_url)
@@ -470,6 +477,59 @@ class ExtendedSessionTests(unittest.TestCase):
         # 이후 11/07(휴장일) 일봉을 잘못 끌어오는 동작은 반드시 거부한다.
         invalid = {'priceInfos': [{'localDate': '20261107', 'closePrice': 195000}]}
         self.assertIsNone(parse_daily_regular(WATCHLIST[0], invalid, q, now=saturday))
+
+    def test_korean_official_daum_daily_close_restores_friday_after_midnight(self):
+        kst = timezone(timedelta(hours=9))
+        saturday = datetime(2026, 11, 7, 0, 14, tzinfo=kst)
+        for stock, observed, yesterday, day_close, regular_pct, expected in (
+            (WATCHLIST[0], 190000, 201500, 188700, -6.3523573,
+             '삼성전자 19.0만 🔺+0.69% A'),
+            (WATCHLIST[1], 1180000, 1264000, 1132000, -10.443038,
+             '하이닉스 118만 🔺+4.24% A'),
+        ):
+            with self.subTest(stock=stock.ticker):
+                code = stock.ticker.split('.')[0]
+                after_pct = (observed / yesterday - 1) * 100
+                polling = {'datas': [{
+                    'itemCode': code, 'closePrice': str(observed),
+                    'fluctuationsRatio': str(after_pct),
+                    'compareToPreviousPrice': {'name': 'FALLING'},
+                    'marketStatus': 'CLOSE', 'marketSessionType': 'afterMarket',
+                    'localTradedAt': '2026-11-06T20:00:00+09:00',
+                }], 'time': '20261106200000'}
+                records = {'data': [{
+                    'symbolCode': 'A' + code, 'exchangeCountry': 'KOREA',
+                    'currency': 'KRW', 'date': '2026-11-06 00:00:00',
+                    'tradePrice': day_close, 'prevClosingPrice': yesterday,
+                    'changeRate': regular_pct / 100,
+                }]}
+                calls = []
+                def opener(req, timeout):
+                    calls.append(req.full_url)
+                    if 'polling.finance' in req.full_url:
+                        return _Response(polling)
+                    if 'finance.daum.net/api/quote/' in req.full_url:
+                        return _Response(records)
+                    raise OSError('Yahoo chart unavailable')
+                q = fetch_quote(stock, opener=opener, now=saturday)
+                self.assertEqual(q.domestic.regular_price, day_close)
+                self.assertEqual(q.domestic.regular_source, '다음금융 정규 일봉')
+                self.assertEqual(compact_quote_line(q), expected)
+                self.assertIn(' A', compact_quote_line(q))
+                self.assertIn('11/06 15:30', quote_line(q))
+                self.assertTrue(any('finance.daum.net' in u for u in calls))
+                self.assertFalse(any('chart/domestic/item' in u for u in calls))
+
+    def test_naver_day_candle_after_market_final_not_valid_regular_close(self):
+        from app.domestic_regular import parse_daily_regular
+        kst = timezone(timedelta(hours=9))
+        saturday = datetime(2026, 11, 7, 0, 14, tzinfo=kst)
+        latest = parse_naver_quote(
+            WATCHLIST[0], naver_after_payload(), now=saturday)
+        self.assertIsNone(parse_daily_regular(WATCHLIST[0],
+                          {'stockExchangeType': 'KRX', 'priceInfos': [
+                              {'localDate':'20261106','closePrice':190000}
+                          ]}, latest, now=saturday))
 
     def test_korean_weekend_after_quote_keeps_a_without_invented_percent(self):
         kst = timezone(timedelta(hours=9))
