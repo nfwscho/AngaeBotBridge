@@ -1012,7 +1012,7 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                         try:
                             from_naver = fetch_naver_extended(
                                 stock, quote, opener=opener, now=now_us,
-                                timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES,
+                                timeout=min(FETCH_TIMEOUT, 1.8), max_bytes=MAX_RESPONSE_BYTES,
                                 user_agent=_YAHOO_USER_AGENT)
                             extra += tuple(p for p in from_naver if p.session not in {v.session for v in extra})
                             if from_naver:
@@ -1024,7 +1024,7 @@ def fetch_quote(stock: Stock, *, opener=urlopen, now: datetime | None = None) ->
                     if desired and not any(p.session == desired for p in extra) and supplier == 'Yahoo':
                         try:
                             from_yahoo = fetch_yahoo(stock, quote, opener=opener, now=now_us,
-                                                     timeout=FETCH_TIMEOUT, max_bytes=MAX_RESPONSE_BYTES * 4,
+                                                     timeout=min(FETCH_TIMEOUT, 2.5), max_bytes=MAX_RESPONSE_BYTES * 4,
                                                      user_agent=_YAHOO_USER_AGENT)
                             extra += tuple(p for p in from_yahoo if p.session not in {v.session for v in extra})
                         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as e:
