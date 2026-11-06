@@ -15,6 +15,8 @@
 13. 부동산 매매·전월세 공식 실거래 조회 및 지역 설정은 core.real_estate로 식별하고 개인메모는 core.records를 보존한다.
 14. 새 주식 메뉴 7번과 '메모리7 상세' 응답은 호출 인수가 번호선택이어도 원본 시세 모듈(core.market)로 식별한다.
 15. 기존 메뉴/분석/관심종목/부동산/날씨 등 모듈 분류와 하단 로그/배터리 표기를 변경하지 않는다.
+16. 공통 99번 선택의 사용자 관심그룹 상세 응답은 실제 renderer watchlists.py로 표기하고 기존 메모리7/core.market 표시를 유지한다.
+17. 메모리7 7번 메뉴 제거는 소스 식별기를 변경하지 않으며 다른 종목 분석·설정·날씨 모듈 귀속은 보존한다.
 """
 from __future__ import annotations
 
@@ -58,6 +60,9 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
             return 'core.history'
         if arg in {'메모리7', '메모리7 상세', '상세'}:
             return 'core.market'
+        if arg.startswith('상세시세 ') or (
+                reply.startswith('🔎 ') and '관심종목 시세 상세 보기' in reply.split('\n', 1)[0]):
+            return 'core.watchlists'
         if arg == '목록' or arg.startswith((
             '추가 ', '삭제 ', '그룹생성 ', '그룹삭제 ', '그룹조회 ', '프리셋 '
         )):
