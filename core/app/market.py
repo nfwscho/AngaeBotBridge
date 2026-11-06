@@ -70,6 +70,12 @@
 62. Yahoo 정규 종가 불일치/장애 시 네이버 KRX 당일 일봉 종가를 독립 검증하고 전일 기준가와 비교해 복구한다.
 63. 국내 네이버 root marketSessionType이 프리/애프터인데 overPriceInfo가 없어도 시각·상태 확인된 closePrice는 장외로만 표시한다.
 64. 국내 프리장에서는 직전 정규장 종가의 독립 검증만 허용하고 당일 정규장 값은 아직 없는 것으로 처리한다.
+65. 메모리7·관심그룹 기본 시세는 종목당 정확히 한 줄로 가격을 표시하고 프리/애프터 중 확인된 해당 세션 체결가를 대표값으로 선택한다.
+66. 국내 애프터 등락률은 당일 정규장 종가, 국내 프리는 직전 정규장 종가를 기준으로 계산하고 전일 종가 대비 변동률과 구별한다.
+67. 국내 기준 정규 종가 검증에 실패하면 장외 가격은 표시하지만 상승/하락률은 임의 계산하지 않고 기준가 미확인으로 표시한다.
+68. 미국 장외 시세는 세션과 현지 거래일을 확인하고 프리/애프터 최신 체결값만 대표가격으로 사용하며 지연·실시간을 보증하지 않는다.
+69. 상세보기(주식 메뉴 7번·메모리7 상세)는 기존 원본 Quote/시각·공급자·정규장/장외 가격을 여러 줄로 보여주고 간략 화면에는 반복하지 않는다.
+70. 기존 1~8 번호 분석/메뉴/사용자 그룹/30초 기본 캐시 및 로그·DB·Android 하단 기능모듈·배터리·AI OFF를 보존한다.
 """
 from __future__ import annotations
 
@@ -1141,12 +1147,18 @@ def _domestic_after_text(item: Quote) -> str:
     if aft is None:
         return ''
     when = aft.market_time.strftime('%m/%d %H:%M:%S')
-    arrow = '▲' if aft.percent > 0.00001 else ('▽' if aft.percent < -0.00001 else '－')
+    relative = _domestic_session_percent(item)
+    if relative is None:
+        change_label = '정규장 기준가 미확인'
+    else:
+        arrow = '▲' if relative > 0.00001 else ('▽' if relative < -0.00001 else '－')
+        change_label = f'{arrow}{abs(relative):.2f}% 정규장 대비'
     status = '거래 중' if aft.status == 'OPEN' else ('마감' if aft.status == 'CLOSE' else '상태 미확인')
     exchange = 'NXT' if aft.exchange == 'NXT' else '시간외(거래소 미확인)'
     session_label = '애프터' if aft.session == '장후' else '프리'
     return (f'   └ {exchange} {aft.session} {_formatted_price(aft.price, item.stock.currency)} '
-            f'({arrow}{abs(aft.percent):.2f}%) · {when} · {status} · {session_label}')
+            f'({change_label}) · {when} · {status} · {session_label}'
+            f' · 전일 종가 대비 {aft.percent:+.2f}%')
 
 
 def _us_extended_text(item: Quote) -> str:
@@ -1250,35 +1262,76 @@ def market_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None])
     return ('시세 출처 · 기준시각:', *result) if result else ()
 
 
+def _domestic_session_percent(item: Quote) -> float | None:
+    """장외 거래 당일 정규장(프리는 직전 정규장) 종가 대비. 기준가 미확인 시 None."""
+    meta = item.domestic
+    aft = meta.after_market if meta else None
+    if aft is None or meta.regular_price is None or meta.regular_price <= 0:
+        return None
+    if meta.regular_time is None:
+        return None
+    if aft.session == '장후' and meta.regular_time.date() != aft.market_time.date():
+        return None
+    if aft.session == '장전' and not (0 < (aft.market_time.date() - meta.regular_time.date()).days <= 4):
+        return None
+    percent = (aft.price / meta.regular_price - 1.0) * 100.0
+    return percent if math.isfinite(percent) and -99.9 < percent < 1000 else None
+
+
+def _display_session(item: Quote) -> tuple[float, float | None, str]:
+    """간략 화면의 대표 세션을 하나만 고른다. 원본 Quote 값은 변경하지 않는다."""
+    if item.stock.market == '한국' and item.domestic is not None:
+        meta = item.domestic
+        aft = meta.after_market
+        period = meta.market_session
+        expected = ('장후' if period in ('aftermarket', 'after_market')
+                    else '장전' if period in ('premarket', 'pre_market', 'beforemarket', 'before_market')
+                    else '')
+        if aft is not None and expected == aft.session:
+            label = '애프터' if aft.session == '장후' else '프리'
+            return aft.price, _domestic_session_percent(item), label
+    if item.stock.market == '미국' and item.extended:
+        from .extended_sessions import session_of
+        # 공급자의 검증된 장외체결 중 현재 현지 세션을 우선.
+        et_now = item.fetched_at.astimezone(_timezone(item.stock.timezone_name))
+        desired = session_of(et_now)
+        if not desired and et_now.weekday() < 5 and et_now.hour >= 20:
+            desired = '애프터'
+        verified = [e for e in item.extended
+                    if e.session in ('프리', '애프터')
+                    and e.market_time.date() == et_now.date()]
+        if verified:
+            chosen = max((e for e in verified if e.session == desired), key=lambda e: e.market_time,
+                         default=None)
+            if chosen is None:
+                chosen = max(verified, key=lambda e: e.market_time)
+            return chosen.price, chosen.percent, chosen.session
+    return item.price, item.percent, '정규'
+
+
+def _compact_price(value: float, currency: str, *, extended: bool = False) -> str:
+    if currency == 'KRW':
+        return f'{value / 10000:.1f}만' if value < 1_000_000 else f'{value / 10000:,.0f}만'
+    if currency == 'JPY':
+        return f'¥{value:,.0f}'
+    # 장외 미국 가격은 소수점까지 표시해 체결가가 변한 것을 확인할 수 있게 한다.
+    return f'\u0024{value:,.2f}' if extended or value < 500 else f'\u0024{value:,.0f}'
+
+
 def compact_quote_line(item: Quote) -> str:
-    """카카오톡 목록 전용: 가격 정밀도를 최소화하되 원본 Quote는 변경하지 않는다."""
+    """메모리7/관심그룹: 종목 하나를 반드시 한 줄로, 선택한 세션 가격만 보여준다."""
     stock = item.stock
     aliases = {'웨스턴디지털': 'WDC', '웬디': 'WDC', 'SK하이닉스': '하이닉스'}
     name = aliases.get(stock.name, stock.name)
-    domestic_extra = (stock.market == '한국' and item.domestic is not None
-                      and item.domestic.market_session in ('aftermarket', 'after_market',
-                                                            'premarket', 'pre_market', 'beforemarket', 'before_market')
-                      and item.domestic.after_market is not None)
-    if domestic_extra and item.domestic.regular_price is None:
-        return f'{name} 정규장 종가 미확인\n' + _domestic_after_text(item)
-    show_price = item.domestic.regular_price if domestic_extra else item.price
-    show_pct = item.domestic.regular_percent if domestic_extra else item.percent
-    if stock.currency == 'KRW':
-        price = f'{show_price / 10000:.1f}만' if show_price < 1_000_000 else f'{show_price / 10000:,.0f}만'
-    elif stock.currency == 'JPY':
-        price = f'¥{show_price:,.0f}'
-    else:
-        price = f'${show_price:,.0f}' if show_price >= 500 else f'${show_price:,.2f}'
-    arrow = '🔺' if show_pct > 0.00001 else ('▽' if show_pct < -0.00001 else '➖')
-    sign = '+' if show_pct > 0.00001 else ('-' if show_pct < -0.00001 else '')
-    line = f'{name} {price} {arrow} {sign}{abs(show_pct):.2f}%'
-    if stock.market == '미국' and item.extended:
-        line += ' [정규]'
-        line += '\n' + _us_extended_text(item)
-    elif stock.market == '한국' and item.domestic is not None and item.domestic.after_market is not None:
-        line += ' [정규·별도 확인]' if domestic_extra else ' [정규]'
-        line += '\n' + _domestic_after_text(item)
-    return line
+    value, change, session = _display_session(item)
+    price = _compact_price(value, stock.currency, extended=(session != '정규'))
+    if change is None:
+        # 정규장 기준가 없이 전일비 하락을 '장후 하락'으로 오표시하지 않는다.
+        return f'{name} {price} [{session}·기준가 미확인]'
+    arrow = '🔺' if change > 0.00001 else ('▽' if change < -0.00001 else '➖')
+    sign = '+' if change > 0.00001 else ('-' if change < -0.00001 else '')
+    suffix = f' [{session}]' if session != '정규' else ''
+    return f'{name} {price} {arrow} {sign}{abs(change):.2f}%{suffix}'
 
 
 def compact_source_summary(quotes: tuple[Quote | None, ...] | list[Quote | None]) -> tuple[str, ...]:
