@@ -17,6 +17,7 @@
  * 15. 섹터 13/19/5종목 시세의 core.sector_watchlists를 실제 Python 소스 파일에 연결하여 'Python 연결' 오표시를 바로잡는다.
  * 16. 인메모리 최근 모듈 ID는 방/발신자별 24시간/최대 200개, 원문·토큰·가격·파일 콘텐츠를 저장하지 않는다.
  * 17. 기존 상세 상태의 배포 브랜치/SHA·조회 오류/로그/충전/권한 및 앱 UI/운영 DB는 변경하지 않는다.
+ * 18. 이미지 시험 명령은 bridge.image로 식별해 기존 '앙개야 모듈'에서 ReplyManager.kt의 정확한 소스 경로를 안내한다.
  */
 package kr.co.angaebot.bridge
 
@@ -24,6 +25,7 @@ object ModuleSourceFormatter {
     private val sources = mapOf(
         "bridge.commands" to ("Bridge 명령·상태" to "app/src/main/java/kr/co/angaebot/bridge/CommandParser.kt"),
         "bridge.python" to ("Python 연결" to "app/src/main/java/kr/co/angaebot/bridge/PythonBridgeClient.kt"),
+        "bridge.image" to ("이미지 전송 시험" to "app/src/main/java/kr/co/angaebot/bridge/ReplyManager.kt"),
         "core.menu" to ("공통 메뉴" to "core/app/selection_menu.py"),
         "core.weather" to ("날씨 예보·지역" to "core/app/weather.py"),
         "core.records" to ("개인 메모·일정" to "core/app/personal_records.py"),
