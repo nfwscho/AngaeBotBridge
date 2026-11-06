@@ -40,6 +40,9 @@
  * 38. 카카오톡 알림에 이미지 MIME 입력이 없으면 억지로 첨부하지 않고 기존 텍스트 답장으로 불가 사유를 알려준다.
  * 39. 지원되는 경우 앱 전용 테스트 이미지만 전달하고 IMAGE_REPLY_* 로그를 추가하되 기존 RECEIVE/COMMAND/REPLY 로그를 보존한다.
  * 40. 전송 요청 성공과 실제 카카오톡 사진 수신은 구분하며 기존 메뉴·Python·AI·배터리·상태·SQLite·UI를 유지한다.
+ * 41. '앙개야 이미지 자동시험'은 별도 사용자가 승인한 접근성 서비스가 연결된 경우에만 실제 카카오톡 공유 UI 자동 전송을 시험한다.
+ * 42. 이전 '앙개야 이미지 테스트'와 텍스트 알림 답장·방/발신자 허용·중복방지 및 기존 로그 체계는 모두 유지한다.
+ * 43. 접근성 OFF·잠금·방 확인 실패는 실패로 보고하고 실제 사진 전송 성공으로 오인하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -119,6 +122,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             }
             val isModuleLookup = parsed.name == "모듈" && parsed.argument.isBlank()
             val isImageTest = parsed.name == "이미지" && parsed.argument == "테스트"
+            val isImageAutoTest = parsed.name == "이미지" && parsed.argument == "자동시험"
             // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
             // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
             if (numericSelection == null && !isModuleLookup &&
@@ -151,10 +155,23 @@ class KakaoNotificationListener : NotificationListenerService() {
             var nextMenuActive = false
             var sourceModule = ModuleSourceFormatter.localCommandSource(parsed.name)
             val imageMime = if (isImageTest) ReplyManager.supportedImageMime(sbn.notification) else null
+            val imageAutoStart = if (isImageAutoTest) KakaoImageAccessibilityService.queueTest(message.room) else null
             val response = if (parsed.name == "이미지") {
                 sourceModule = "bridge.image"
-                if (!isImageTest) {
-                    "🖼️ 이미지 전송 진단: 앙개야 이미지 테스트\n※ 등록된 채팅방과 발신자에서만 실행됩니다."
+                if (isImageAutoTest) {
+                    when (imageAutoStart) {
+                        ImageAutoStart.Queued -> {
+                            logger.log("INFO", "IMAGE_UI_START_ACCEPTED", "카카오톡 사진 공유 UI 실험 예약(실제 수신 미확인)", message.room, message.sender)
+                            "🖼️ 이미지 자동전송 시험 시작\\nS20+의 카카오톡 화면에서 대상 방과 사진을 확인합니다.\\n※ 실제 사진 말풍선이 도착했는지 확인하세요."
+                        }
+                        is ImageAutoStart.Rejected -> {
+                            logger.log("WARN", "IMAGE_UI_START_REJECTED", imageAutoStart.reason, message.room, message.sender)
+                            "⚠️ 이미지 자동전송 시험 불가\\n${imageAutoStart.reason}\\n※ 기존 텍스트 자동응답은 정상 유지됩니다."
+                        }
+                        null -> "⚠️ 이미지 자동전송 상태를 확인하지 못했습니다."
+                    }
+                } else if (!isImageTest) {
+                    "🖼️ 이미지 진단: 앙개야 이미지 테스트 / 앙개야 이미지 자동시험\\n※ 자동시험은 Android 접근성 서비스와 별도 설정이 필요합니다."
                 } else if (imageMime == null) {
                     logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "카카오톡 알림에 이미지 MIME RemoteInput 액션 없음", message.room, message.sender)
                     "🖼️ 이미지 직접 전송 미지원\n현재 카카오톡 알림은 사진 첨부 입력을 제공하지 않습니다.\n※ 텍스트 자동응답은 정상 유지됩니다."
