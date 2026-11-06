@@ -82,7 +82,7 @@ class MarketSourceSummaryTests(unittest.TestCase):
         self.assertEqual(report.count('KR11/05'), 1)
         self.assertEqual(report.count('US11/04'), 1)
         self.assertEqual(report.count('JP11/05'), 1)
-        self.assertIn('9. 🔎 상세보기', report)
+        self.assertIn('99. 🔎 상세보기', report)
         self.assertIn('4종목 조회 실패', report)
         self.assertIn('5분 내 1~8', report)
 
