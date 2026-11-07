@@ -1,3 +1,11 @@
+## 2026-11-07 — MediaSender 직접공유 A/B S20+ 실기기 검증 결과
+
+- Android Bridge v0.4.24 실기기 A/B를 21:41에 실시. 동일 1:1 방에서 A(카카오톡 직접 공유 3개 Intent 키 포함)는 `A: DIRECT (KEY_ID)` PNG 새 사진 말풍선 수신 성공.
+- B(동일 공유 Intent 방식에서 `key_id` / `key_type` / `key_from_direct_share` 제외)는 `comparison=B_NO_KEY route=RECIPIENT_PICKER roomChoices=1 autoClick=false` 로그와 수동 선택 UI가 발생, 사진 수신 실패·텍스트 응답만 수신.
+- 따라서 현재 카카오톡 1:1 환경에서 3개 직접공유 힌트 **조합**이 채팅방 선택 단계 생략에 기여한다는 강한 근거 확보. 각 개별 키의 필수성/다른 방 ID 안정성/단체방/MP4/PIN 잠금은 미검증.
+- A 관찰 로그 `MEDIA_DIRECT_PROBE_TIMEOUT`은 UI 식별 실패를 의미하며 실제 PNG 수신 성공과 모순되지 않음. 이 로그·기존 기능·설정/DB/Python/주식/날씨/개인 할 일/Android 이미지 전송 코드는 변경하지 않음.
+- 전체 결과/추가 검증 계획: docs/MEDIASENDER_EXPERIMENT.md. 기능 브랜치에 검증 기록만 추가하며 main 미변경.
+
 ## 2026-11-07 — MediaSender 채팅방 직접 공유 A/B 실험 v0.4.24
 
 - 21:08:54~21:09:14 실제 로그 `MEDIA_DIRECT_INTENT_STARTED`, `MEDIA_DIRECT_PROBE_WAIT pickerHeading=true targetNameVisible=true roomChoices=0 sendButtons=0 autoClick=false`, `MEDIA_DIRECT_PROBE_TIMEOUT` 확인. 자동 클릭 없이 공유 Intent 실행은 확인되었지만 전송 성공/채팅방 ID 인증은 미확인.
