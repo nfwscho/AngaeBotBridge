@@ -18,6 +18,8 @@
  * 15. 카카오 UI 변경 진단은 화면 내용·채팅 문구 없이 단계/버튼 개수/사진 미리보기 유무만 주기적으로 기록한다.
  * 16. v0.4.18은 Android 공식 화면 깨우기 Activity로 사용자 인증이 불필요한 경우에만 공유를 재개한다.
  * 17. 일회성 토큰·화면 잠금 재검사·타임아웃·기존 Image_UI 및 IMAGE_WAKE 로그와 접근성 방 검증을 유지한다.
+ * 18. v0.4.19는 S20+ 공유 화면 하단의 '1 보내기'를 인식해 선택된 1명에게만 전송하도록 보완한다.
+ * 19. 기존 수신 방 선택 성공/단일 버튼/잠금/타임아웃/사진 확인/모든 기존 로그와 응답 흐름을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -178,10 +180,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     private fun isExplicitSendControl(node: AccessibilityNodeInfo): Boolean {
         val labels = listOfNotNull(node.text?.toString()?.trim(), node.contentDescription?.toString()?.trim())
-        val textMatches = labels.any {
-            it in setOf("보내기", "전송", "전송하기", "사진 보내기", "사진 전송",
-                "이미지 보내기", "Send", "Send photo")
-        }
+        // 1 보내기처럼 선택 인원 수가 붙은 카카오 공유 화면 버튼도 인식한다.
+        // 2 보내기 등의 복수 선택은 ImageUiPolicy에서 별도로 차단한다.
+        val textMatches = labels.any { ImageSendButtonLabel.matches(it) }
         val resourceName = node.viewIdResourceName?.substringAfterLast('/')?.lowercase().orEmpty()
         val idMatches = resourceName in setOf("btn_send", "button_send", "send_button",
             "action_send", "share_send", "send")
