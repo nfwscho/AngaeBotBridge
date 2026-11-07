@@ -158,7 +158,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             ))
             if (observation != MediaDirectRoute.UNVERIFIED) {
                 finish("MEDIA_DIRECT_PROBE_RESULT",
-                    "route=" + observation.name +
+                    "comparison=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
+                        " route=" + observation.name +
                         " targetNameVisible=" + labeled.any { it == job.room } +
                         " roomChoices=" + roomCandidates.size +
                         " sendButtons=" + sendCandidates.size +
@@ -166,7 +167,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             } else if (SystemClock.elapsedRealtime() - job.lastDiagnosticAtMs >= 2500L) {
                 job.lastDiagnosticAtMs = SystemClock.elapsedRealtime()
                 logger.log("INFO", "MEDIA_DIRECT_PROBE_WAIT",
-                    "pickerHeading=" + isPicker +
+                    "comparison=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
+                        " pickerHeading=" + isPicker +
                         " targetNameVisible=" + labeled.any { it == job.room } +
                         " roomChoices=" + roomCandidates.size +
                         " sendButtons=" + sendCandidates.size +
@@ -330,7 +332,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 if (activeJob === job) {
                     if (job.observeOnly) {
                         finish("MEDIA_DIRECT_PROBE_TIMEOUT",
-                            "카카오톡 공유 화면 식별 실패 · 자동 클릭 없음 · 채팅방 ID 미검증", true)
+                            "comparison=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
+                                " · 카카오톡 공유 화면 식별 실패 · 자동 클릭 없음 · 채팅방 ID 미검증", true)
                     } else {
                         finish("IMAGE_UI_TIMEOUT", "잠금/이미지 화면 확인 시간 초과", true)
                     }
@@ -387,6 +390,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                         if (activeJob === job && job.shareLaunched) inspectCurrentWindow(job)
                     }, delay)
                 }
+            }
+            if (job.observeOnly && job.directCandidate == null) {
+                logger.log("INFO", "MEDIA_DIRECT_CONTROL_INTENT_STARTED",
+                    "B_NO_KEY · key_id/key_type/key_from_direct_share 없음 · 자동 클릭 없음 · 실제 수신 미확인")
             }
             if (job.directCandidate != null) {
                 logger.log("INFO", "MEDIA_DIRECT_INTENT_STARTED",
