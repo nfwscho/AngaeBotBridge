@@ -17,6 +17,10 @@
 15. v0.7.5는 기존 created_at/updated_at 컬럼을 읽어 등록·수정·완료 시각을 KST로 안내한다.
 16. 목록의 1~10은 고유 #ID와 구별된 선택 번호로 보이고 세부 화면에서 안전한 관리 메뉴로 이동한다.
 17. 확인 없는 단독 삭제를 계속 차단하고 기존 날짜/검색/범위/중복/SQL 인덱스를 보존한다.
+18. v0.7.6은 10건씩 페이지 조회할 수 있도록 건수·오프셋 조회를 추가하고 기존 행과 고유 ID를 유지한다.
+19. 검색/완료/전체 결과의 페이지 이동은 방·발신자 범위와 제목/상세 검색 조건을 재사용한다.
+20. 제목만 수정하면 기존 상세 내용·마감일을 보존하고, 구분자 |를 명시하면 상세를 수정/비운다.
+21. 페이지 이동과 수정은 기존 jobs/events 트랜잭션, Android 이미지 전송 및 운영 설정을 변경하지 않는다.
 """
 from __future__ import annotations
 
@@ -50,6 +54,8 @@ class Todo:
 class TodoResult:
     reply: str
     rows: tuple[Todo, ...] | None = None
+    state: str = 'open'
+    query: str | None = None
 
 
 def init_todos_schema(db: sqlite3.Connection) -> None:
@@ -112,9 +118,9 @@ def _todo(row: tuple) -> Todo:
                 int(row[5]), int(row[6]))
 
 
-def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
-               state: str = 'open', query: str | None = None,
-               limit: int = LIST_LIMIT) -> tuple[Todo, ...]:
+def _todo_filter(room: str, sender: str, state: str,
+                 query: str | None) -> tuple[str, list[object]]:
+    """조회/건수/페이지 이동에서 동일한 방·발신자 및 검색 조건을 사용한다."""
     _scope(room, sender)
     if state not in ('open', 'done', 'all'):
         raise TodoError("목록 상태를 확인하세요.")
@@ -131,11 +137,28 @@ def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
         escaped = word.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         where.append("(title LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\')")
         args.extend(('%' + escaped + '%', '%' + escaped + '%'))
-    args.append(max(1, min(int(limit), LIST_LIMIT)))
+    return ' AND '.join(where), args
+
+
+def count_todos(db: sqlite3.Connection, room: str, sender: str, *,
+                state: str = 'open', query: str | None = None) -> int:
+    """페이지 경계 확인을 위한 읽기 전용 건수 조회."""
+    where, args = _todo_filter(room, sender, state, query)
+    return int(db.execute('SELECT COUNT(*) FROM personal_todos WHERE ' + where, args)
+               .fetchone()[0])
+
+
+def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
+               state: str = 'open', query: str | None = None,
+               limit: int = LIST_LIMIT, offset: int = 0) -> tuple[Todo, ...]:
+    where, args = _todo_filter(room, sender, state, query)
+    if not isinstance(offset, int) or offset < 0 or offset > MAX_TODOS:
+        raise TodoError("할 일 목록 페이지를 확인하세요.")
+    args.extend((max(1, min(int(limit), LIST_LIMIT)), offset))
     return tuple(_todo(row) for row in db.execute(
         'SELECT id,title,detail,due_date,completed_at,created_at,updated_at FROM personal_todos WHERE ' +
-        ' AND '.join(where) +
-        " ORDER BY (completed_at IS NOT NULL) ASC, COALESCE(due_date,'9999-12-31') ASC, id DESC LIMIT ?",
+        where +
+        " ORDER BY (completed_at IS NOT NULL) ASC, COALESCE(due_date,'9999-12-31') ASC, id DESC LIMIT ? OFFSET ?",
         args).fetchall())
 
 
@@ -181,6 +204,8 @@ def todo_help() -> str:
             '할일 수정 번호 새 제목 | 상세 내용\n'
             '할일 기한 번호 YYYY-MM-DD · 할일 기한 번호 없음\n'
             '할일 삭제 번호 확인\n'
+            '※ 10건 초과 시 97 이전 페이지 · 98 다음 페이지\n'
+            '※ 수정 시 |를 생략하면 원래 상세 내용이 보존됩니다.\n'
             '※ 개 5 할일 추가 제목 도 가능하며, 항목 번호를 누르면 관리 메뉴가 열립니다.')
 
 
@@ -199,7 +224,8 @@ def execute_todo_command(db: sqlite3.Connection, room: str, sender: str,
         heading = '완료한 일' if state == 'done' else '전체 할 일' if state == 'all' else '해야 할 일'
         rows = list_todos(db, room, sender, state=state,
                           query=remainder if action == '검색' else None)
-        return TodoResult(heading if action != '검색' else '검색된 할 일', rows=rows)
+        return TodoResult(heading if action != '검색' else '검색된 할 일', rows=rows,
+                          state=state, query=remainder if action == '검색' else None)
     if action in ('도움말', '안내'):
         return TodoResult(todo_help())
     if action == '추가':
@@ -247,6 +273,9 @@ def execute_todo_command(db: sqlite3.Connection, room: str, sender: str,
             if not trailing.strip():
                 raise TodoError(f'사용법: 할일 수정 {identifier} 새 제목 | 상세 내용')
             title, detail, due = _payload(trailing)
+            # '|'를 생략한 제목 수정은 기존 상세를 지우지 않는다. '|'를 명시한 경우만 변경한다.
+            if '|' not in trailing:
+                detail = record.detail
             # 날짜를 지정하지 않은 수정은 원래 마감일을 보존한다.
             db.execute('''UPDATE personal_todos
                 SET title=?,detail=?,due_date=?,updated_at=? WHERE id=? AND room=? AND sender=?''',

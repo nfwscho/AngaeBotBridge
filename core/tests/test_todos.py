@@ -9,6 +9,9 @@
 7. 임시 SQLite와 TestClient만 사용하며 실제 카카오톡/Termux/Google 계정에 접근하지 않는다.
 8. v0.7.5 등록/수정/완료 시각(KST)과 고유 #번호, 항목 관리·2단계 삭제·취소·0/00를 테스트한다.
 9. 숫자 선택 변경도 기존 인증·요청ID 중복 방지·타 사용자 격리·jobs/events 로깅을 유지한다.
+10. v0.7.6 97/98 페이지, 1~10 고유 ID 선택, 이전 화면 필터 복원과 범위 분리를 검증한다.
+11. 제목만 수정 시 기존 상세/기한/등록시각 보존, 명시적 |로 상세 비우기를 검증한다.
+12. S20+·운영 DB·Android Bridge는 테스트하지 않고 임시 DB만 사용하여 기존 기능을 보존한다.
 """
 from __future__ import annotations
 
@@ -203,6 +206,83 @@ class TodoAPITests(unittest.TestCase):
             self.assertTrue({"personal_records", "personal_todos", "jobs", "events", "stock_groups"} <= names)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos WHERE room='조우상'").fetchone()[0], 2)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_records").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],
+                             db.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
+    def test_paginated_list_number_maps_to_stable_id_and_back(self):
+        for i in range(1, 24):
+            self.assertTrue(self.post(f"추가 항목 {i:02d}").json()["ok"])
+        first = self.post("경로 개인 5", command="메뉴").json()
+        self.assertTrue(first["ok"], first)
+        self.assertIn("📄 1/3페이지 · 총 23건", first["reply"])
+        self.assertIn("1. ☐ [#23]", first["reply"])
+        self.assertIn("98. ▶ 다음 페이지", first["reply"])
+        page2 = self.post("선택 98", command="메뉴").json()
+        self.assertTrue(page2["ok"], page2)
+        self.assertIn("📄 2/3페이지", page2["reply"])
+        self.assertIn("1. ☐ [#13]", page2["reply"])
+        item = self.post("선택 1", command="메뉴").json()
+        self.assertIn("할 일 #13 관리", item["reply"])
+        returned = self.post("선택 0", command="메뉴").json()
+        self.assertIn("📄 2/3페이지", returned["reply"])
+        self.assertIn("[#13]", returned["reply"])
+        page3 = self.post("선택 98", command="메뉴").json()
+        self.assertIn("📄 3/3페이지", page3["reply"])
+        self.assertIn("1. ☐ [#3]", page3["reply"])
+        self.assertNotIn("98. ▶", page3["reply"])
+        self.assertFalse(self.post("선택 98", command="메뉴").json()["ok"])
+        self.assertIn("📄 2/3페이지", self.post("선택 97", command="메뉴").json()["reply"])
+        self.assertIn("앙개봇 메인 메뉴", self.post("선택 00", command="메뉴").json()["reply"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos").fetchone()[0], 23)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],
+                             db.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
+    def test_paginated_completed_and_search_remember_scope_and_filter(self):
+        for i in range(1, 15):
+            self.assertTrue(self.post(f"추가 필터작업 {i:02d} | 검색키").json()["ok"])
+        self.assertTrue(self.post("추가 별도 기록").json()["ok"])
+        for i in range(1, 13):
+            self.assertTrue(self.post(f"완료 {i}").json()["ok"])
+        done = self.post("완료목록").json()
+        self.assertIn("📄 1/2페이지 · 총 12건", done["reply"])
+        self.assertIn("98. ▶ 다음 페이지", done["reply"])
+        done_page2 = self.post("선택 98", command="메뉴").json()
+        self.assertIn("📄 2/2페이지 · 총 12건", done_page2["reply"])
+        self.assertIn("☑", done_page2["reply"])
+        self.assertIn("완료한 일", self.post("선택 0", command="메뉴").json()["reply"])
+        search = self.post("검색 필터작업").json()
+        self.assertIn("📄 1/2페이지 · 총 14건", search["reply"])
+        self.assertIn("검색된 할 일", search["reply"])
+        search_page2 = self.post("선택 98", command="메뉴").json()
+        self.assertIn("📄 2/2페이지 · 총 14건", search_page2["reply"])
+        self.assertNotIn("별도 기록", search_page2["reply"])
+        detail = self.post("선택 1", command="메뉴").json()
+        self.assertIn("할 일 #", detail["reply"])
+        back = self.post("선택 0", command="메뉴").json()
+        self.assertIn("📄 2/2페이지 · 총 14건", back["reply"])
+        self.assertNotIn("별도 기록", back["reply"])
+        other = self.post("검색 필터작업", sender="남").json()
+        self.assertIn("표시할 할 일이 없습니다", other["reply"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos").fetchone()[0], 15)
+
+    def test_edit_title_only_retains_detail_due_date_and_created_at(self):
+        created = self.post("추가 2030-11-10 원제목 | 지우면 안 되는 상세").json()
+        self.assertTrue(created["ok"], created)
+        with sqlite3.connect(self.path) as db:
+            before = db.execute(
+                "SELECT title,detail,due_date,created_at FROM personal_todos WHERE id=1").fetchone()
+        self.assertTrue(self.post("수정 #1 변경된 제목").json()["ok"])
+        with sqlite3.connect(self.path) as db:
+            after = db.execute(
+                "SELECT title,detail,due_date,created_at FROM personal_todos WHERE id=1").fetchone()
+        self.assertEqual(after, ("변경된 제목", before[1], before[2], before[3]))
+        self.assertIn("지우면 안 되는 상세", self.post("보기 1").json()["reply"])
+        self.assertTrue(self.post("수정 1 비운 제목 |").json()["ok"])
+        with sqlite3.connect(self.path) as db:
+            row = db.execute("SELECT title,detail,due_date,created_at FROM personal_todos").fetchone()
+            self.assertEqual(row, ("비운 제목", "", "2030-11-10", before[3]))
             self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],
                              db.execute("SELECT COUNT(*) FROM events").fetchone()[0])
 

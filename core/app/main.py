@@ -110,6 +110,8 @@
 105. 기존 메모/일정/부동산·주식·AI/날씨·Android 앱/UI/보안 설정·Python DB 데이터를 보존한다.
 106. v0.7.5에서 할 일 등록/수정/완료 시간 표시와 개인 5번 항목별 관리·2단계 삭제 확인 숫자 메뉴를 추가한다.
 107. 실제 완료·복원·삭제는 사전 번호 선택 후 기존 인증된 jobs/events 트랜잭션에서만 실행하며 0/00·방·발신자 보호를 유지한다.
+108. v0.7.6은 할 일 필터(미완료/완료/전체/검색)를 10건 페이지 메뉴에 전달하며 기존 API 인증과 logs/DB를 유지한다.
+109. 제목만 수정한 할 일의 상세·마감일 데이터 보존 및 97/98 페이지 이동 테스트를 추가한다.
 """
 from __future__ import annotations
 
@@ -145,7 +147,7 @@ from .real_estate import (RealEstateError, init_real_estate_schema, resolve_dist
                           save_district, parse_transaction_query, region_help,
                           transaction_report)
 
-VERSION = "0.7.5"
+VERSION = "0.7.6"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래", "할일"} | PERSONAL_COMMANDS
 
 
@@ -510,7 +512,8 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         result = execute_todo_command(db, request.room, request.sender, request.argument)
                         if result.rows is not None:
                             menu = selection_menus.open_todo_results(
-                                db, request.room, request.sender, rows=result.rows, heading=result.reply)
+                                db, request.room, request.sender, rows=result.rows, heading=result.reply,
+                                state=result.state, query=result.query)
                             reply = menu.reply
                             stock_menu_active = menu.menu_active
                         else:
