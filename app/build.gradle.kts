@@ -27,6 +27,19 @@
 // 26. 기존 단축 투·메/기존 UI·권한·설정·DB·로그·5분 세션 및 카카오톡 응답 흐름을 보존한다.
 // 27. 날씨 조회/지역 설정 단축어는 Android Bridge v0.4.13(versionCode 17)로 배포하며 앱 ID·서명·설정·로그를 유지한다.
 // 28. 부동산 실거래가 단축 조회 v0.4.14(versionCode 18)는 같은 앱 ID·서명·데이터·UI·로그·배터리를 보존한다.
+// 29. 이미지 MIME 진단 및 안전한 테스트 사진 전송 v0.4.15(versionCode 19): 별도 권한 추가 없이 기존 앱 데이터/명령/텍스트 ReplyManager/로그를 보존한다.
+// 30. 카카오톡 이미지 실제 수신은 S20+ 현장 검증에 맡기며 미지원 알림은 기존 텍스트 경로로 안내한다.
+// 31. v0.4.16(versionCode 20) 접근성 공유 실험은 별도 사용자 승인/기본 OFF, 일치 방·사진 확인 실패 시 전송 차단을 추가한다.
+// 32. 기존 텍스트 알림 답장·기존 이미지 MIME 진단·전체 DB/메뉴/배터리/Android UI 요소·Core API를 보존한다.
+// 33. v0.4.17(versionCode 21)은 확인된 대상 방의 사진 보내기 버튼까지 자동 클릭하고 화면 차이 대기 로깅을 추가한다.
+// 34. 기존 설치 데이터/알림·접근성 권한/메뉴/로그/토큰/배터리/API를 보존하며 잠긴 화면에선 전송하지 않는다.
+// 35. v0.4.18(versionCode 22)은 인증 불필요 잠금/꺼진 화면의 Android 공식 화면 깨우기와 잠금 정책 테스트를 추가한다.
+// 36. 인증 필요한 PIN/패턴/비밀번호는 우회하지 않으며 기존 설치 DB/.env/텍스트 알림/UI·로그/배터리를 유지한다.
+// 37. v0.4.19(versionCode 23)은 S20+ 카카오톡 '1 보내기' 숫자 포함 단일 수신 버튼 인식을 보완한다.
+// 38. 기존 Python Core/DB/.env/Android UI·설정/알림 응답/로그·배터리/잠금 정책은 모두 유지한다.
+// 39. v0.4.20(versionCode 24)은 '할'/'할일' 명령을 안전하게 Python Core에 전달한다.
+// 40. 기존 이미지 자동전송·접근성 설정·Android 데이터/로그/버전 업그레이드 호환성을 보존한다.
+// 41. v0.4.21(versionCode 25)은 '개 5 할일 추가' 복합 명령만 추가하고 기존 앱 설정/UI/로그는 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -40,8 +53,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.4.14"
+        versionCode = 25
+        versionName = "0.4.21"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

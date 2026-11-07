@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  앙개봇 카카오톡 사진 자동전송 실험 접근성 구성 — 모든 기능
+  1. com.kakao.talk 화면 변경 이벤트만 확인하며 다른 앱의 화면 정보는 읽지 않는다.
+  2. 사용자 수동 승인 없이는 서비스가 실행되지 않으며 기존 알림 텍스트 응답은 독립적으로 유지된다.
+  3. 화면 노드/버튼만 확인하고 화면 캡처, 터치 좌표 추정, 루트 권한, 원격 감시는 사용하지 않는다.
+  4. 채팅방 정확 일치/사진 확인 실패 시 자동 전송하지 않는 실험 기능만 포함한다.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="150"
+    android:canRetrieveWindowContent="true"
+    android:accessibilityFlags="flagReportViewIds"
+    android:packageNames="com.kakao.talk"
+    android:description="@string/image_auto_service_description" />

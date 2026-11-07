@@ -49,6 +49,17 @@
  * 51. 기존 도움말 8줄·주 분·1~10 다른 메뉴·AI OFF/로그/숫자 게이트는 보존한다.
  * 52. 주식홈 1 반도체주19·2 미국시총10·3 AI·4 반도체기자재·5 데센·6 최근·7 관심목록·8 분석 새 번호 체계를 8줄 로컬 도움말에 반영한다.
  * 53. 과거 메모리7/반도체 개인그룹의 직접 명령과 인증·로그·종목 번호·다른 섹터 단축명령은 유지한다.
+ * 54. 이미지 테스트는 기존 일반 장문 파싱을 재사용하며 다른 단축어/텍스트 답장/로그를 보존한다.
+ * 55. v0.4.15 표시만 갱신하고 미지원 명령의 기존 처리 흐름·도움말 8줄을 유지한다.
+ * 56. v0.4.16 이미지 자동시험은 기존 장문 명령 파서에서 처리하며 로컬 상태 버전만 올린다.
+ * 57. 기존 주식·날씨·부동산·메모·AI·숫자 선택/로그 및 8줄 도움말은 유지한다.
+ * 58. 이미지 자동전송 v0.4.17의 상태 버전만 갱신하고 모든 기존 명령 인식은 보존한다.
+ * 59. v0.4.18의 화면 깨우기 시도 버전만 갱신하고 모든 기존 명령/로그/UI를 유지한다.
+ * 60. v0.4.19의 1명 사진 전송 버튼 인식 개선에 맞춰 상태 버전만 올리고 명령 파서 및 전체 도움말을 보존한다.
+ * 61. v0.4.20에서 정확한 할/할일 단축 및 앙개야 할일 명령으로 개인 할 일 등록·완료·삭제를 Python Core에 전달한다.
+ * 62. 기존 앙/주/개/메/부 등 단축어, 숫자 메뉴, 기존 개인정보 보호·로그·이미지 자동전송 기능을 보존한다.
+ * 63. v0.4.21은 사용자 입력 '개 5 할일 추가 ...'를 명시적 개인 할 일 명령으로 정확히 인식한다.
+ * 64. 개 5 숫자 경로, 일반 대화 차단, 기존 단축·알림/이미지/주식·로그/UI를 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -89,6 +100,14 @@ object CommandParser {
             }
             if (root != null) {
                 if (segments.size == 1) return ParseResult.Command("메뉴", root)
+                // 개인 메뉴의 '개 5 할일 추가 제목'을 할 일 직접 명령으로 처리한다.
+                // 기존 '개 5' 숫자 메뉴와 다른 메뉴 경로에는 전혀 영향을 주지 않는다.
+                if (index == "개" && segments.size >= 3 && segments[1] == "5" &&
+                    segments[2] == "할일") {
+                    val taskArgument = segments.drop(3).joinToString(" ")
+                    return ParseResult.Command("할일",
+                        if (taskArgument.isBlank()) "목록" else taskArgument)
+                }
                 if (numericPath) {
                     return ParseResult.Command("메뉴", "경로 $root ${segments.drop(1).joinToString(" ")}")
                 }
@@ -111,6 +130,11 @@ object CommandParser {
             when (message) {
                 "상" -> return ParseResult.Command("상태", "")
                 "도" -> return ParseResult.Command("도움말", "")
+            }
+            // 개인 할 일은 독립 단축 명령. 일반 단어의 접두사와 우연히 일치하면 인식하지 않는다.
+            if (index == "할" || index == "할일") {
+                val todoArgument = message.substring(index.length).trim()
+                return ParseResult.Command("할일", if (todoArgument.isEmpty()) "목록" else todoArgument)
             }
         }
         // '주'는 사용자가 직접 선택한 짧은 주식 호출어. 원래 호출어 및 사용자 설정을 먼저 보호한다.
@@ -151,7 +175,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.14 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.21 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
@@ -159,7 +183,7 @@ object LocalCommandExecutor {
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
             "주 1 반도체주 · 2 미국시총10 · 3 AI · 4 반도체기자재 · 5 데센",
-            "앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울",
+            "앙 2/3/9 메모·일정 · 개 5 할일 · 부 3~5 실거래 · 날 지역 서울",
             "주 6 최근 · 7 관심목록 · 8 분석 · 주 분 삼성전자 · 1~19 · 99 · 0/00 · 앙개야 모듈"
         ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"

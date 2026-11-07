@@ -62,6 +62,12 @@
 76. 주식 홈을 사용자 지정 8개 메뉴(1 반도체주 19, 2 미국 시총10, 3 AI 주도주, 4 반도체 및 기자재, 5 데센, 6 최근조회, 7 관심목록, 8 분석)로 교체한다.
 77. 메모리7 원본과 기존 사용자 '반도체' 그룹 조회는 주식 메모리7/주식 반도체 직접 명령 및 관심목록에서 유지해 데이터·로그를 삭제하지 않는다.
 78. 새 섹터의 1~19 번호/99 상세/0 이전·00 홈은 유지하고 8개 홈 선택 번호만 변경, 개인 기록·설정 메뉴는 그대로 둔다.
+81. 개인 메뉴의 기존 1~4번 번호를 유지하고 5번 '해야 할 일' 목록을 별도 SQLite 읽기 메뉴로 추가한다.
+82. 할 일 1~10은 상세 조회만 가능하며 완료/수정/삭제는 별도의 명시적 텍스트 명령만 수행한다.
+83. 기존 0/00/5분 TTL/방·발신자 격리/메뉴 트리/주식·날씨·기존 메모 기록·로그를 모두 보존한다.
+84. v0.7.5는 개인 5번 목록에서 고유 #번호와 등록일시를 표시하고 각 항목의 번호로 완료/수정 안내/삭제 확인/목록 메뉴를 연다.
+85. 할 일 완료·삭제는 실제 SQLite 변경을 이 함수에서 수행하지 않고 기존 인증된 메인 트랜잭션에 지시한다.
+86. 삭제는 할 일 메뉴 선택 후 별도 최종 확인 번호가 필요하며, 0/00·범위·TTL·중복 방지·기존 전체 메뉴를 유지한다.
 79. 주식 홈에서는 1~5 시세와 6~8 조회·목록·분석 사이에 빈 줄 하나만 삽입하고 다른 메뉴 출력/이전 화면 복구는 변경하지 않는다.
 80. 미국 시총10 홈 2번은 개인 DB 그룹 사전 생성이 필요 없는 고정 US_MARKET_CAP_PRESET 10종목 조회로 연결하며 기존 직접 '주식 미국시총10'·그룹 CRUD는 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
@@ -93,6 +99,7 @@ from dataclasses import dataclass
 from .market import Stock, StockQuoteError, WATCHLIST
 from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
                                get_record, list_records, record_preview, record_detail, help_text)
+from .todos import (list_todos, get_todo, todo_preview, todo_detail)
 
 MENU_TTL_SECONDS = 300
 MAX_MENU_SESSIONS = 200
@@ -181,6 +188,10 @@ class StockSelectionMenus:
             rendered += f'\n※ 등록: {alias} 추가 제목 | 내용'
             if sector == '부동산':
                 rendered += '\n※ 조회 지역: 부 지역 강남구'
+            if sector == '개인':
+                rendered += '\n※ 해야 할 일: 개 5 · 할일 추가 제목'
+        elif state.origin.startswith('todos-results'):
+            rendered += '\n※ 번호: 항목 관리 · 할일 추가 제목 · 0 이전'
         elif state.origin == 'settings':
             rendered += '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만'
         return rendered
@@ -265,6 +276,7 @@ class StockSelectionMenus:
                 MenuChoice('다가오는 일정', page='records:upcoming:개인'),
                 MenuChoice('메모 등록·검색 안내', page='records:help:개인'),
                 MenuChoice('일정 등록·관리 안내', page='records:help:일정'),
+                MenuChoice('✅ 해야 할 일', page='todos:list'),
             )
         return choices
 
@@ -297,7 +309,7 @@ class StockSelectionMenus:
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 1 반도체주 · 주 2 미국시총10 · 주 3 AI · 주 4 반도체기자재',
-            '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
+            '앙 2/3/9 메모·일정 · 개 5 해야 할 일 · 부 3~5 실거래 · 날 지역 서울',
             '주 5 데센 · 주 6 최근 · 주 7 관심목록 · 주 8 분석 · 주 분 삼성전자',
         ))
 
@@ -370,7 +382,8 @@ class StockSelectionMenus:
         alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
         return MenuAnswer(self._render('📂 ' + sector + ' 메뉴', choices)
                           + f'\n※ 등록: {alias} 추가 제목 | 내용'
-                          + ('\n※ 조회 지역: 부 지역 강남구' if sector == '부동산' else ''),
+                          + ('\n※ 조회 지역: 부 지역 강남구' if sector == '부동산' else '')
+                          + ('\n※ 해야 할 일: 개 5 · 할일 추가 제목' if sector == '개인' else ''),
                           menu_active=True)
 
     def open_record_results(self, room: str, sender: str,
@@ -390,6 +403,62 @@ class StockSelectionMenus:
         self._save(key, choices, back='records-sector:' + sector if sector in PERSONAL_SECTORS else 'home',
                    origin='records-results', title='🗂 ' + heading, previous=previous)
         return MenuAnswer(self._render('🗂 ' + heading, choices), menu_active=True)
+
+    def open_todo_results(self, db: sqlite3.Connection, room: str, sender: str, *,
+                          rows=None, heading: str = '해야 할 일',
+                          previous: 'MenuState | None' = None) -> MenuAnswer:
+        """해야 할 일 조회 메뉴. 표시 번호는 항목 선택이며 #고유번호는 DB 식별자다."""
+        key = self._key(room, sender)
+        tasks = tuple(rows if rows is not None else list_todos(db, room, sender))
+        if not tasks:
+            parent = self.open_record_sector(room, sender, '개인', previous=previous)
+            return MenuAnswer('📭 표시할 할 일이 없습니다.\n'
+                              '※ 등록: 할일 추가 S20+ Extend Unlock 확인\n'
+                              '※ 또는: 개 5 할일 추가 S20+ Extend Unlock 확인\n\n' +
+                              parent.reply, menu_active=True)
+        choices = tuple(MenuChoice(todo_preview(task), page=f'todos:view:{task.id}')
+                        for task in tasks[:10])
+        self._save(key, choices, back='records-sector:개인', origin='todos-results',
+                   title='✅ ' + heading, previous=previous)
+        return MenuAnswer(self._render('✅ ' + heading, choices) +
+                          '\n※ 번호: 항목 관리 · 할일 추가 제목 · 0 이전',
+                          menu_active=True)
+
+    def open_todo_actions(self, db: sqlite3.Connection, room: str, sender: str, identifier: int, *,
+                          previous: 'MenuState | None' = None) -> MenuAnswer:
+        """선택한 할 일의 상세/안전한 상태 전환 메뉴. 텍스트를 임의로 실행하지 않는다."""
+        task = get_todo(db, room, sender, identifier)
+        action = ('복원' if task.completed_at is not None else '완료')
+        label = ('↩️ 다시 할 일로 복원' if action == '복원' else '✅ 완료 처리')
+        choices = (
+            MenuChoice(label, command_argument=f'할일작업 {action} {task.id}'),
+            MenuChoice('✏️ 제목·내용 수정 안내', page=f'todos:edit:{task.id}'),
+            MenuChoice('🗑️ 삭제', page=f'todos:confirm:{task.id}'),
+            MenuChoice('📋 해야 할 일 목록', page='todos:list'),
+        )
+        key = self._key(room, sender)
+        self._save(key, choices, back='records-sector:개인',
+                   origin=f'todos-item:{task.id}', title=f'📋 할 일 #{task.id} 관리',
+                   previous=previous)
+        return MenuAnswer(todo_detail(task) + '\n\n' +
+                          self._render(f'📋 할 일 #{task.id} 관리', choices),
+                          menu_active=True)
+
+    def open_todo_delete_confirmation(self, db: sqlite3.Connection, room: str,
+                                      sender: str, identifier: int, *,
+                                      previous: 'MenuState | None' = None) -> MenuAnswer:
+        """1차 삭제 선택 후 2차 확인 번호를 요구한다. 실제 삭제는 메인 트랜잭션에서만 한다."""
+        task = get_todo(db, room, sender, identifier)
+        choices = (
+            MenuChoice('🗑️ 이 할 일 영구 삭제 확인', command_argument=f'할일작업 삭제 {task.id} 확인'),
+            MenuChoice('취소 · 상세 메뉴로 돌아가기', page=f'todos:view:{task.id}'),
+        )
+        self._save(self._key(room, sender), choices, back='records-sector:개인',
+                   origin=f'todos-delete-confirm:{task.id}',
+                   title=f'⚠️ 할 일 #{task.id} 삭제 확인', previous=previous)
+        return MenuAnswer(self._render(f'⚠️ 할 일 #{task.id} 삭제 확인', choices) +
+                          f'\n대상: {task.title}\n※ 1을 누르면 복구할 수 없습니다. · 2/0 취소',
+                          menu_active=True)
 
     def open_settings(self, room: str, sender: str, *, previous: 'MenuState | None' = None) -> MenuAnswer:
         """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
@@ -594,6 +663,13 @@ class StockSelectionMenus:
                         from .watchlists import execute_group_command
                         return MenuAnswer(execute_group_command(db, room, sender, '목록'),
                                           menu_active=True, back=prior.back, restored=True)
+                    if prior.origin == 'todos-results':
+                        # DB를 다시 조회해 완료/삭제 이후 오래된 목록 선택을 방지한다.
+                        return self.open_todo_results(db, room, sender, previous=prior.previous)
+                    if prior.origin.startswith('todos-item:'):
+                        return self.open_todo_actions(db, room, sender,
+                                                      int(prior.origin.split(':', 1)[1]),
+                                                      previous=prior.previous)
                     return MenuAnswer(self._restore_menu_reply(prior),
                                       menu_active=True, back=prior.back, restored=True)
                 back = state.back
@@ -651,6 +727,29 @@ class StockSelectionMenus:
             return self.open_settings(room, sender, previous=state)
         if choice.page.startswith('records:root:'):
             return self.open_record_sector(room, sender, choice.page.split(':', 2)[2], previous=state)
+        if choice.page == 'todos:list':
+            return self.open_todo_results(db, room, sender, previous=state)
+        if choice.page.startswith('todos:view:'):
+            # 삭제 확인 화면에서 취소하면 확인 메뉴를 재진입하지 않고 항목 관리로 복귀한다.
+            parent = (state.previous.previous
+                      if state.origin.startswith('todos-delete-confirm:') and
+                      state.previous is not None else state)
+            return self.open_todo_actions(db, room, sender,
+                                          int(choice.page.rsplit(':', 1)[1]), previous=parent)
+        if choice.page.startswith('todos:edit:'):
+            identifier = int(choice.page.rsplit(':', 1)[1])
+            task = get_todo(db, room, sender, identifier)
+            parent = self.open_todo_actions(db, room, sender, identifier,
+                                            previous=state)
+            return MenuAnswer(
+                f'✏️ 할 일 #{identifier} 수정\n'
+                f'현재: {task.title}\n'
+                f'※ 수정: 할일 수정 {identifier} 새 제목 | 상세 내용\n'
+                f'※ 기한: 할일 기한 {identifier} YYYY-MM-DD (또는 없음)\n\n' +
+                parent.reply, menu_active=True)
+        if choice.page.startswith('todos:confirm:'):
+            return self.open_todo_delete_confirmation(db, room, sender,
+                int(choice.page.rsplit(':', 1)[1]), previous=state)
         if choice.page.startswith('records:list:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,

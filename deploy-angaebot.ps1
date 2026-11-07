@@ -29,6 +29,9 @@
 # 22. Metadata is best-effort after successful service/APK verification; never erase existing DB/logs/data.
 # 20. If Java is missing from the shell, reuse Android Studio's bundled JBR
 #     for the Gradle APK build without changing machine settings.
+# 30. Retry transient GitHub Actions API 408/429/5xx and network timeout errors until WaitMinutes expires.
+# 31. Never bypass CI, accept a different SHA/branch, or ignore permanent authentication/API errors.
+# 32. Keep the previous successful-run validation and all S20+ deployment, rollback, .env and logging behavior.
 # Run: .\deploy-angaebot.ps1
 # Option: .\deploy-angaebot.ps1 -WaitMinutes 10
 param(
@@ -55,6 +58,34 @@ $adbExe = ''
 $localEnvPath = ''
 $envSyncPrepared = $false
 $envStageAttempted = $false
+
+# Only HTTP gateway/network failures are retried. Invalid credentials (401/403)
+# and API request errors (such as 404) must still abort immediately.
+function Test-TransientGithubApiFailure([System.Management.Automation.ErrorRecord]$Failure) {
+    $exception = $Failure.Exception
+    $httpStatus = $null
+    try {
+        if ($null -ne $exception.Response -and $null -ne $exception.Response.StatusCode) {
+            $httpStatus = [int]$exception.Response.StatusCode
+        }
+    } catch {
+        # Some PowerShell / .NET versions do not expose an HTTP response on timeout.
+    }
+    if ($null -ne $httpStatus) {
+        return ($httpStatus -in @(408, 429, 500, 502, 503, 504))
+    }
+    if ($exception -is [System.Net.WebException]) {
+        return ($exception.Status -in @(
+            [System.Net.WebExceptionStatus]::Timeout,
+            [System.Net.WebExceptionStatus]::ConnectFailure,
+            [System.Net.WebExceptionStatus]::ConnectionClosed,
+            [System.Net.WebExceptionStatus]::ReceiveFailure,
+            [System.Net.WebExceptionStatus]::SendFailure,
+            [System.Net.WebExceptionStatus]::KeepAliveFailure
+        ))
+    }
+    return $false
+}
 
 function Assert-Exit([string]$Message) {
     if ($LASTEXITCODE -ne 0) { throw "$Message (exit=$LASTEXITCODE)" }
@@ -134,9 +165,23 @@ try {
     $passed = $false
     $headers = @{ 'Accept' = 'application/vnd.github+json'; 'User-Agent' = 'AngaeBot-Deploy' }
     if ($env:GH_TOKEN) { $headers['Authorization'] = "Bearer $env:GH_TOKEN" }
+    $apiFailures = 0
     do {
         $api = "https://api.github.com/repos/$Repo/actions/runs?head_sha=$sha&per_page=30"
-        $result = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 20
+        try {
+            $result = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 20
+            $apiFailures = 0
+        } catch {
+            if (-not (Test-TransientGithubApiFailure $_)) { throw }
+            $apiFailures++
+            if ((Get-Date) -ge $deadline) {
+                throw "GitHub Actions API still unavailable after $WaitMinutes minutes. No CI bypass; deployment stopped."
+            }
+            $retrySeconds = [int][Math]::Min(20, 5 * [Math]::Pow(2, [Math]::Min($apiFailures - 1, 2)))
+            Write-Warning "[CI] Temporary GitHub Actions API gateway/network error (attempt $apiFailures). Retrying in $retrySeconds seconds; target SHA remains $sha."
+            Start-Sleep -Seconds $retrySeconds
+            continue
+        }
         $run = @($result.workflow_runs | Where-Object {
             $_.head_sha -eq $sha -and $_.name -eq 'AngaeBot Core regression' -and $_.head_branch -eq $Branch
         } | Sort-Object run_number -Descending | Select-Object -First 1)

@@ -11,6 +11,7 @@
  * 9. 날씨 응답은 별도 core/app/weather.py로 표시한다.
  * 10. 기본 답장에서는 모듈·파일 경로를 생략하고 앙개야 모듈 단독 응답에서만 이전 모듈 상세를 복원한다.
  * 11. 섹터 시세 core.sector_watchlists가 Python 연결로 잘못 표시되지 않는지, 방/발신자별 최근 모듈 격리/24시간 만료를 확인한다.
+ * 12. 이미지 시험의 별도 module_source가 다른 기능 소스와 혼동되지 않고 ReplyManager.kt로 연결되는지 검사한다.
  */
 package kr.co.angaebot.bridge
 
@@ -28,6 +29,7 @@ class ModuleSourceFormatterTest {
         assertTrue(ModuleSourceFormatter.append("오늘 날씨", "core.weather").contains("core/app/weather.py"))
         assertEquals("bridge.commands", ModuleSourceFormatter.localCommandSource("상태"))
         assertTrue(ModuleSourceFormatter.append("상태", "bridge.commands").contains("CommandParser.kt"))
+        assertTrue(ModuleSourceFormatter.append("이미지", "bridge.image").contains("ReplyManager.kt"))
     }
     @Test fun originalBodyAndBatteryCompatible() {
         val original = "✅ 앙개봇 상태"
