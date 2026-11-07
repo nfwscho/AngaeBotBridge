@@ -46,6 +46,8 @@
 // 45. 진단에서 방/보내기 클릭 없음, 기존 전송 방식/SQLite/잠금·로그/UI 보존.
 // 46. v0.4.24(versionCode 28)는 A/B 고유 테스트 PNG와 no-key 대조로 MediaSender ID 힌트 실제 효과를 비교한다.
 // 47. 기존 모든 앱 설정/SQLite/개인 할 일/이미지 자동시험/잠금 인증/Android 로그를 보존한다.
+// 48. v0.4.25(versionCode 29) 승인된 1:1 PNG 직접 공유와 인증 Core 실제 일봉 PNG 다운로드를 지원한다.
+// 49. 기존 원본 이미지 실험, 개인정보 보호/설정/DB/로그/UI/주식/날씨/개인 할 일을 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -59,8 +61,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.4.24"
+        versionCode = 29
+        versionName = "0.4.25"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
