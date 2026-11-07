@@ -9,6 +9,8 @@
  * 이미지 데이터를 앱 전용 읽기 전용 ContentProvider로 전달한다. 원래 reply()와 텍스트·예외 로그는 그대로 보존한다.
  * 이미지 전송 요청이 수락되어도 카카오톡 대화방의 실제 수신·표시 여부는 S20+로 별도 확인해야 한다.
  * 접근성 공유 시험에서는 기존 앱 전용 640x360 PNG 생성을 재사용하고 content URI만 제공하며 원래 텍스트 답장 코드는 변경하지 않는다.
+ * v0.4.24 MediaSender 대조 실험은 고유 파일명·이미지 내 A/B 표식·작업별 파일 구별로 두 직접공유 Intent를 구분한다.
+ * A는 key_id 포함, B는 key_id 제외이며 기존 테스트 사진 생성·RemoteInput·공유 API/로그/UI를 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -125,7 +127,19 @@ object ReplyManager {
             .build()
     }
 
-    private fun createTestImage(context: Context, fileName: String, mime: String) {
+    /** 별도 파일명을 갖는 MediaSender A/B PNG. 기존 공유 이미지와 절대 같은 경로를 사용하지 않는다. */
+    fun prepareDirectComparisonImage(context: Context, withChannelHint: Boolean): Uri {
+        val fileName = if (withChannelHint) "angaebot-direct-a.png" else "angaebot-direct-b.png"
+        val marker = if (withChannelHint) "A: DIRECT (KEY_ID)" else "B: CONTROL (NO KEY_ID)"
+        createTestImage(context, fileName, "image/png", marker)
+        return Uri.Builder()
+            .scheme("content")
+            .authority("${context.packageName}.imageprovider")
+            .appendPath(fileName)
+            .build()
+    }
+
+    private fun createTestImage(context: Context, fileName: String, mime: String, marker: String? = null) {
         val outputDir = File(context.cacheDir, "image-reply")
         if (!outputDir.isDirectory && !outputDir.mkdirs()) {
             throw IllegalStateException("이미지 캐시 폴더 생성 실패")
@@ -143,6 +157,12 @@ object ReplyManager {
             paint.textSize = 27f
             paint.isFakeBoldText = false
             canvas.drawText("S20+ / Android RemoteInput", 44f, 216f, paint)
+            if (marker != null) {
+                paint.color = Color.rgb(255, 220, 102)
+                paint.textSize = 28f
+                paint.isFakeBoldText = true
+                canvas.drawText(marker, 44f, 282f, paint)
+            }
             File(outputDir, fileName).outputStream().use { stream ->
                 val format = if (mime == "image/png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
                 if (!bitmap.compress(format, 90, stream)) throw IllegalStateException("테스트 이미지 인코딩 실패")
