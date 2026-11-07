@@ -63,6 +63,7 @@
  * 65. v0.4.22에서 기존 장문 "앙개야 이미지 직공유진단/직공유시험"을 허용목록 기반 이미지 시험에 연결한다.
  * 66. 나머지 기존 단축/주식/개인/날씨 명령 파서는 절대 변경하지 않는다.
  * 67. v0.4.23의 앙개야 이미지 직공유경로확인도 기존 정확한 장문 호출어·허용목록을 그대로 사용한다.
+ * 68. v0.4.24는 앙개야 이미지 직공유대조를 같은 정확한 호출어와 알림 인증 흐름으로 처리한다.
  */
 package kr.co.angaebot.bridge
 
@@ -178,7 +179,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.23 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.24 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
