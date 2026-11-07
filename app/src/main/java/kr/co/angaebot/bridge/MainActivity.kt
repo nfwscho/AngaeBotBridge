@@ -186,7 +186,6 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "이미지 실험 설정을 저장했습니다.", Toast.LENGTH_SHORT).show()
             } else {
                 imageAutoSwitch.isChecked = ImageAutoConfig.enabled(this)
-        mediaDirectSwitch.isChecked = MediaDirectConfig.enabled(this)
                 Toast.makeText(this, "설정 저장 실패", Toast.LENGTH_LONG).show()
             }
             updateStatusAndLogs()
@@ -263,6 +262,7 @@ class MainActivity : Activity() {
         val values = config.load()
         powerSwitch.isChecked = values.enabled
         imageAutoSwitch.isChecked = ImageAutoConfig.enabled(this)
+        mediaDirectSwitch.isChecked = MediaDirectConfig.enabled(this)
         wakeInput.setText(values.wakeWord)
         roomsInput.setText(values.allowedRooms.joinToString("\n"))
         sendersInput.setText(values.allowedSenders.joinToString("\n"))
