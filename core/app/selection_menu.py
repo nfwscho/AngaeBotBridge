@@ -68,6 +68,9 @@
 84. v0.7.5는 개인 5번 목록에서 고유 #번호와 등록일시를 표시하고 각 항목의 번호로 완료/수정 안내/삭제 확인/목록 메뉴를 연다.
 85. 할 일 완료·삭제는 실제 SQLite 변경을 이 함수에서 수행하지 않고 기존 인증된 메인 트랜잭션에 지시한다.
 86. 삭제는 할 일 메뉴 선택 후 별도 최종 확인 번호가 필요하며, 0/00·범위·TTL·중복 방지·기존 전체 메뉴를 유지한다.
+87. v0.7.6 해야 할 일은 10건 단위로 97/98 페이지 이동하며 미완료/완료/전체/검색 조건을 유지한다.
+88. 페이지마다 표시 번호 1~10을 고유 #ID로 안전하게 매핑하고 0 이전·00 홈·5분·스코프 격리를 보존한다.
+89. 메뉴 이력에는 짧은 검색어와 페이지 상태만 저장하며 상세 내용/SQLite 자료/인증키는 복제하지 않는다.
 79. 주식 홈에서는 1~5 시세와 6~8 조회·목록·분석 사이에 빈 줄 하나만 삽입하고 다른 메뉴 출력/이전 화면 복구는 변경하지 않는다.
 80. 미국 시총10 홈 2번은 개인 DB 그룹 사전 생성이 필요 없는 고정 US_MARKET_CAP_PRESET 10종목 조회로 연결하며 기존 직접 '주식 미국시총10'·그룹 CRUD는 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
@@ -99,7 +102,8 @@ from dataclasses import dataclass
 from .market import Stock, StockQuoteError, WATCHLIST
 from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
                                get_record, list_records, record_preview, record_detail, help_text)
-from .todos import (list_todos, get_todo, todo_preview, todo_detail)
+from .todos import (list_todos, count_todos, get_todo, todo_preview, todo_detail,
+                    LIST_LIMIT)
 
 MENU_TTL_SECONDS = 300
 MAX_MENU_SESSIONS = 200
@@ -130,6 +134,7 @@ class MenuState:
     origin: str = 'menu'
     title: str = ''
     previous: 'MenuState | None' = None
+    search_query: str | None = None
 
 
 # 카카오톡 대메뉴와 하위 콘텐츠는 텍스트 라벨이 아니라 고정된 내부 카테고리 키로 분리한다.
@@ -172,7 +177,8 @@ class StockSelectionMenus:
         if state is None or limit <= 0:
             return None
         return MenuState(state.expire_at, state.choices, state.back, state.origin,
-                         state.title, StockSelectionMenus._history(state.previous, limit=limit-1))
+                         state.title, StockSelectionMenus._history(state.previous, limit=limit-1),
+                          state.search_query)
 
     @classmethod
     def _restore_menu_reply(cls, state: MenuState) -> str:
@@ -198,7 +204,8 @@ class StockSelectionMenus:
 
     def _save(self, key: tuple[str, str], choices: tuple[MenuChoice, ...], *,
               back: str = 'menu', origin: str = 'menu', title: str = '',
-              previous: 'MenuState | None' = None) -> None:
+              previous: 'MenuState | None' = None,
+               search_query: str | None = None) -> None:
         now = self._clock()
         with self._lock:
             self._states = {k: v for k, v in self._states.items() if v.expire_at > now}
@@ -206,7 +213,8 @@ class StockSelectionMenus:
                 oldest = min(self._states, key=lambda k: self._states[k].expire_at)
                 self._states.pop(oldest, None)
             prior = self._history(previous) if previous is not None and previous.expire_at > now else None
-            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin, title, prior)
+            self._states[key] = MenuState(now + MENU_TTL_SECONDS, choices, back, origin, title,
+                                          prior, search_query)
 
 
     @staticmethod
@@ -406,10 +414,17 @@ class StockSelectionMenus:
 
     def open_todo_results(self, db: sqlite3.Connection, room: str, sender: str, *,
                           rows=None, heading: str = '해야 할 일',
-                          previous: 'MenuState | None' = None) -> MenuAnswer:
-        """해야 할 일 조회 메뉴. 표시 번호는 항목 선택이며 #고유번호는 DB 식별자다."""
+                          previous: 'MenuState | None' = None,
+                          state: str = 'open', query: str | None = None,
+                          page: int = 1) -> MenuAnswer:
+        """필터별 10건 페이지 목록. 표시 번호와 고유 #ID를 분리하고 세션에는 본문을 저장하지 않는다."""
         key = self._key(room, sender)
-        tasks = tuple(rows if rows is not None else list_todos(db, room, sender))
+        total = count_todos(db, room, sender, state=state, query=query)
+        pages = max(1, (total + LIST_LIMIT - 1) // LIST_LIMIT)
+        page = max(1, min(page, pages))
+        tasks = tuple(rows if rows is not None and page == 1 else
+                      list_todos(db, room, sender, state=state, query=query,
+                                 offset=(page - 1) * LIST_LIMIT))
         if not tasks:
             parent = self.open_record_sector(room, sender, '개인', previous=previous)
             return MenuAnswer('📭 표시할 할 일이 없습니다.\n'
@@ -417,10 +432,15 @@ class StockSelectionMenus:
                               '※ 또는: 개 5 할일 추가 S20+ Extend Unlock 확인\n\n' +
                               parent.reply, menu_active=True)
         choices = tuple(MenuChoice(todo_preview(task), page=f'todos:view:{task.id}')
-                        for task in tasks[:10])
-        self._save(key, choices, back='records-sector:개인', origin='todos-results',
-                   title='✅ ' + heading, previous=previous)
-        return MenuAnswer(self._render('✅ ' + heading, choices) +
+                        for task in tasks[:LIST_LIMIT])
+        title = '✅ ' + heading
+        self._save(key, choices, back='records-sector:개인',
+                   origin=f'todos-results:{state}:{page}', title=title,
+                   previous=previous, search_query=query)
+        navigation = ('\n97. ◀ 이전 페이지' if page > 1 else '') + (
+                     '\n98. ▶ 다음 페이지' if page < pages else '')
+        return MenuAnswer(self._render(title, choices) +
+                          f'\n📄 {page}/{pages}페이지 · 총 {total}건' + navigation +
                           '\n※ 번호: 항목 관리 · 할일 추가 제목 · 0 이전',
                           menu_active=True)
 
@@ -643,7 +663,8 @@ class StockSelectionMenus:
                 prior = state.previous
                 if prior is not None and prior.expire_at > self._clock():
                     restored = MenuState(self._clock() + MENU_TTL_SECONDS, prior.choices,
-                                         prior.back, prior.origin, prior.title, prior.previous)
+                                         prior.back, prior.origin, prior.title, prior.previous,
+                                         prior.search_query)
                     self._states[key] = restored
                     if prior.origin.startswith('quotes:sector:'):
                         from .sector_watchlists import sector_argument
@@ -663,9 +684,12 @@ class StockSelectionMenus:
                         from .watchlists import execute_group_command
                         return MenuAnswer(execute_group_command(db, room, sender, '목록'),
                                           menu_active=True, back=prior.back, restored=True)
-                    if prior.origin == 'todos-results':
-                        # DB를 다시 조회해 완료/삭제 이후 오래된 목록 선택을 방지한다.
-                        return self.open_todo_results(db, room, sender, previous=prior.previous)
+                    if prior.origin.startswith('todos-results:'):
+                        # DB를 다시 조회하고 기존 상태·검색어·페이지를 보존해 오래된 ID 선택을 방지한다.
+                        _, task_state, page_text = prior.origin.split(':')
+                        return self.open_todo_results(db, room, sender,
+                            state=task_state, query=prior.search_query, page=int(page_text),
+                            heading=prior.title.removeprefix('✅ '), previous=prior.previous)
                     if prior.origin.startswith('todos-item:'):
                         return self.open_todo_actions(db, room, sender,
                                                       int(prior.origin.split(':', 1)[1]),
@@ -684,6 +708,18 @@ class StockSelectionMenus:
                     from .watchlists import execute_group_command
                     return MenuAnswer(execute_group_command(db, room, sender, '목록'), menu_active=True)
                 return self.open(room, sender, back='home')
+            if number in ('97', '98') and state.origin.startswith('todos-results:'):
+                _, task_state, page_text = state.origin.split(':')
+                current_page = int(page_text)
+                total = count_todos(db, room, sender, state=task_state, query=state.search_query)
+                last_page = max(1, (total + LIST_LIMIT - 1) // LIST_LIMIT)
+                target = current_page + (1 if number == '98' else -1)
+                if target < 1 or target > last_page:
+                    raise StockQuoteError('이미 첫 페이지입니다.' if target < 1
+                                          else '이미 마지막 페이지입니다.')
+                return self.open_todo_results(db, room, sender,
+                    heading=state.title.removeprefix('✅ '), state=task_state,
+                    query=state.search_query, page=target, previous=state.previous)
             if number in ('97', '98', '99') and state.origin.startswith('quotes:sector:'):
                 from .sector_watchlists import page_count, sector_argument
                 _, _, key_name, page_text, mode = state.origin.split(':')
