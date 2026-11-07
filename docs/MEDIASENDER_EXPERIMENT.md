@@ -10,9 +10,11 @@
 1. 기존 앙개봇 1:1 카카오톡 및 호출어·방/발신자 허용목록이 정상인지 확인한다. `앙개야 이미지 자동시험`이 작동하는 기존 경로는 그대로 유지한다.
 2. S25에서 `앙개야 이미지 직공유진단` 전송. S20+는 알림 tag가 숫자 8~18자리인지, room과 sender가 정확히 같은지 검사한다. 성공 시 자릿수 및 끝 네 자리만 응답하고 5분짜리 일회성 메모리 승인을 남긴다. **진단 단계에서는 어떤 파일도 전송하지 않는다.**
 3. S20+ Android Bridge의 ②-B-1 MediaSender 직공유 실험 스위치를 ON으로 하고 저장한다. 기존 ②-B 이미지 자동전송 스위치 및 접근성 서비스도 ON이어야 한다.
-4. 5분 내 S25에서 `앙개야 이미지 직공유시험`을 전송한다. 진단 시점과 동일한 1:1 채팅방·발신자·알림 tag 값일 때만 테스트 이미지에 direct-share 힌트를 넣어 전송을 요청한다.
-5. 사진이 **실제 S25의 해당 대화방에 도착했는지**, S20+가 의도치 않은 다른 방을 선택하지 않았는지 확인한다. 부작용이 있으면 즉시 시험 스위치를 OFF 한다.
-6. 이벤트 로그에서 MEDIA_DIRECT_CANDIDATE, MEDIA_DIRECT_QUEUED, MEDIA_DIRECT_INTENT_STARTED, IMAGE_UI_SEND_REQUESTED 또는 IMAGE_UI_ABORTED/IMAGE_UI_TIMEOUT을 확인한다. 직접 공유 Intent를 시작했음은 실제 수신 확인이 아니다.
+4. **권장 2차 검증**: 5분 내 S25에서 `앙개야 이미지 직공유경로확인`을 전송한다. 이 명령은 MediaSender의 direct-share 힌트로 카카오 공유 화면을 열지만 **수신 방 선택이나 보내기 버튼을 자동 클릭하지 않는다.** S20+에서 어떤 화면이 보이는지 직접 확인하고 건드리지 않는다. Android에서 다른 앱의 공유 처리 자체가 자동으로 진행되는 경우까지 강제로 금지하지는 못한다.
+5. 로그 `MEDIA_DIRECT_PROBE_RESULT`의 `route=RECIPIENT_PICKER`라면 수신자 선택창이 표시되어 직접 지정 효과가 확인되지 않은 것. `TARGET_SCREEN_CANDIDATE`는 대상 텍스트/버튼이 함께 보이는 후보일 뿐 정확한 ID 또는 실제 발송 성공을 증명하지 않는다. `MEDIA_DIRECT_PROBE_WAIT`·`MEDIA_DIRECT_PROBE_TIMEOUT`이면 판단 보류. 화면에서는 자동 클릭 없이 20초까지 관찰한다.
+6. 이전 실험의 `앙개야 이미지 직공유시험`은 기존 접근성 자동화의 방 선택·보내기 클릭을 **그대로 사용**한다. 사진이 도착해도 직접 채팅방 ID 동작을 입증하지 못한다. `MEDIA_DIRECT_FALLBACK_ROOM_CLICK` / `IMAGE_UI_ROOM_SELECTED`이 있으면 기존 방식으로 채팅방을 선택한 것.
+7. 관찰용 화면을 닫은 후 반드시 새로운 `앙개야 이미지 직공유진단`을 먼저 보내야 한다. 진단 승인은 1회용이며 소모되면 재사용할 수 없다. 기존 사진 자동전송을 비교하려면 `앙개야 이미지 자동시험`을 사용한다. 부작용이 있으면 실험 스위치를 OFF 한다.
+8. 이벤트 로그 `MEDIA_DIRECT_CANDIDATE`, `MEDIA_DIRECT_PROBE_QUEUED`, `MEDIA_DIRECT_INTENT_STARTED`, `MEDIA_DIRECT_PROBE_RESULT` 또는 `MEDIA_DIRECT_PROBE_TIMEOUT`을 확인한다. Intent 시작 성공은 실제 수신 확인이 아니다.
 
 ## 한계·안전
 - Android StatusBarNotification.tag는 **알림 태그**일 뿐 실제 카카오톡 채팅방 ID인지 보증되지 않는다. 숫자가 보인다는 사실만으로는 직접 발송 성공 또는 올바른 대상 인증을 뜻하지 않는다.
