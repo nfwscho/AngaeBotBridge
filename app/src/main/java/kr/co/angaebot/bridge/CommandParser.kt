@@ -55,6 +55,7 @@
  * 57. 기존 주식·날씨·부동산·메모·AI·숫자 선택/로그 및 8줄 도움말은 유지한다.
  * 58. 이미지 자동전송 v0.4.17의 상태 버전만 갱신하고 모든 기존 명령 인식은 보존한다.
  * 59. v0.4.18의 화면 깨우기 시도 버전만 갱신하고 모든 기존 명령/로그/UI를 유지한다.
+ * 60. v0.4.19의 1명 사진 전송 버튼 인식 개선에 맞춰 상태 버전만 올리고 명령 파서 및 전체 도움말을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -157,7 +158,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.18 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.19 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
