@@ -51,6 +51,10 @@
  * 49. v0.4.24 직공유대조는 5분 내 동일 방·발신자·태그 진단 후 key_id 없이 B 이미지 관찰 시험만 실행한다.
  * 50. 직공유경로확인(A)과 직공유대조(B)는 앱 생성 별도 A/B PNG를 사용하여 지난 동일 사진과 구분한다.
  * 51. 두 모드 모두 별도 OFF 실험 스위치/정확한 허용목록/중복방지/PIN 보호/접근성 자동 클릭 차단을 유지한다.
+ * 52. v0.4.25 기존 직공유진단 뒤 S20+ 물리적 승인으로 1:1 정확 방/발신자/숫자형 ID를 별도 직접 PNG 엔진에 연결한다.
+ * 53. 앙개야 이미지 직접시험/직접차트 MU는 등록된 방과 현재 알림 tag가 정확히 같은 경우에만 새로운 전송을 요청한다.
+ * 54. 직접차트는 기존 토큰으로 localhost Python Core에서 실제 일별 차트 PNG를 받아 유효한 PNG만 공유한다.
+ * 55. 새 직접전송 엔진은 다른 채팅/단체방/미연결/설정 OFF에서 거부하고 기존 이미지 자동시험/A-B/모든 로그를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -137,6 +141,8 @@ class KakaoNotificationListener : NotificationListenerService() {
             val isMediaDirectTest = parsed.name == "이미지" && parsed.argument == "직공유시험"
             val isMediaRouteProbe = parsed.name == "이미지" && parsed.argument == "직공유경로확인"
             val isMediaControlProbe = parsed.name == "이미지" && parsed.argument == "직공유대조"
+            val isDirectPngTest = parsed.name == "이미지" && parsed.argument == "직접시험"
+            val isDirectPngChart = parsed.name == "이미지" && parsed.argument.startsWith("직접차트 ")
             // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
             // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
             if (numericSelection == null && !isModuleLookup &&
@@ -171,6 +177,8 @@ class KakaoNotificationListener : NotificationListenerService() {
             val imageMime = if (isImageTest) ReplyManager.supportedImageMime(sbn.notification) else null
             val imageAutoStart = if (isImageAutoTest) KakaoImageAccessibilityService.queueTest(message.room) else null
             val directCandidate = if (isMediaDirectDiagnostic) {
+                // 별도 1:1 직접 PNG 엔진의 물리적 승인 버튼에서만 등록 가능한 후보로도 5분 보관.
+                DirectPngPairing.stage(sbn.tag, message.room, message.sender, SystemClock.elapsedRealtime())
                 mediaDirectApproval.diagnose(sbn.tag, message.room, message.sender, SystemClock.elapsedRealtime())
             } else if ((isMediaDirectTest || isMediaRouteProbe || isMediaControlProbe) && MediaDirectConfig.enabled(this)) {
                 mediaDirectApproval.consume(sbn.tag, message.room, message.sender, SystemClock.elapsedRealtime())
@@ -186,7 +194,55 @@ class KakaoNotificationListener : NotificationListenerService() {
             }
             val response = if (parsed.name == "이미지") {
                 sourceModule = "bridge.image"
-                if (isMediaDirectDiagnostic) {
+                if (isDirectPngTest || isDirectPngChart) {
+                    if (!DirectPngConfig.authorized(this,message.room,message.sender,sbn.tag)) {
+                        logger.log("WARN","DIRECT_PNG_REJECTED",
+                            "직접 PNG 전용 스위치·승인된 1:1 방/발신자/현재 알림 태그 불일치",
+                            message.room,message.sender)
+                        "⚠️ PNG 직접전송 대상 미승인\n" +
+                            "S20+의 ②-B-2에서 직공유진단 후보를 승인하고 별도 스위치를 ON으로 저장하세요.\n" +
+                            "※ 기존 이미지 자동시험은 그대로 이용할 수 있습니다."
+                    } else {
+                        val ticker=if(isDirectPngChart) parsed.argument.removePrefix("직접차트 ").trim() else ""
+                        val chartResult=if(isDirectPngChart) {
+                            try {
+                                val settings=pythonConfig.load()
+                                if(!settings.enabled) ChartPngOutcome.Failed("Python 연결 설정 OFF")
+                                else PythonBridgeClient.stockChartPng(settings.token,ticker)
+                            } catch(e:Exception) {
+                                ChartPngOutcome.Failed("Python 차트 연결 오류: "+e.javaClass.simpleName)
+                            }
+                        } else null
+                        when {
+                            chartResult is ChartPngOutcome.Failed -> {
+                                logger.log("WARN","DIRECT_PNG_CHART_FAILED",
+                                    "ticker="+ticker.take(16)+" "+chartResult.reason,message.room,message.sender)
+                                "⚠️ 주식 차트 PNG 생성 불가\n"+chartResult.reason
+                            }
+                            else -> {
+                                val pngBytes=(chartResult as? ChartPngOutcome.Ready)?.bytes
+                                val source=if(isDirectPngChart) "core_stock" else "self_test"
+                                val queue=KakaoImageAccessibilityService.queueProductionPng(
+                                    message.room,message.sender,sbn.tag,pngBytes,source)
+                                when(queue) {
+                                    ImageAutoStart.Queued -> {
+                                        logger.log("INFO","DIRECT_PNG_QUEUED",
+                                            "source="+source+" ticker="+ticker.take(16)+
+                                                " · 사용자 승인 1:1 · 실제 수신 미확인",message.room,message.sender)
+                                        "🖼️ PNG 직접전송 요청\n" +
+                                            (if(isDirectPngChart) "실제 마감 일봉 차트: "+ticker else "고유 테스트 PNG") +
+                                            "\n※ 카카오톡 사진 말풍선의 실제 도착 여부를 확인하세요."
+                                    }
+                                    is ImageAutoStart.Rejected -> {
+                                        logger.log("WARN","DIRECT_PNG_REJECTED",queue.reason,
+                                            message.room,message.sender)
+                                        "⚠️ PNG 직접전송 거부\n"+queue.reason
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (isMediaDirectDiagnostic) {
                     if (directCandidate == null) {
                         logger.log("WARN", "MEDIA_DIRECT_NO_CANDIDATE",
                             "1:1 이름 일치 또는 숫자형 알림 tag 검증 실패", message.room, message.sender)
@@ -256,7 +312,8 @@ class KakaoNotificationListener : NotificationListenerService() {
                 } else if (!isImageTest) {
                     "🖼️ 이미지 진단: 앙개야 이미지 테스트 / 앙개야 이미지 자동시험\n" +
                         "MediaSender: 직공유진단 / 직공유경로확인(A) / 직공유대조(B) / 직공유시험\n" +
-                        "※ 직접 공유는 별도 OFF 기본값이며 진단이 선행돼야 합니다."
+                        "PNG 직접전송: 이미지 직접시험 / 이미지 직접차트 MU · S20+ ②-B-2 승인 필요\n" +
+                        "※ 새로운 직접 PNG 엔진은 기본 OFF이며 1:1 물리적 승인이 필요합니다."
                 } else if (imageMime == null) {
                     logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "카카오톡 알림에 이미지 MIME RemoteInput 액션 없음", message.room, message.sender)
                     "🖼️ 이미지 직접 전송 미지원\n현재 카카오톡 알림은 사진 첨부 입력을 제공하지 않습니다.\n※ 텍스트 자동응답은 정상 유지됩니다."
