@@ -42,6 +42,8 @@
 // 41. v0.4.21(versionCode 25)은 '개 5 할일 추가' 복합 명령만 추가하고 기존 앱 설정/UI/로그는 유지한다.
 // 42. v0.4.22(versionCode 26)은 MediaSender 채팅방 직접 공유 후보 진단과 별도 OFF 기본값 실험을 제공한다.
 // 43. 기존 앙개봇 이미지 자동전송/주식/날씨/할 일/SQLite/.env/Android UI 및 모든 로그/보안 설정을 유지한다.
+// 44. v0.4.23(versionCode 27) 관찰 전용 직접공유 경로 진단으로 기존 대상 선택과 직접 ID 경로를 구분한다.
+// 45. 진단에서 방/보내기 클릭 없음, 기존 전송 방식/SQLite/잠금·로그/UI 보존.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -55,8 +57,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.4.22"
+        versionCode = 27
+        versionName = "0.4.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
