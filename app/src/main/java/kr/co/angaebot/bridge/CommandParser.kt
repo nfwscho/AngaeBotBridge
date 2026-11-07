@@ -56,6 +56,8 @@
  * 58. 이미지 자동전송 v0.4.17의 상태 버전만 갱신하고 모든 기존 명령 인식은 보존한다.
  * 59. v0.4.18의 화면 깨우기 시도 버전만 갱신하고 모든 기존 명령/로그/UI를 유지한다.
  * 60. v0.4.19의 1명 사진 전송 버튼 인식 개선에 맞춰 상태 버전만 올리고 명령 파서 및 전체 도움말을 보존한다.
+ * 61. v0.4.20에서 정확한 할/할일 단축 및 앙개야 할일 명령으로 개인 할 일 등록·완료·삭제를 Python Core에 전달한다.
+ * 62. 기존 앙/주/개/메/부 등 단축어, 숫자 메뉴, 기존 개인정보 보호·로그·이미지 자동전송 기능을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -119,6 +121,11 @@ object CommandParser {
                 "상" -> return ParseResult.Command("상태", "")
                 "도" -> return ParseResult.Command("도움말", "")
             }
+            // 개인 할 일은 독립 단축 명령. 일반 단어의 접두사와 우연히 일치하면 인식하지 않는다.
+            if (index == "할" || index == "할일") {
+                val todoArgument = message.substring(index.length).trim()
+                return ParseResult.Command("할일", if (todoArgument.isEmpty()) "목록" else todoArgument)
+            }
         }
         // '주'는 사용자가 직접 선택한 짧은 주식 호출어. 원래 호출어 및 사용자 설정을 먼저 보호한다.
         // 정확히 '주'이거나 '주'+공백/탭/개행일 때만 사용하고, 붙여 쓴 일반 단어는 무시한다.
@@ -158,7 +165,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.19 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.20 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
@@ -166,7 +173,7 @@ object LocalCommandExecutor {
             "여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)",
             "설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말",
             "주 1 반도체주 · 2 미국시총10 · 3 AI · 4 반도체기자재 · 5 데센",
-            "앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울",
+            "앙 2/3/9 메모·일정 · 개 5 할일 · 부 3~5 실거래 · 날 지역 서울",
             "주 6 최근 · 7 관심목록 · 8 분석 · 주 분 삼성전자 · 1~19 · 99 · 0/00 · 앙개야 모듈"
         ).joinToString("\n")
         else -> "지원하지 않는 명령: $name\n도움말: 앙개야 도움말"
