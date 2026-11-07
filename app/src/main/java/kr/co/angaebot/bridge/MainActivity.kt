@@ -26,6 +26,9 @@
  * v0.4.22 MediaSender 직접 공유 진단은 별도 OFF 기본값과 설정 저장 버튼만 추가하며 기존 UI·로그·토큰·이미지 자동전송을 유지한다.
  * v0.4.23은 '직공유경로확인' 관찰 전용 명령 안내를 추가하며 기존 설정/DB/로그/이미지·텍스트 UI를 보존한다.
  * v0.4.24는 A/B 사진 직접공유 시험 절차와 이미지는 각기 구별되며 기존 앱 설정·로그·UI는 보존한다.
+ * v0.4.25는 ②-B-2 독립 직접 PNG 전송의 1:1 물리적 대상 승인/정확한 태그 연결/기본 OFF 스위치를 추가한다.
+ * 기존 ①~④ 설정/토큰/Android 접근성/로그·내보내기/이미지 자동시험·주식/개인 UI를 모두 유지한다.
+ * 1:1 외에는 연결을 승인하지 않으며 승인 후보는 5분 RAM에만 보관한다.
  */
 package kr.co.angaebot.bridge
 
@@ -38,6 +41,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.InputType
 import android.view.View
@@ -61,6 +65,8 @@ class MainActivity : Activity() {
     private lateinit var aiFreeformSwitch: Switch
     private lateinit var imageAutoSwitch: Switch
     private lateinit var mediaDirectSwitch: Switch
+    private lateinit var directPngSwitch: Switch
+    private lateinit var directPngStatus: TextView
     private lateinit var pythonTokenInput: EditText
     private lateinit var logs: LogRepository
     private lateinit var powerSwitch: Switch
@@ -102,7 +108,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.4.24 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.25 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -213,9 +219,78 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "MediaSender 시험 설정 저장됨", Toast.LENGTH_SHORT).show()
             } else {
                 mediaDirectSwitch.isChecked = MediaDirectConfig.enabled(this)
+        updateDirectPngStatus()
                 Toast.makeText(this, "MediaSender 설정 저장 실패", Toast.LENGTH_LONG).show()
             }
             updateStatusAndLogs()
+        })
+        root.addView(space(10))
+        root.addView(section("②-B-2 PNG 직접전송 · 검증된 개인 1:1 전용"))
+        root.addView(label(
+            "검증된 MediaSender 직접공유 방식으로 새로운 PNG 또는 Python Core 주식 차트를 보냅니다. " +
+            "기본 OFF · 다른 방/단톡방 전송 금지.\n" +
+            "① S25에서 '앙개야 이미지 직공유진단' 발송\n" +
+            "② 5분 안에 아래 '1:1 대상 연결 승인' 버튼을 S20+에서 직접 눌러 확인\n" +
+            "③ 직접 PNG 스위치를 ON 저장\n" +
+            "④ 카톡에서 '앙개야 이미지 직접시험' 또는 '앙개야 이미지 직접차트 MU' 입력\n" +
+            "기존 이미지 자동전송과 A/B 실험은 유지하며 PIN 인증 잠금은 우회하지 않습니다.\n" +
+            "방 이름이 변경되면 기존 연결을 해제하고 다시 등록하세요.",12f))
+        directPngStatus = label("연결된 1:1 채팅방 없음", 13f)
+        root.addView(directPngStatus)
+        root.addView(button("진단된 1:1 대상 연결 승인 (S20+에서만)") {
+            val candidate=DirectPngPairing.preview(SystemClock.elapsedRealtime())
+            if(candidate==null) {
+                Toast.makeText(this,"5분 이내 직공유진단 후보가 없습니다. 다시 진단하세요.",Toast.LENGTH_LONG).show()
+            } else {
+                AlertDialog.Builder(this).setTitle("직접 PNG 대상 연결 확인")
+                    .setMessage("실제로 검증된 개인 1:1 대화방만 승인하세요.\n\n" +
+                        DirectPngPolicy.masked(candidate) + "\n\n" +
+                        "잘못된 방에 이미지를 전송할 위험이 있으므로 대상이 맞을 때만 승인합니다.")
+                    .setNegativeButton("취소",null)
+                    .setPositiveButton("이 1:1 방 승인") { _, _ ->
+                        val again=DirectPngPairing.consume(SystemClock.elapsedRealtime())
+                        if(again!=candidate || !DirectPngConfig.approve(this,candidate)) {
+                            Toast.makeText(this,"승인 실패 · 진단 만료 또는 허용목록 확인 필요",Toast.LENGTH_LONG).show()
+                        } else {
+                            logs.log("INFO","DIRECT_PNG_PAIR_APPROVED",
+                                "room="+candidate.room+" tag="+MediaDirectPolicy.mask(candidate.tag)+
+                                    " · 작동 스위치 기본 OFF")
+                            Toast.makeText(this,"승인 저장됨. 직접 PNG 스위치를 별도로 켜세요.",Toast.LENGTH_LONG).show()
+                        }
+                        updateDirectPngStatus()
+                        updateStatusAndLogs()
+                    }.show()
+            }
+        })
+        directPngSwitch = Switch(this).apply {
+            text="검증된 1:1 PNG 직접전송 허용 (기본 OFF)"
+            textSize=15f
+            setPadding(0,dp(4),0,dp(4))
+        }
+        root.addView(directPngSwitch)
+        root.addView(button("직접 PNG 전송 설정 저장") {
+            val ok=DirectPngConfig.saveEnabled(this,directPngSwitch.isChecked)
+            if(ok) {
+                logs.log("INFO","DIRECT_PNG_SETTING_SAVED","enabled="+directPngSwitch.isChecked)
+                Toast.makeText(this,"직접 PNG 전송 설정 저장됨",Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this,"승인된 1:1 대상이 없어 ON 할 수 없습니다.",Toast.LENGTH_LONG).show()
+            }
+            updateDirectPngStatus()
+            updateStatusAndLogs()
+        })
+        root.addView(button("직접 PNG 대상 연결 해제") {
+            AlertDialog.Builder(this).setTitle("직접 PNG 연결 해제")
+                .setMessage("직접 PNG 전송만 OFF하고 승인된 대상 연결을 해제합니다. " +
+                    "기존 이미지 자동전송/로그/DB/주식/할 일은 유지됩니다.")
+                .setNegativeButton("취소",null)
+                .setPositiveButton("연결 해제") { _, _ ->
+                    if(DirectPngConfig.clear(this)) {
+                        logs.log("WARN","DIRECT_PNG_PAIR_CLEARED","직접 PNG 전송 대상만 연결 해제")
+                    }
+                    updateDirectPngStatus()
+                    updateStatusAndLogs()
+                }.show()
         })
         root.addView(button("이미지 자동전송 접근성 권한 설정 열기") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -281,6 +356,14 @@ class MainActivity : Activity() {
             pythonTokenInput.setText("")
             logs.log("ERROR", "PYTHON_SETTINGS_FAILED", "${e.javaClass.simpleName}: 저장된 토큰 확인 필요")
         }
+    }
+
+    private fun updateDirectPngStatus() {
+        val binding=DirectPngConfig.binding(this)
+        val on=DirectPngConfig.enabled(this)
+        directPngSwitch.isChecked=on
+        directPngStatus.text="대상: "+DirectPngPolicy.masked(binding) +
+            "\n직접 PNG 전송: " + (if(on) "ON" else "OFF")
     }
 
     private fun saveSettings() {
