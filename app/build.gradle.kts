@@ -48,6 +48,8 @@
 // 47. 기존 모든 앱 설정/SQLite/개인 할 일/이미지 자동시험/잠금 인증/Android 로그를 보존한다.
 // 48. v0.4.25(versionCode 29) 승인된 1:1 PNG 직접 공유와 인증 Core 실제 일봉 PNG 다운로드를 지원한다.
 // 49. 기존 원본 이미지 실험, 개인정보 보호/설정/DB/로그/UI/주식/날씨/개인 할 일을 유지한다.
+// 50. v0.4.26(versionCode 30)는 MediaSender 방식의 검증된 1:1 방 MP4 직접전송, 2.5초 앱 내장 영상, SAF 파일 선택을 추가한다.
+// 51. MP4 전송 기본 OFF/최대 50MiB·180초·읽기 전용 검증, 기존 이미지/주식/AI/개인 메뉴·SQLite/.env/전체 로그를 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -61,8 +63,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.4.25"
+        versionCode = 30
+        versionName = "0.4.26"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
