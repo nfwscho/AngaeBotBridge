@@ -8,7 +8,7 @@
  * 6. 새로운 direct PNG 스위치는 기본 OFF, 등록 대상은 단일 1:1 채팅방만 허용한다.
  * 7. PIN 인증·패턴·비밀번호 자동 해제는 어떤 경우에도 허용하지 않는다.
  * 8. 로그에는 태그의 자릿수/끝 네 자리만 기록하며 전체 식별자는 공개하지 않는다.
- * 9. PNG는 서명/IHDR/컬러타입/크기·파일 용량을 엄격히 검증한다.
+ * 9. PNG는 서명/IHDR/컬러타입/크기·파일 용량 및 PNG 청크 CRC를 엄격히 검증한다.
  * 10. 기존 접근성 직접시험/주식/메모/날씨/Python/SQLite/Android 설정은 수정하지 않는다.
  */
 package kr.co.angaebot.bridge
@@ -54,19 +54,42 @@ internal object DirectPngPairing {
 internal object DirectPngBytes {
     const val MAX_BYTES = 1_200_000
     private val signature = byteArrayOf(137.toByte(),80,78,71,13,10,26,10)
+    private val ihdr=byteArrayOf(73,72,68,82)
+    private val idat=byteArrayOf(73,68,65,84)
+    private val iend=byteArrayOf(73,69,78,68)
+
     fun valid(content: ByteArray): Boolean {
-        if (content.size !in 45..MAX_BYTES || !content.copyOfRange(0,8).contentEquals(signature)) return false
-        if (!content.copyOfRange(12,16).contentEquals(byteArrayOf(73,72,68,82))) return false // IHDR
-        val ihdrLength = uint(content,8)
-        if (ihdrLength!=13L) return false
+        if (content.size !in 57..MAX_BYTES || !content.copyOfRange(0,8).contentEquals(signature)) return false
+        if (uint(content,8)!=13L || !content.copyOfRange(12,16).contentEquals(ihdr)) return false
         val width=uint(content,16)
         val height=uint(content,20)
         if(width !in 320L..1600L || height !in 180L..1200L) return false
         if((content[24].toInt() and 255)!=8 || (content[25].toInt() and 255) !in listOf(2,6)) return false
         if((content[26].toInt() and 255)!=0 || (content[27].toInt() and 255)!=0 ||
            (content[28].toInt() and 255)!=0) return false
-        return content.copyOfRange(content.size-12,content.size-8).contentEquals(byteArrayOf(0,0,0,0)) &&
-            content.copyOfRange(content.size-8,content.size-4).contentEquals(byteArrayOf(73,69,78,68))
+
+        var index=8
+        var chunks=0
+        var imageData=false
+        while(index+12<=content.size) {
+            val length=uint(content,index)
+            if(length>MAX_BYTES || length>content.size-index-12) return false
+            val next=index+12+length.toInt()
+            val type=content.copyOfRange(index+4,index+8)
+            if(chunks==0 && (!type.contentEquals(ihdr) || length!=13L)) return false
+            val crc=java.util.zip.CRC32()
+            crc.update(content,index+4,4+length.toInt())
+            if(crc.value != uint(content,next-4)) return false
+            if(type.contentEquals(idat)) {
+                if(length<1L) return false
+                imageData=true
+            }
+            if(type.contentEquals(iend)) return imageData && length==0L && next==content.size
+            index=next
+            chunks++
+            if(chunks>100) return false
+        }
+        return false
     }
     private fun uint(b:ByteArray,offset:Int):Long =
         ((b[offset].toLong() and 255L) shl 24) or
