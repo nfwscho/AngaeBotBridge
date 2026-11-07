@@ -5,6 +5,8 @@
  * 3. 진단 미실시/다른 채팅/태그 변경/5분 초과/재사용된 승인 요청을 모두 차단한다.
  * 4. 원본 채팅 메시지나 인증정보를 다루지 않고 실제 Android 동작 없이 Kotlin JUnit으로만 검증한다.
  * 5. 수신 선택창/주소 명확성/불명확 화면에서 실제 클릭 없이 관찰 분류만 하도록 테스트한다.
+ * 6. A_KEY_ID와 B_NO_KEY를 구별하는 고정 PNG 이름/이미지 표식이 서로 다른지 검증한다.
+ * 7. B 대조는 A의 채팅방 ID 필드를 재사용하지 않아야 하며 기존 승인 증거를 재사용하지 못한다.
  */
 package kr.co.angaebot.bridge
 
@@ -24,6 +26,15 @@ class MediaDirectPolicyTest {
         }
         assertNull(MediaDirectPolicy.candidate(tag, "단톡방", "조우상"))
         assertNull(MediaDirectPolicy.candidate(tag, "", ""))
+    }
+
+    @Test fun comparisonMarkersAreDistinctAndSafe() {
+        assertEquals("angaebot-direct-a.png", MediaDirectComparisonPolicy.fileName(true))
+        assertEquals("angaebot-direct-b.png", MediaDirectComparisonPolicy.fileName(false))
+        assertEquals("A: DIRECT (KEY_ID)", MediaDirectComparisonPolicy.imageLabel(true))
+        assertEquals("B: CONTROL (NO KEY_ID)", MediaDirectComparisonPolicy.imageLabel(false))
+        assertEquals("A_KEY_ID", MediaDirectComparisonPolicy.mode(true))
+        assertEquals("B_NO_KEY", MediaDirectComparisonPolicy.mode(false))
     }
 
     @Test fun routeProbeLabelsAreNotConflatedWithActualSendSuccess() {
