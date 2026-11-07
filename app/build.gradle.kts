@@ -37,6 +37,8 @@
 // 36. 인증 필요한 PIN/패턴/비밀번호는 우회하지 않으며 기존 설치 DB/.env/텍스트 알림/UI·로그/배터리를 유지한다.
 // 37. v0.4.19(versionCode 23)은 S20+ 카카오톡 '1 보내기' 숫자 포함 단일 수신 버튼 인식을 보완한다.
 // 38. 기존 Python Core/DB/.env/Android UI·설정/알림 응답/로그·배터리/잠금 정책은 모두 유지한다.
+// 39. v0.4.20(versionCode 24)은 '할'/'할일' 명령을 안전하게 Python Core에 전달한다.
+// 40. 기존 이미지 자동전송·접근성 설정·Android 데이터/로그/버전 업그레이드 호환성을 보존한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -50,8 +52,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "0.4.19"
+        versionCode = 24
+        versionName = "0.4.20"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
