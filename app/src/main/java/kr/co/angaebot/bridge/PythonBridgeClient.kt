@@ -24,12 +24,20 @@
  * 22. 신규 '실거래' 명령과 부동산 직접 시세 조회만 기존 시세의 23초 타임아웃을 재사용한다.
  * 23. 기존 메모·날씨·주식·AI·로그·Android UI·HTTP 보안/응답 크기/배터리 표시를 변경하지 않는다.
  * 24. v0.4.20은 인증된 할일 명령을 개인 기록과 같은 1000자 제한으로 Python Core에 전달하며 기존 기능과 로그를 보존한다.
+ * 25. v0.4.25의 인증된 주식 차트 PNG 다운로드는 127.0.0.1의 신규 읽기 전용 HTTP 엔드포인트만 사용한다.
+ * 26. 24초 연결 타임아웃·1.2MB 바이트 상한·image/png MIME·PNG 헤더 검사로 임의 URL/파일 사용을 차단한다.
+ * 27. 기존 AI/주식/메모/메뉴 명령 결과 파싱/토큰/에러 로그/SQLite/요청 시간 제한은 절대 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+
+sealed interface ChartPngOutcome {
+    data class Ready(val bytes: ByteArray) : ChartPngOutcome
+    data class Failed(val reason: String) : ChartPngOutcome
+}
 
 sealed interface PythonOutcome {
     data class Success(val reply: String, val duplicate: Boolean, val commandOk: Boolean,
@@ -61,6 +69,40 @@ object PythonBridgeClient {
             argument.substringBefore(' ') in setOf("시세", "매매", "전세", "월세", "지역", "실거래")
         return request("POST", "/v1/commands", token, payload, name in aiCommands,
             name in stockCommands || propertyQuery, name == "메뉴")
+    }
+
+    /** 이미지 다운로드 전용. 사용자가 입력한 임의 URL은 절대 요청하지 않는다. */
+    fun stockChartPng(token: String, ticker: String): ChartPngOutcome {
+        if(token.length < 32) return ChartPngOutcome.Failed("Python 인증 토큰이 설정되지 않았습니다.")
+        if(!ticker.matches(Regex("[A-Za-z0-9.]{1,16}"))) {
+            return ChartPngOutcome.Failed("차트 종목코드는 MU / 005930 / AAPL 형식으로 입력하세요.")
+        }
+        var conn: HttpURLConnection? = null
+        return try {
+            conn=(URL(BASE + "/v1/media/stock-chart?symbol=" + ticker).openConnection() as HttpURLConnection).apply {
+                requestMethod="GET"
+                connectTimeout=2_000
+                readTimeout=28_000
+                setRequestProperty("X-AngaeBot-Token",token)
+                setRequestProperty("Accept","image/png")
+                useCaches=false
+            }
+            val status=conn.responseCode
+            if(status !in 200..299) return ChartPngOutcome.Failed(
+                if(status==401) "Python 인증에 실패했습니다." else "차트 생성 실패 HTTP " + status)
+            if(!conn.contentType.orEmpty().lowercase().startsWith("image/png")) {
+                return ChartPngOutcome.Failed("Python 응답이 PNG가 아닙니다.")
+            }
+            val declared=conn.contentLengthLong
+            if(declared>DirectPngBytes.MAX_BYTES) return ChartPngOutcome.Failed("차트 PNG 크기 제한 초과")
+            val bytes=conn.inputStream.use { it.readNBytes(DirectPngBytes.MAX_BYTES+1) }
+            if(!DirectPngBytes.valid(bytes)) return ChartPngOutcome.Failed("PNG 구조/크기 검사 실패")
+            ChartPngOutcome.Ready(bytes)
+        } catch(e:java.net.SocketTimeoutException) {
+            ChartPngOutcome.Failed("Python 차트 PNG 요청 시간 초과")
+        } catch(e:Exception) {
+            ChartPngOutcome.Failed("Python 차트 PNG 요청 오류: "+e.javaClass.simpleName)
+        } finally { conn?.disconnect() }
     }
 
     private fun request(method: String, path: String, token: String, payload: JSONObject?, isAi: Boolean = false, isStock: Boolean = false, isMenu: Boolean = false): PythonOutcome {
