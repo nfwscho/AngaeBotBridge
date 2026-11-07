@@ -730,13 +730,17 @@ class StockSelectionMenus:
         if choice.page == 'todos:list':
             return self.open_todo_results(db, room, sender, previous=state)
         if choice.page.startswith('todos:view:'):
+            # 삭제 확인 화면에서 취소하면 확인 메뉴를 재진입하지 않고 항목 관리로 복귀한다.
+            parent = (state.previous.previous
+                      if state.origin.startswith('todos-delete-confirm:') and
+                      state.previous is not None else state)
             return self.open_todo_actions(db, room, sender,
-                                          int(choice.page.rsplit(':', 1)[1]), previous=state)
+                                          int(choice.page.rsplit(':', 1)[1]), previous=parent)
         if choice.page.startswith('todos:edit:'):
             identifier = int(choice.page.rsplit(':', 1)[1])
             task = get_todo(db, room, sender, identifier)
             parent = self.open_todo_actions(db, room, sender, identifier,
-                                            previous=state.previous if state.origin.startswith('todos-item:') else state)
+                                            previous=state)
             return MenuAnswer(
                 f'✏️ 할 일 #{identifier} 수정\n'
                 f'현재: {task.title}\n'
