@@ -113,12 +113,13 @@ internal object DirectMp4Files {
         return try {
             cleanOld(context)
             val name=newName()
-            file=File(directory(context),name)
+            val target=File(directory(context),name)
+            file=target
             val input=context.contentResolver.openInputStream(source)
                 ?: throw IllegalArgumentException("선택한 파일을 읽을 수 없습니다.")
-            input.use { copyBounded(it, file) }
-            val duration=validate(file)
-            val size=file.length()
+            input.use { copyBounded(it, target) }
+            val duration=validate(target)
+            val size=target.length()
             if (!DirectMp4Config.saveSelected(context,name,size,duration)) {
                 throw IllegalStateException("MP4 설정 저장 실패")
             }
