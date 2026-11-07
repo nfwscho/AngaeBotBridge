@@ -116,7 +116,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         if (activeJob !== job || !job.shareLaunched) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) ||
-            (!job.directProduction && (job.directCandidate != null || job.observeOnly) &&
+            (!job.directProduction && !job.directMp4 && (job.directCandidate != null || job.observeOnly) &&
                 !MediaDirectConfig.enabled(this)) ||
             (job.directProduction && (job.directCandidate == null ||
                 !DirectPngConfig.authorizedCandidate(this,job.room,job.directCandidate))) ||
@@ -440,7 +440,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         if (activeJob !== job || job.shareLaunched || job.wakePending) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) ||
-            (!job.directProduction && job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            (!job.directProduction && !job.directMp4 && job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
             (job.directProduction && (job.directCandidate == null ||
                 !DirectPngConfig.authorizedCandidate(this,job.room,job.directCandidate))) ||
             !settings.enabled || !settings.isAllowedRoom(job.room)) {
