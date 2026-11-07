@@ -7,6 +7,8 @@
 5. 확인 없는 삭제, 다른 발신자·방의 조회/수정/삭제, 긴 제목/상세 내용과 잘못된 날짜를 거부한다.
 6. 개인 기록/일정/주식/AI 및 기존 jobs/events 기록은 변경하지 않고 신규 테이블을 추가한다.
 7. 임시 SQLite와 TestClient만 사용하며 실제 카카오톡/Termux/Google 계정에 접근하지 않는다.
+8. v0.7.5 등록/수정/완료 시각(KST)과 고유 #번호, 항목 관리·2단계 삭제·취소·0/00를 테스트한다.
+9. 숫자 선택 변경도 기존 인증·요청ID 중복 방지·타 사용자 격리·jobs/events 로깅을 유지한다.
 """
 from __future__ import annotations
 
@@ -77,10 +79,84 @@ class TodoAPITests(unittest.TestCase):
         detail = self.post("선택 1", command="메뉴").json()
         self.assertTrue(detail["ok"], detail)
         self.assertIn("PIN 설정한 상태", detail["reply"])
-        self.assertIn("개인 메뉴", detail["reply"])
+        self.assertIn("할 일 #1 관리", detail["reply"])
+        self.assertIn("등록:", detail["reply"])
+        self.assertIn("2026-", detail["reply"])
+        self.assertIn("1. ✅ 완료 처리", detail["reply"])
+        self.assertIn("2. ✏️ 제목·내용 수정 안내", detail["reply"])
+        self.assertIn("3. 🗑️ 삭제", detail["reply"])
         self.assertIn("✅ 해야 할 일", self.post("선택 0", command="메뉴").json()["reply"])
         self.assertIn("개인 메뉴", self.post("선택 0", command="메뉴").json()["reply"])
         self.assertIn("앙개봇 메인 메뉴", self.post("선택 00", command="메뉴").json()["reply"])
+
+    def test_numbered_task_management_safe_delete_and_timestamps(self):
+        added = self.post("추가 Extend Unlock 자동전송 확인 | PIN 잠금 실험").json()
+        self.assertTrue(added["ok"], added)
+        self.assertIn("등록:", added["reply"])
+        tasks = self.post("경로 개인 5", command="메뉴").json()
+        self.assertTrue(tasks["menu_active"], tasks)
+        self.assertRegex(tasks["reply"], r"1\\. ☐ \\[\\#1\\] Extend Unlock.*등록")
+        self.assertNotIn("✅ 완료", tasks["reply"])
+        detail = self.post("선택 1", command="메뉴").json()
+        self.assertIn("할 일 #1 관리", detail["reply"])
+        self.assertIn("등록:", detail["reply"])
+        self.assertIn("기한:", detail["reply"])
+        edit = self.post("선택 2", command="메뉴").json()
+        self.assertIn("할일 수정 1 새 제목", edit["reply"])
+        self.assertIn("할 일 #1 관리", self.post("선택 0", command="메뉴").json()["reply"])
+        delete_prompt = self.post("선택 3", command="메뉴").json()
+        self.assertIn("삭제 확인", delete_prompt["reply"])
+        self.assertIn("1. 🗑️ 이 할 일 영구 삭제 확인", delete_prompt["reply"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos").fetchone()[0], 1)
+        cancel = self.post("선택 2", command="메뉴").json()
+        self.assertIn("할 일 #1 관리", cancel["reply"])
+        self.assertIn("✅ 해야 할 일", self.post("선택 0", command="메뉴").json()["reply"])
+        detail = self.post("선택 1", command="메뉴").json()
+        self.assertIn("할 일 #1 관리", detail["reply"])
+        done = self.post("선택 1", command="메뉴", request_id="task_complete_menu_0001").json()
+        self.assertTrue(done["ok"], done)
+        self.assertEqual(done["module_source"], "core.todos")
+        self.assertIn("할 일 완료 #1", done["reply"])
+        repeated = self.post("선택 1", command="메뉴", request_id="task_complete_menu_0001").json()
+        self.assertTrue(repeated["duplicate"])
+        self.assertEqual(repeated["reply"], done["reply"])
+        completed = self.post("완료목록").json()
+        self.assertIn("Extend Unlock", completed["reply"])
+        self.assertIn("☑", completed["reply"])
+        detail = self.post("선택 1", command="메뉴").json()
+        self.assertIn("완료:", detail["reply"])
+        self.assertIn("1. ↩️ 다시 할 일로 복원", detail["reply"])
+        self.assertIn("할 일 #1 관리", detail["reply"])
+        restored = self.post("선택 1", command="메뉴").json()
+        self.assertTrue(restored["ok"], restored)
+        self.assertIn("다시 해야 할 일", restored["reply"])
+        self.assertIn("Extend Unlock", self.post("목록").json()["reply"])
+        self.assertTrue(self.post("보기 1").json()["ok"])
+        with sqlite3.connect(self.path) as db:
+            registered, updated = db.execute(
+                "SELECT created_at,updated_at FROM personal_todos WHERE id=1").fetchone()
+            self.assertGreater(registered, 0)
+            self.assertGreaterEqual(updated, registered)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],
+                             db.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
+    def test_numbered_delete_requires_second_confirm_and_valid_scope(self):
+        self.assertTrue(self.post("추가 삭제 전에 확인할 작업").json()["ok"])
+        self.post("경로 개인 5", command="메뉴")
+        self.post("선택 1", command="메뉴")
+        confirm = self.post("선택 3", command="메뉴")
+        self.assertTrue(confirm.json()["ok"])
+        self.assertFalse(self.post("선택 1", command="메뉴", sender="다른사람").json()["ok"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos").fetchone()[0], 1)
+        delete = self.post("선택 1", command="메뉴").json()
+        self.assertTrue(delete["ok"], delete)
+        self.assertIn("할 일 #1 삭제 완료", delete["reply"])
+        self.assertEqual(delete["module_source"], "core.todos")
+        self.assertIn("표시할 할 일이 없습니다", delete["reply"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM personal_todos").fetchone()[0], 0)
 
     def test_due_date_complete_restore_search_and_confirm_delete(self):
         self.assertTrue(self.post("추가 2026-11-15 Extend Unlock 테스트 | Bluetooth 연결").json()["ok"])
