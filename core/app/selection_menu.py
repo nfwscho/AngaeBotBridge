@@ -62,6 +62,9 @@
 76. 주식 홈을 사용자 지정 8개 메뉴(1 반도체주 19, 2 미국 시총10, 3 AI 주도주, 4 반도체 및 기자재, 5 데센, 6 최근조회, 7 관심목록, 8 분석)로 교체한다.
 77. 메모리7 원본과 기존 사용자 '반도체' 그룹 조회는 주식 메모리7/주식 반도체 직접 명령 및 관심목록에서 유지해 데이터·로그를 삭제하지 않는다.
 78. 새 섹터의 1~19 번호/99 상세/0 이전·00 홈은 유지하고 8개 홈 선택 번호만 변경, 개인 기록·설정 메뉴는 그대로 둔다.
+81. 개인 메뉴의 기존 1~4번 번호를 유지하고 5번 '해야 할 일' 목록을 별도 SQLite 읽기 메뉴로 추가한다.
+82. 할 일 1~10은 상세 조회만 가능하며 완료/수정/삭제는 별도의 명시적 텍스트 명령만 수행한다.
+83. 기존 0/00/5분 TTL/방·발신자 격리/메뉴 트리/주식·날씨·기존 메모 기록·로그를 모두 보존한다.
 79. 주식 홈에서는 1~5 시세와 6~8 조회·목록·분석 사이에 빈 줄 하나만 삽입하고 다른 메뉴 출력/이전 화면 복구는 변경하지 않는다.
 80. 미국 시총10 홈 2번은 개인 DB 그룹 사전 생성이 필요 없는 고정 US_MARKET_CAP_PRESET 10종목 조회로 연결하며 기존 직접 '주식 미국시총10'·그룹 CRUD는 유지한다.
 33. 설정 7번에 전체 메뉴 트리 조회를 추가하며 기존 설정 1~6번의 번호·동작을 보존한다.
@@ -93,6 +96,7 @@ from dataclasses import dataclass
 from .market import Stock, StockQuoteError, WATCHLIST
 from .personal_records import (CATEGORIES as PERSONAL_SECTORS, RecordError,
                                get_record, list_records, record_preview, record_detail, help_text)
+from .todos import (list_todos, get_todo, todo_preview, todo_detail)
 
 MENU_TTL_SECONDS = 300
 MAX_MENU_SESSIONS = 200
@@ -181,6 +185,10 @@ class StockSelectionMenus:
             rendered += f'\n※ 등록: {alias} 추가 제목 | 내용'
             if sector == '부동산':
                 rendered += '\n※ 조회 지역: 부 지역 강남구'
+            if sector == '개인':
+                rendered += '\n※ 해야 할 일: 개 5 · 할일 추가 제목'
+        elif state.origin.startswith('todos-results'):
+            rendered += '\n※ 번호: 상세보기 · 할일 완료 번호 · 할일 삭제 번호 확인'
         elif state.origin == 'settings':
             rendered += '\n※ 조회 전용 · 설정 변경은 관리자 화면에서만'
         return rendered
@@ -265,6 +273,7 @@ class StockSelectionMenus:
                 MenuChoice('다가오는 일정', page='records:upcoming:개인'),
                 MenuChoice('메모 등록·검색 안내', page='records:help:개인'),
                 MenuChoice('일정 등록·관리 안내', page='records:help:일정'),
+                MenuChoice('✅ 해야 할 일', page='todos:list'),
             )
         return choices
 
@@ -297,7 +306,7 @@ class StockSelectionMenus:
             '여(여행) · 민(배드민턴) · 요(요리) · 종(종친) · 날(날씨)',
             '설 1 통합 상태 · 설 7 전체 메뉴 · 설 8 도움말',
             '주 1 반도체주 · 주 2 미국시총10 · 주 3 AI · 주 4 반도체기자재',
-            '앙 2/3/9 메모·일정 · 부 3~5 실거래 · 날 지역 서울',
+            '앙 2/3/9 메모·일정 · 개 5 해야 할 일 · 부 3~5 실거래 · 날 지역 서울',
             '주 5 데센 · 주 6 최근 · 주 7 관심목록 · 주 8 분석 · 주 분 삼성전자',
         ))
 
@@ -370,7 +379,8 @@ class StockSelectionMenus:
         alias = '메모' if sector == '개인' else '부동산' if sector == '부동산' else '투자'
         return MenuAnswer(self._render('📂 ' + sector + ' 메뉴', choices)
                           + f'\n※ 등록: {alias} 추가 제목 | 내용'
-                          + ('\n※ 조회 지역: 부 지역 강남구' if sector == '부동산' else ''),
+                          + ('\n※ 조회 지역: 부 지역 강남구' if sector == '부동산' else '')
+                          + ('\n※ 해야 할 일: 개 5 · 할일 추가 제목' if sector == '개인' else ''),
                           menu_active=True)
 
     def open_record_results(self, room: str, sender: str,
@@ -390,6 +400,25 @@ class StockSelectionMenus:
         self._save(key, choices, back='records-sector:' + sector if sector in PERSONAL_SECTORS else 'home',
                    origin='records-results', title='🗂 ' + heading, previous=previous)
         return MenuAnswer(self._render('🗂 ' + heading, choices), menu_active=True)
+
+    def open_todo_results(self, db: sqlite3.Connection, room: str, sender: str, *,
+                          rows=None, heading: str = '해야 할 일',
+                          previous: 'MenuState | None' = None) -> MenuAnswer:
+        """해야 할 일 조회 메뉴. 목록 번호는 상세 보기만 수행하고 상태 변경은 절대 하지 않는다."""
+        key = self._key(room, sender)
+        tasks = tuple(rows if rows is not None else list_todos(db, room, sender))
+        if not tasks:
+            parent = self.open_record_sector(room, sender, '개인', previous=previous)
+            return MenuAnswer('📭 표시할 할 일이 없습니다.\n'
+                              '※ 첫 등록: 할일 추가 S20+ Extend Unlock 확인\n\n' +
+                              parent.reply, menu_active=True)
+        choices = tuple(MenuChoice(todo_preview(task), page=f'todos:view:{task.id}')
+                        for task in tasks[:10])
+        self._save(key, choices, back='records-sector:개인', origin='todos-results',
+                   title='✅ ' + heading, previous=previous)
+        return MenuAnswer(self._render('✅ ' + heading, choices) +
+                          '\n※ 번호: 상세보기 · 할일 완료 번호 · 할일 삭제 번호 확인',
+                          menu_active=True)
 
     def open_settings(self, room: str, sender: str, *, previous: 'MenuState | None' = None) -> MenuAnswer:
         """읽기 전용 운영 조회 메뉴. 편집/재시작/권한 변경을 메뉴 선택에 연결하지 않는다."""
@@ -651,6 +680,12 @@ class StockSelectionMenus:
             return self.open_settings(room, sender, previous=state)
         if choice.page.startswith('records:root:'):
             return self.open_record_sector(room, sender, choice.page.split(':', 2)[2], previous=state)
+        if choice.page == 'todos:list':
+            return self.open_todo_results(db, room, sender, previous=state)
+        if choice.page.startswith('todos:view:'):
+            task = get_todo(db, room, sender, int(choice.page.rsplit(':', 1)[1]))
+            parent = self.open_record_sector(room, sender, '개인', previous=state)
+            return MenuAnswer(todo_detail(task) + '\n\n' + parent.reply, menu_active=True)
         if choice.page.startswith('records:list:'):
             sector = choice.page.split(':', 2)[2]
             return self.open_record_results(room, sender,
