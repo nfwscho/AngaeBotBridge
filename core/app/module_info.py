@@ -20,6 +20,7 @@
 18. AI/반도체·기자재/데센 섹터 고정 시세(97/98/99 페이지) 응답은 실제 core.sector_watchlists.py로 식별하고 기존 사용자 관심그룹 core.watchlists와 구별한다.
 19. 신규 반도체주 시세와 미국 시총10 고정 섹터의 중복 응답/번호 경로도 본문 제목으로 core.sector_watchlists를 식별해 원래 Python 연결/공통 메뉴로 잘못 기록하지 않는다.
 20. 개인 해야 할 일 직접 명령과 메뉴 번호 조회는 core.todos로 식별하며 기존 모듈 소스 분류와 로그를 유지한다.
+21. v0.7.5 숫자 선택 완료/복원/삭제는 '할일작업' 표시로 core.todos 모듈 ID를 유지한다.
 """
 from __future__ import annotations
 
@@ -47,6 +48,8 @@ def module_for(command: str, argument: str = '', reply: str = '') -> str:
     if command == '날씨':
         return 'core.menu' if '날씨 메뉴' in reply else 'core.weather'
     if command in {'메뉴', '주식'}:
+        if arg.startswith('할일작업 '):
+            return 'core.todos'
         if arg.startswith('실거래조회 ') or arg == '실거래설정 안내':
             return 'core.real_estate'
         if arg.startswith(('날씨조회 ', '날씨설정 ')) or reply.startswith(
