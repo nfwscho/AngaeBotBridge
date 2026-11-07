@@ -22,7 +22,7 @@
  * AI·반도체기자재 섹터의 97/98 페이지와 99 상세, 기존 주 2 메모리7·그룹 9/10 종목 분석을 함께 검사한다.
  * 고정 섹터 1~19 번호 경로와 '앙개야 모듈' 최근 기능 모듈 상세 조회를 기존 8줄 도움말 및 호출어 보호와 함께 확인한다.
  * 변경된 주식 홈 1 반도체주·2 미국시총10·3 AI·4 반도체기자재·5 데센 순서를 실제 로컬 도움말에서 검증하고 기존 메모리7 직접 명령은 유지한다.
- * 이미지 테스트 명령이 기존 장문 호출어와 정확한 공백 경계로만 파싱되며 기존 로컬 상태 버전 v0.4.23을 검사한다.
+ * 이미지 테스트 명령이 기존 장문 호출어와 정확한 공백 경계로만 파싱되며 기존 로컬 상태 버전 v0.4.24을 검사한다.
  */
 package kr.co.angaebot.bridge
 
@@ -66,7 +66,7 @@ class CommandParserTest {
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("5 데센"))
     }
     @Test fun displaysActualInstalledBridgeVersion() {
-        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.23"))
+        assertTrue(LocalCommandExecutor.execute("상태", "").contains("v0.4.24"))
         assertTrue(LocalCommandExecutor.execute("도움말", "").contains("앙(홈)"))
     }
 
@@ -76,6 +76,7 @@ class CommandParserTest {
         assertEquals(ParseResult.Command("이미지", "직공유진단"), CommandParser.parse("앙개야 이미지 직공유진단", "앙개야"))
         assertEquals(ParseResult.Command("이미지", "직공유시험"), CommandParser.parse("앙개야 이미지 직공유시험", "앙개야"))
         assertEquals(ParseResult.Command("이미지", "직공유경로확인"), CommandParser.parse("앙개야 이미지 직공유경로확인", "앙개야"))
+        assertEquals(ParseResult.Command("이미지", "직공유대조"), CommandParser.parse("앙개야 이미지 직공유대조", "앙개야"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("이미지 직공유경로확인", "앙개야"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("이미지 테스트", "앙개야"))
         assertEquals(ParseResult.NoTrigger, CommandParser.parse("앙개야이미지 테스트", "앙개야"))
