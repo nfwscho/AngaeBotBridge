@@ -23,6 +23,9 @@
  * 20. v0.4.22에서 사용자가 별도 승인한 경우에만 MediaSender 방식의 3가지 채팅방 직접 지정 인텐트 힌트를 추가한다.
  * 21. 기존 공유/사진/방 선택/버튼 클릭/잠금 인증 제한 로직은 전부 유지하고 직공유는 실제 수신 미확인으로 기록한다.
  * 22. 알림 숫자형 tag가 실제 카카오 채널 ID인지 미검증이며 자체 2단계 진단 후 1:1 시험에만 사용한다.
+ * 23. v0.4.23 직공유경로확인은 Intent만 띄우고 수신자/전송 버튼을 절대 클릭하지 않는 관찰 모드다.
+ * 24. 수신자 선택창과 직접 목적지 화면의 징후를 UI 텍스트 저장 없이 분류하며 실제 ID·전송 완료로 단정하지 않는다.
+ * 25. 기존 직공유시험의 방 클릭은 MEDIA_DIRECT_FALLBACK_ROOM_CLICK 로그로 식별하고 기존 자동전송 경로는 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -66,6 +69,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         val shareIntent: Intent,
         val wakeToken: String,
         val directCandidate: Long? = null,
+        val observeOnly: Boolean = false,
         @Volatile var wakePending: Boolean = false
     )
 
@@ -138,6 +142,34 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 bounds.width() >= 160f * density && bounds.height() >= 95f * density
             }
         }
+        if (job.observeOnly) {
+            // 관찰 모드는 카카오톡 공유 Activity를 열기만 한다.
+            // 수신 방 선택 및 보내기 버튼은 이 경로에서 절대로 자동 클릭하지 않는다.
+            val isPicker = labeled.any { it in setOf("채팅방", "대화방", "친구", "공유", "전송 대상", "보낼 대상") }
+            val observation = MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(
+                recipientPickerHeadingVisible = isPicker,
+                clickableRoomCount = roomCandidates.size,
+                exactTargetNameVisible = labeled.any { it == job.room },
+                sendButtonCount = sendCandidates.size
+            ))
+            if (observation != MediaDirectRoute.UNVERIFIED) {
+                finish("MEDIA_DIRECT_PROBE_RESULT",
+                    "route=" + observation.name +
+                        " targetNameVisible=" + labeled.any { it == job.room } +
+                        " roomChoices=" + roomCandidates.size +
+                        " sendButtons=" + sendCandidates.size +
+                        " autoClick=false · 실제 채팅방 ID/수신 확인 아님", false)
+            } else if (SystemClock.elapsedRealtime() - job.lastDiagnosticAtMs >= 2500L) {
+                job.lastDiagnosticAtMs = SystemClock.elapsedRealtime()
+                logger.log("INFO", "MEDIA_DIRECT_PROBE_WAIT",
+                    "pickerHeading=" + isPicker +
+                        " targetNameVisible=" + labeled.any { it == job.room } +
+                        " roomChoices=" + roomCandidates.size +
+                        " sendButtons=" + sendCandidates.size +
+                        " autoClick=false")
+            }
+            return
+        }
         val elapsedSinceSelection = SystemClock.elapsedRealtime() - job.selectedRoomAtMs
         val readyAfterRoomSelection = job.selectedRoomAtMs > 0L && elapsedSinceSelection >= 350L
         val decision = ImageUiPolicy.action(
@@ -162,6 +194,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                     job.stage = ImageUiStage.CONFIRM_IMAGE
                     job.selectedRoomAtMs = SystemClock.elapsedRealtime()
                     logger.log("INFO", "IMAGE_UI_ROOM_SELECTED", "검증된 동일 이름 채팅방 항목 선택 요청")
+                    if (job.directCandidate != null) {
+                        logger.log("INFO", "MEDIA_DIRECT_FALLBACK_ROOM_CLICK",
+                            "직공유시험에서 기존 수신자 클릭이 실행됨 · key_id 만으로 방 선택을 건너뛰지 않았음")
+                    }
                     // 이벤트를 생략하는 카카오 UI에서도 후속 화면을 반복 확인한다.
                     for (delay in longArrayOf(550L, 1150L, 2100L, 3500L, 5500L)) {
                         handler.postDelayed({
@@ -215,7 +251,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun beginShare(room: String, directCandidate: Long? = null): ImageAutoStart {
+    private fun beginShare(room: String, directCandidate: Long? = null, observeOnly: Boolean = false): ImageAutoStart {
         if (!ImageAutoConfig.enabled(this)) return ImageAutoStart.Rejected("이미지 자동전송 스위치 OFF")
         if (directCandidate != null && !MediaDirectConfig.enabled(this)) {
             return ImageAutoStart.Rejected("MediaSender 직공유 실험 스위치 OFF")
@@ -257,6 +293,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             val job = ImageJob(room, SystemClock.elapsedRealtime(),
                 shareIntent = intent, wakeToken = UUID.randomUUID().toString(),
                 directCandidate = directCandidate,
+                observeOnly = observeOnly,
                 wakePending = action == ImageLockAction.WAKE)
             activeJob = job
             logger.log("INFO", "IMAGE_UI_QUEUED", "허용 채팅방 기준 이미지 공유 준비")
@@ -278,7 +315,14 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 handler.postDelayed({ launchShare(job) }, 900L)
             }
             handler.postDelayed({
-                if (activeJob === job) finish("IMAGE_UI_TIMEOUT", "잠금/이미지 화면 확인 시간 초과", true)
+                if (activeJob === job) {
+                    if (job.observeOnly) {
+                        finish("MEDIA_DIRECT_PROBE_TIMEOUT",
+                            "카카오톡 공유 화면 식별 실패 · 자동 클릭 없음 · 채팅방 ID 미검증", true)
+                    } else {
+                        finish("IMAGE_UI_TIMEOUT", "잠금/이미지 화면 확인 시간 초과", true)
+                    }
+                }
             }, EXPIRE_MS + 100L)
             ImageAutoStart.Queued
         } catch (e: Exception) {
@@ -322,6 +366,15 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             startActivity(job.shareIntent)
             job.shareLaunched = true
             logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
+            if (job.observeOnly) {
+                logger.log("INFO", "MEDIA_DIRECT_PROBE_STARTED",
+                    "공유 UI 읽기 전용 관찰 · 수신자/보내기 자동 클릭 비활성 · 20초 타임아웃")
+                for (delay in longArrayOf(450L, 1100L, 2200L, 4000L)) {
+                    handler.postDelayed({
+                        if (activeJob === job && job.shareLaunched) inspectCurrentWindow(job)
+                    }, delay)
+                }
+            }
             if (job.directCandidate != null) {
                 logger.log("INFO", "MEDIA_DIRECT_INTENT_STARTED",
                     "알림 태그 기반 key_id 힌트 포함 · 후보 " + MediaDirectPolicy.mask(job.directCandidate) +
@@ -368,6 +421,12 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
             if (candidate <= 0L) return ImageAutoStart.Rejected("잘못된 채팅방 ID 후보")
             return service.beginShare(room, candidate)
+        }
+
+        internal fun queueRouteProbe(room: String, candidate: Long): ImageAutoStart {
+            val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
+            if (candidate <= 0L) return ImageAutoStart.Rejected("잘못된 채팅방 ID 후보")
+            return service.beginShare(room, candidate, observeOnly = true)
         }
     }
 }
