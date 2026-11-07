@@ -1,3 +1,13 @@
+## 2026-11-07 — MediaSender 실제 직접 공유 경로 구분 v0.4.23
+
+- S25 실기기에서 `이미지 직공유진단`은 숫자 알림 태그 15자리(끝 8064), `직공유시험`은 실제 1:1 카카오톡 PNG 수신 확인.
+- 그러나 기존 0.4.22 코드는 key_id 추가에도 **접근성 서비스가 방을 클릭해야만 보내기 버튼을 누르는 구조**이므로, 이 사진 수신으로 채팅방 ID 직접 공유 성공을 확정하지 않는다.
+- 실험 경로 구분을 위해 `앙개야 이미지 직공유경로확인` 추가. 기존 5분/일회성 진단·별도 OFF 스위치·허용 방/발신자·PIN 인증 차단을 모두 유지하면서 카카오 공유 화면을 열고 자동 클릭 없이 UI만 관찰.
+- `MEDIA_DIRECT_PROBE_RESULT`(RECIPIENT_PICKER/TARGET_SCREEN_CANDIDATE/UNVERIFIED), `MEDIA_DIRECT_PROBE_WAIT`/TIMEOUT을 로그에 저장하되 실제 채팅방 ID 인증 또는 수신 성공이라고 표현하지 않음.
+- 기존 `직공유시험`은 그대로 유지하고 실제 방 클릭 시 `MEDIA_DIRECT_FALLBACK_ROOM_CLICK` 로그만 추가. 기존 일반 이미지 자동시험/알림 빠른답장/주식·날씨·메모·할 일/DB/.env/로그/Android UI 유지.
+- 화면 재생성 시 별도 MediaSender 스위치 저장 상태가 정상 복원되도록 개선.
+- main과 다른 채팅 기능 브랜치 수정 없음. 상세 절차: docs/MEDIASENDER_EXPERIMENT.md
+
 ## 2026-11-07 — MediaSender 직접 공유 실험 v0.4.22
 
 - feature/mediasender-experiment-20261107 브랜치는 main 787cbda654217bff56666e96adf25ab0e5221050 에서 독립 생성.
