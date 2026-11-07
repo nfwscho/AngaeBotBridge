@@ -307,7 +307,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
     private fun launchShare(job: ImageJob) {
         if (activeJob !== job || job.shareLaunched || job.wakePending) return
         val settings = BotConfig(this).load()
-        if (!ImageAutoConfig.enabled(this) || !settings.enabled || !settings.isAllowedRoom(job.room)) {
+        if (!ImageAutoConfig.enabled(this) ||
+            (job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 설정 또는 허용 채팅방 변경", true)
             return
         }
