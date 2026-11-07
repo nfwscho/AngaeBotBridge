@@ -29,6 +29,10 @@
  * v0.4.25는 ②-B-2 독립 직접 PNG 전송의 1:1 물리적 대상 승인/정확한 태그 연결/기본 OFF 스위치를 추가한다.
  * 기존 ①~④ 설정/토큰/Android 접근성/로그·내보내기/이미지 자동시험·주식/개인 UI를 모두 유지한다.
  * 1:1 외에는 연결을 승인하지 않으며 승인 후보는 5분 RAM에만 보관한다.
+ * v0.4.26 ②-B-3은 검증 1:1 대상용 MP4 별도 스위치를 기본 OFF로 추가하고 테스트 영상·파일 선택을 관리한다.
+ * S20+ 사용자가 Android 문서 선택기로 원본 MP4를 직접 선택하면 앱 전용 캐시에 50MiB 이하로만 복사한다.
+ * 1~180초/영상 트랙/해상도 검증 이후 선택 파일을 사용하며, 원본은 삭제하지 않고 캐시 복사본만 해제할 수 있다.
+ * 기존 PNG/A-B/텍스트 답장·DB/.env/전체 UI·로그·배터리와 Android 허용목록·잠금 정책은 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -67,6 +71,9 @@ class MainActivity : Activity() {
     private lateinit var mediaDirectSwitch: Switch
     private lateinit var directPngSwitch: Switch
     private lateinit var directPngStatus: TextView
+    private lateinit var directMp4Switch: Switch
+    private lateinit var directMp4Status: TextView
+    private companion object { const val MP4_PICK_REQUEST = 4926 }
     private lateinit var pythonTokenInput: EditText
     private lateinit var logs: LogRepository
     private lateinit var powerSwitch: Switch
@@ -292,6 +299,61 @@ class MainActivity : Activity() {
                     updateStatusAndLogs()
                 }.show()
         })
+        root.addView(space(10))
+        root.addView(section("②-B-3 MP4 동영상 직접전송 · 검증된 1:1 전용"))
+        root.addView(label(
+            "기존 ②-B-2의 1:1 대상 연결 승인 정보를 재사용합니다. 동영상 기능은 별도 기본 OFF입니다.\n" +
+            "시험: 앙개야 동영상 직접시험 (앱 원본 2.5초 H.264 영상)\n" +
+            "선택: 아래에서 MP4 파일을 선택한 후 앙개야 동영상 직접전송\n" +
+            "파일: 최대 50MiB, 3분, MP4 영상 트랙 필수. 원본 파일 수정/삭제 없음.\n" +
+            "카카오톡이 MIME=video/mp4 공유를 실제 처리하는지는 S20+에서 확인해야 합니다.\n" +
+            "PIN 잠금은 우회하지 않고 공유 버튼은 자동 클릭하지 않습니다.",12f))
+        directMp4Status = label("MP4 기능 OFF · 선택된 영상 없음",13f)
+        root.addView(directMp4Status)
+        root.addView(button("S20+ MP4 파일 선택 (원본 유지)") {
+            try {
+                val choose = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "video/mp4"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivityForResult(choose,MP4_PICK_REQUEST)
+            } catch (e: Exception) {
+                logs.log("WARN","DIRECT_MP4_PICK_FAILED","파일 선택 화면 실행 오류: "+e.javaClass.simpleName)
+                Toast.makeText(this,"Android 파일 선택기를 열 수 없습니다.",Toast.LENGTH_LONG).show()
+            }
+        })
+        directMp4Switch = Switch(this).apply {
+            text="MP4 직접전송 허용 (기본 OFF · 1:1 연결 필수)"
+            textSize=15f
+            setPadding(0, dp(4),0,dp(4))
+        }
+        root.addView(directMp4Switch)
+        root.addView(button("MP4 직접전송 설정 저장") {
+            val saved=DirectMp4Config.saveEnabled(this,directMp4Switch.isChecked)
+            if(saved) {
+                logs.log("INFO","DIRECT_MP4_SETTING_SAVED","enabled="+directMp4Switch.isChecked)
+                Toast.makeText(this,"MP4 직접전송 설정 저장됨",Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this,"먼저 ②-B-2에서 1:1 채팅방을 승인하세요.",Toast.LENGTH_LONG).show()
+            }
+            updateDirectMp4Status()
+            updateStatusAndLogs()
+        })
+        root.addView(button("선택한 MP4 복사본 해제 (원본은 그대로)") {
+            AlertDialog.Builder(this).setTitle("선택된 MP4 복사본 해제")
+                .setMessage("S20+ 앱 전용 캐시에 복사한 동영상만 삭제합니다.\n" +
+                    "카카오톡 전송 직후에는 업로드가 끝난 것을 확인한 뒤 사용하세요.\n" +
+                    "기존 PNG·로그·DB·설정 및 원본 MP4는 유지합니다.")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("선택 해제") { _, _ ->
+                    if(DirectMp4Config.clearSelected(this)) {
+                        logs.log("INFO","DIRECT_MP4_SELECTED_CLEARED","선택 MP4 캐시 복사본만 해제")
+                    }
+                    updateDirectMp4Status()
+                    updateStatusAndLogs()
+                }.show()
+        })
         root.addView(button("이미지 자동전송 접근성 권한 설정 열기") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
@@ -341,6 +403,7 @@ class MainActivity : Activity() {
         powerSwitch.isChecked = values.enabled
         imageAutoSwitch.isChecked = ImageAutoConfig.enabled(this)
         mediaDirectSwitch.isChecked = MediaDirectConfig.enabled(this)
+        updateDirectMp4Status()
         wakeInput.setText(values.wakeWord)
         roomsInput.setText(values.allowedRooms.joinToString("\n"))
         sendersInput.setText(values.allowedSenders.joinToString("\n"))
@@ -355,6 +418,42 @@ class MainActivity : Activity() {
             aiFreeformSwitch.isChecked = false
             pythonTokenInput.setText("")
             logs.log("ERROR", "PYTHON_SETTINGS_FAILED", "${e.javaClass.simpleName}: 저장된 토큰 확인 필요")
+        }
+    }
+
+    private fun updateDirectMp4Status() {
+        directMp4Switch.isChecked = DirectMp4Config.enabled(this)
+        directMp4Status.text = "MP4 직접전송: " +
+            (if(DirectMp4Config.enabled(this)) "ON" else "OFF") +
+            "\n1:1 대상: " + (if(DirectPngConfig.binding(this)!=null) "기존 승인 연결 사용" else "미등록") +
+            "\n" + DirectMp4Config.selectedSummary(this)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode != MP4_PICK_REQUEST || resultCode != Activity.RESULT_OK) return
+        val uri=data?.data ?: return
+        directMp4Status.text = "MP4 파일을 앱 전용 캐시에 복사·검사하는 중..."
+        thread(name="angaebot-mp4-import") {
+            val outcome=DirectMp4Files.importSelected(applicationContext,uri)
+            runOnUiThread {
+                when(outcome) {
+                    is Mp4ImportOutcome.Ready -> {
+                        logs.log("INFO","DIRECT_MP4_FILE_READY",
+                            "size="+outcome.size+" durationMs="+outcome.durationMs+
+                                " · 사용자 선택 mp4, 원본 보존")
+                        Toast.makeText(this,"MP4 선택·검증 완료",Toast.LENGTH_LONG).show()
+                    }
+                    is Mp4ImportOutcome.Failed -> {
+                        logs.log("WARN","DIRECT_MP4_FILE_REJECTED",outcome.reason)
+                        AlertDialog.Builder(this).setTitle("MP4 파일 선택 거부")
+                            .setMessage(outcome.reason)
+                            .setPositiveButton("확인",null).show()
+                    }
+                }
+                updateDirectMp4Status()
+                updateStatusAndLogs()
+            }
         }
     }
 
