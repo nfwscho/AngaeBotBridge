@@ -757,3 +757,10 @@
 cd D:\stockproj\AngaeBotBridge
 .\gradlew.bat :app:assembleDebug
 ```
+## 2026-11-07 — S20+ '1 보내기' 버튼 자동 클릭 인식 보완 (feature/image-send-20261107)
+
+- Android Bridge v0.4.19(versionCode 23): 카카오톡 이미지 공유 화면의 1명 선택 버튼 '1 보내기'에 숫자가 붙어 기존 정확 일치 인식에서 누락되던 문제 보완.
+- 신규 ImageSendButtonLabel.kt 및 단위 테스트로 1명 버튼/공백 변형/기존 라벨과 복수 대상 거부를 검증한다.
+- 기존 수신 채팅방 단일 검증/이미지 자동 생성·공유/잠금 정책/SQLite IMAGE_UI 로그/메뉴·배터리·Python Core·운영 설정을 모두 보존한다.
+- 실제 화면에서 자동 클릭 및 카카오톡 사진 수신은 S20+ 검증 전이며 기능 브랜치만 사용하고 main은 유지한다.
+
