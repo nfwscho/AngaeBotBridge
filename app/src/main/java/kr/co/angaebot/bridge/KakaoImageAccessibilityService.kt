@@ -26,6 +26,10 @@
  * 23. v0.4.23 직공유경로확인은 Intent만 띄우고 수신자/전송 버튼을 절대 클릭하지 않는 관찰 모드다.
  * 24. 수신자 선택창과 직접 목적지 화면의 징후를 UI 텍스트 저장 없이 분류하며 실제 ID·전송 완료로 단정하지 않는다.
  * 25. 기존 직공유시험의 방 클릭은 MEDIA_DIRECT_FALLBACK_ROOM_CLICK 로그로 식별하고 기존 자동전송 경로는 보존한다.
+ * 26. v0.4.24 A/B 비교 시 key_id 3종 포함/제외 두 Intent를 각각 동일한 관찰 전용 모드에서 실행한다.
+ * 27. A/B는 고유 PNG 파일명과 이미지 내 다른 문구를 사용해 실제 사진 수신 원인을 검증하고 기존 사진은 그대로 둔다.
+ * 28. A/B 모두 별도 직공유 실험 스위치·이미지 스위치·허용 방·PIN 잠금 보호를 검사하며 자동 클릭은 금지한다.
+ * 29. A/B 직공유 관찰의 Intent 시작/결과/타임아웃 로그는 키 포함 여부만 표기하고 후보 ID 전체는 숨긴다.
  */
 package kr.co.angaebot.bridge
 
@@ -98,7 +102,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         if (activeJob !== job || !job.shareLaunched) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) ||
-            (job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            ((job.directCandidate != null || job.observeOnly) && !MediaDirectConfig.enabled(this)) ||
             !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
             return
@@ -253,7 +257,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     private fun beginShare(room: String, directCandidate: Long? = null, observeOnly: Boolean = false): ImageAutoStart {
         if (!ImageAutoConfig.enabled(this)) return ImageAutoStart.Rejected("이미지 자동전송 스위치 OFF")
-        if (directCandidate != null && !MediaDirectConfig.enabled(this)) {
+        if ((directCandidate != null || observeOnly) && !MediaDirectConfig.enabled(this)) {
             return ImageAutoStart.Rejected("MediaSender 직공유 실험 스위치 OFF")
         }
         val settings = BotConfig(this).load()
@@ -270,7 +274,11 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             return ImageAutoStart.Rejected("S20+ 보안 잠금 인증 필요: PIN·패턴·비밀번호는 자동 해제하지 않습니다.")
         }
         val uri = try {
-            ReplyManager.prepareShareTestImage(this)
+            if (observeOnly) {
+                ReplyManager.prepareDirectComparisonImage(this, withChannelHint = directCandidate != null)
+            } else {
+                ReplyManager.prepareShareTestImage(this)
+            }
         } catch (e: Exception) {
             return ImageAutoStart.Rejected("테스트 이미지 준비 실패: ${e.javaClass.simpleName}")
         }
@@ -279,6 +287,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             setPackage(KAKAO_PACKAGE)
             putExtra(Intent.EXTRA_STREAM, uri)
             clipData = ClipData.newUri(contentResolver, "AngaeBot photo test", uri)
+            if (observeOnly) {
+                // A와 B가 동일한 Intent 플래그를 사용하도록 통제한다.
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
             if (directCandidate != null) {
                 // MediaSender의 공유 힌트를 실험한다. 공식 API 아님·타겟/전송 성공 보장 없음.
                 putExtra("key_id", directCandidate)
@@ -368,7 +380,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
             if (job.observeOnly) {
                 logger.log("INFO", "MEDIA_DIRECT_PROBE_STARTED",
-                    "공유 UI 읽기 전용 관찰 · 수신자/보내기 자동 클릭 비활성 · 20초 타임아웃")
+                    "A/B 모드=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
+                        " · 공유 UI 관찰 전용 · 수신자/보내기 자동 클릭 없음 · 20초 타임아웃")
                 for (delay in longArrayOf(450L, 1100L, 2200L, 4000L)) {
                     handler.postDelayed({
                         if (activeJob === job && job.shareLaunched) inspectCurrentWindow(job)
@@ -427,6 +440,13 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
             if (candidate <= 0L) return ImageAutoStart.Rejected("잘못된 채팅방 ID 후보")
             return service.beginShare(room, candidate, observeOnly = true)
+        }
+
+        /** B 대조군: 동일한 UI 관찰·고유 PNG·Intent 플래그, 채팅방 직접 지정 extra만 생략. */
+        internal fun queueNoKeyProbe(room: String, approvedCandidate: Long): ImageAutoStart {
+            val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
+            if (approvedCandidate <= 0L) return ImageAutoStart.Rejected("진단된 후보 없음")
+            return service.beginShare(room, directCandidate = null, observeOnly = true)
         }
     }
 }
