@@ -5,6 +5,7 @@
  * 3. 같은 화면에 수신 방 이름이 남고 전송 버튼만 나타나는 공유 UI도 처리한다.
  * 4. 중복/다른 방, 방 선택 기록 부재, 너무 빠른 상태, 잘못된 확인 버튼, 사진 증거 부재를 안전하게 차단한다.
  * 5. 기존 Android/Kotlin/Windows/Python 테스트와 카카오톡 로그/상태/UI는 모두 보존한다.
+ * 6. 카카오톡 1인 공유 선택 화면의 실제 '1 보내기'를 클릭하며 '2 보내기'를 차단하는지 검증한다.
  */
 package kr.co.angaebot.bridge
 
@@ -31,6 +32,19 @@ class ImageUiPolicyTest {
             selectedRoomVerified = true, afterRoomClick = true)
         assertEquals(ImageUiAction.CLICK_SEND, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, selected))
         assertEquals(ImageUiAction.WAIT, ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, "다른방", selected))
+    }
+
+    @Test fun kakaoOneRecipientPickerUsesCountedSendButton() {
+        val screen = ImageUiSnapshot(listOf("친구", room, "1 보내기"), 1, 1,
+            selectedRoomVerified = true, afterRoomClick = true)
+        assertEquals(ImageUiAction.CLICK_SEND,
+            ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room, screen))
+        assertEquals(ImageUiAction.WAIT,
+            ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+                screen.copy(visibleLabels = listOf("친구", room, "2 보내기"))))
+        assertEquals(ImageUiAction.WAIT,
+            ImageUiPolicy.action(ImageUiStage.CONFIRM_IMAGE, room,
+                screen.copy(selectedRoomVerified = false)))
     }
 
     @Test fun imagePreviewCanHideRecipientAfterVerifiedSelection() {
