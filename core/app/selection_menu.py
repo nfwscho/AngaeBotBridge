@@ -719,7 +719,7 @@ class StockSelectionMenus:
                                           else '이미 마지막 페이지입니다.')
                 return self.open_todo_results(db, room, sender,
                     heading=state.title.removeprefix('✅ '), state=task_state,
-                    query=state.search_query, page=target, previous=state.previous)
+                    query=state.search_query, page=target, previous=state)
             if number in ('97', '98', '99') and state.origin.startswith('quotes:sector:'):
                 from .sector_watchlists import page_count, sector_argument
                 _, _, key_name, page_text, mode = state.origin.split(':')
