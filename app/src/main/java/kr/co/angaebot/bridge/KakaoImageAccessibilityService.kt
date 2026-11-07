@@ -30,6 +30,11 @@
  * 27. A/B는 고유 PNG 파일명과 이미지 내 다른 문구를 사용해 실제 사진 수신 원인을 검증하고 기존 사진은 그대로 둔다.
  * 28. A/B 모두 별도 직공유 실험 스위치·이미지 스위치·허용 방·PIN 잠금 보호를 검사하며 자동 클릭은 금지한다.
  * 29. A/B 직공유 관찰의 Intent 시작/결과/타임아웃 로그는 키 포함 여부만 표기하고 후보 ID 전체는 숨긴다.
+ * 30. v0.4.25 신규 직접 PNG 엔진은 물리 승인된 1:1 방/태그, 별도 ON 설정, 기존 이미지 ON 및 PIN 보안 제한을 모두 재검증한다.
+ * 31. 실제 Python 차트 PNG 또는 고유 테스트 PNG를 사용하며 카카오톡에 key_id 3종 힌트로 공유한다.
+ * 32. 직접 PNG 엔진에서는 접근성 서비스가 방/보내기 버튼을 절대 클릭하지 않고 화면을 관찰만 한다.
+ * 33. 직접 PNG 전용 REQUESTED/OBSERVED/RECEIPT_UNCONFIRMED 로그로 Intent 실행과 수신 성공을 구별한다.
+ * 34. 기존 자동전송·A/B 실험·잠금 깨우기/타임아웃/허용목록/배터리 및 로그 흐름은 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -74,6 +79,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         val wakeToken: String,
         val directCandidate: Long? = null,
         val observeOnly: Boolean = false,
+        val directProduction: Boolean = false,
+        val sourceKind: String = "test",
         @Volatile var wakePending: Boolean = false
     )
 
@@ -102,7 +109,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         if (activeJob !== job || !job.shareLaunched) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) ||
-            ((job.directCandidate != null || job.observeOnly) && !MediaDirectConfig.enabled(this)) ||
+            (!job.directProduction && (job.directCandidate != null || job.observeOnly) &&
+                !MediaDirectConfig.enabled(this)) ||
+            (job.directProduction && (job.directCandidate == null ||
+                !DirectPngConfig.authorizedCandidate(this,job.room,job.directCandidate))) ||
             !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
             return
@@ -145,6 +155,16 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(bounds)
                 bounds.width() >= 160f * density && bounds.height() >= 95f * density
             }
+        }
+        if (job.directProduction) {
+            // 별도의 검증된 1:1 PNG 전용 엔진. 카카오톡 자체 전송 외의 모든 클릭 금지.
+            if (SystemClock.elapsedRealtime() - job.lastDiagnosticAtMs >= 3500L) {
+                job.lastDiagnosticAtMs=SystemClock.elapsedRealtime()
+                logger.log("INFO", "DIRECT_PNG_UI_OBSERVED",
+                    "source=" + job.sourceKind + " roomChoices=" + roomCandidates.size +
+                    " sendButtons=" + sendCandidates.size + " autoClick=false · 수신 확인 아님")
+            }
+            return
         }
         if (job.observeOnly) {
             // 관찰 모드는 카카오톡 공유 Activity를 열기만 한다.
@@ -257,9 +277,19 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun beginShare(room: String, directCandidate: Long? = null, observeOnly: Boolean = false): ImageAutoStart {
+    private fun beginShare(room: String, directCandidate: Long? = null, observeOnly: Boolean = false,
+                           directProduction: Boolean = false, pngBytes: ByteArray? = null,
+                           sourceKind: String = "test"): ImageAutoStart {
         if (!ImageAutoConfig.enabled(this)) return ImageAutoStart.Rejected("이미지 자동전송 스위치 OFF")
-        if ((directCandidate != null || observeOnly) && !MediaDirectConfig.enabled(this)) {
+        if (directProduction) {
+            if (directCandidate == null ||
+                !DirectPngConfig.authorizedCandidate(this,room,directCandidate)) {
+                return ImageAutoStart.Rejected("직접 PNG 전송 대상 1:1 연결 또는 별도 스위치 미확인")
+            }
+            if (pngBytes != null && !DirectPngBytes.valid(pngBytes)) {
+                return ImageAutoStart.Rejected("실제 주식 차트 PNG 검사 실패")
+            }
+        } else if ((directCandidate != null || observeOnly) && !MediaDirectConfig.enabled(this)) {
             return ImageAutoStart.Rejected("MediaSender 직공유 실험 스위치 OFF")
         }
         val settings = BotConfig(this).load()
@@ -276,7 +306,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             return ImageAutoStart.Rejected("S20+ 보안 잠금 인증 필요: PIN·패턴·비밀번호는 자동 해제하지 않습니다.")
         }
         val uri = try {
-            if (observeOnly) {
+            if (directProduction) {
+                ReplyManager.prepareProductionPng(this, pngBytes)
+            } else if (observeOnly) {
                 ReplyManager.prepareDirectComparisonImage(this, withChannelHint = directCandidate != null)
             } else {
                 ReplyManager.prepareShareTestImage(this)
@@ -308,6 +340,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 shareIntent = intent, wakeToken = UUID.randomUUID().toString(),
                 directCandidate = directCandidate,
                 observeOnly = observeOnly,
+                directProduction = directProduction,
+                sourceKind = sourceKind,
                 wakePending = action == ImageLockAction.WAKE)
             activeJob = job
             logger.log("INFO", "IMAGE_UI_QUEUED", "허용 채팅방 기준 이미지 공유 준비")
@@ -330,7 +364,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             }
             handler.postDelayed({
                 if (activeJob === job) {
-                    if (job.observeOnly) {
+                    if (job.directProduction) {
+                        finish("DIRECT_PNG_RECEIPT_UNCONFIRMED",
+                            "source=" + job.sourceKind + " · 전송 Intent 이후 관찰 종료·카카오톡 실제 수신은 별도 확인",false)
+                    } else if (job.observeOnly) {
                         finish("MEDIA_DIRECT_PROBE_TIMEOUT",
                             "comparison=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
                                 " · 카카오톡 공유 화면 식별 실패 · 자동 클릭 없음 · 채팅방 ID 미검증", true)
@@ -367,7 +404,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         if (activeJob !== job || job.shareLaunched || job.wakePending) return
         val settings = BotConfig(this).load()
         if (!ImageAutoConfig.enabled(this) ||
-            (job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            (!job.directProduction && job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            (job.directProduction && (job.directCandidate == null ||
+                !DirectPngConfig.authorizedCandidate(this,job.room,job.directCandidate))) ||
             !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 설정 또는 허용 채팅방 변경", true)
             return
@@ -381,7 +420,11 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             startActivity(job.shareIntent)
             job.shareLaunched = true
             logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
-            if (job.observeOnly) {
+            if (job.directProduction) {
+                logger.log("INFO", "DIRECT_PNG_INTENT_REQUESTED",
+                    "source=" + job.sourceKind + " · 승인된 1:1 방 직접 공유 힌트 · 자동 클릭 없음 · 실제 카카오톡 수신 미확인")
+            }
+            if (job.observeOnly && !job.directProduction) {
                 logger.log("INFO", "MEDIA_DIRECT_PROBE_STARTED",
                     "A/B 모드=" + (if (job.directCandidate == null) "B_NO_KEY" else "A_KEY_ID") +
                         " · 공유 UI 관찰 전용 · 수신자/보내기 자동 클릭 없음 · 20초 타임아웃")
@@ -395,7 +438,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 logger.log("INFO", "MEDIA_DIRECT_CONTROL_INTENT_STARTED",
                     "B_NO_KEY · key_id/key_type/key_from_direct_share 없음 · 자동 클릭 없음 · 실제 수신 미확인")
             }
-            if (job.directCandidate != null) {
+            if (job.directCandidate != null && !job.directProduction) {
                 logger.log("INFO", "MEDIA_DIRECT_INTENT_STARTED",
                     "알림 태그 기반 key_id 힌트 포함 · 후보 " + MediaDirectPolicy.mask(job.directCandidate) +
                         " · 실제 수신/대상은 S20+ 카카오톡에서 확인 필요")
@@ -447,6 +490,20 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
             if (candidate <= 0L) return ImageAutoStart.Rejected("잘못된 채팅방 ID 후보")
             return service.beginShare(room, candidate, observeOnly = true)
+        }
+
+        /** 운영 독립 PNG 엔진: Android 앱이 허용된 1:1 방과 현재 알림 tag를 다시 검증한다. */
+        internal fun queueProductionPng(room: String, sender: String, tag: String?,
+                                        content: ByteArray? = null,
+                                        source: String = "self_test"): ImageAutoStart {
+            val service=connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
+            if (!DirectPngConfig.authorized(service,room,sender,tag)) {
+                return ImageAutoStart.Rejected("미등록 1:1 채팅방 또는 직접 PNG 스위치 OFF")
+            }
+            val candidate=MediaDirectPolicy.candidate(tag,room,sender)
+                ?: return ImageAutoStart.Rejected("현재 알림 채팅방 ID 검증 실패")
+            return service.beginShare(room, directCandidate=candidate,
+                directProduction=true, pngBytes=content, sourceKind=source)
         }
 
         /** B 대조군: 동일한 UI 관찰·고유 PNG·Intent 플래그, 채팅방 직접 지정 extra만 생략. */
