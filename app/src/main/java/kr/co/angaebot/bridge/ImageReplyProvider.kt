@@ -9,12 +9,16 @@
  * 7. 새 PNG는 파일 자체에 A/B 표식을 넣어 직접 ID 인텐트와 무-ID 대조 실험의 수신 여부를 구별한다.
  * 8. v0.4.25는 오직 앱이 발급한 20자리 16진수 랜덤 PNG만 신규 경로로 허용해 파일명 재사용/흰색 미리보기 충돌을 방지한다.
  * 9. 기존 읽기 전용/앱 비공개 캐시/외부 파일·경로 탐색 금지/Android 설정 및 모든 이미지 로그를 유지한다.
+ * 10. v0.4.25에서 카카오톡이 미리보기 생성 시 요청하는 OpenableColumns DISPLAY_NAME/SIZE를 실제 파일 기준으로 조회한다.
+ * 11. URI 스키마/파일명 화이트리스트·파일 존재 여부 검사를 공유하고 기존 쓰기/외부 파일 접근 차단을 보존한다.
  */
 package kr.co.angaebot.bridge
 
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.database.Cursor
+import android.database.MatrixCursor
+import android.provider.OpenableColumns
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import java.io.File
@@ -36,6 +40,14 @@ class ImageReplyProvider : ContentProvider() {
     private fun isUniqueProductionPng(name: String): Boolean =
         name.matches(Regex("angaebot-prod-[0-9a-f]{20}\\.png"))
 
+    private fun allowedFile(uri: Uri): File? {
+        val name=uri.pathSegments.singleOrNull() ?: return null
+        if(getType(uri)==null) return null
+        val base=context?.cacheDir ?: return null
+        val file=File(File(base,"image-reply"),name)
+        return file.takeIf { it.isFile }
+    }
+
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         if (mode != "r") throw FileNotFoundException("read-only image provider")
         val filename = uri.pathSegments.singleOrNull()
@@ -51,7 +63,19 @@ class ImageReplyProvider : ContentProvider() {
     }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?,
-                       selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
+                       selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
+        val file=allowedFile(uri) ?: return null
+        val cols=(projection?.toList() ?: listOf(
+            OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE)).toTypedArray()
+        val values=cols.map { col ->
+            when(col) {
+                OpenableColumns.DISPLAY_NAME -> file.name
+                OpenableColumns.SIZE -> file.length()
+                else -> null
+            }
+        }.toTypedArray()
+        return MatrixCursor(cols).apply { addRow(values) }
+    }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? =
         throw UnsupportedOperationException("read-only image provider")
