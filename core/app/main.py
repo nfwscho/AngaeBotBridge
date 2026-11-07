@@ -108,6 +108,8 @@
 103. v0.7.4 개인 해야 할 일 전용 SQLite 테이블과 목록/검색/조회/추가/완료/복원/수정/기한/확인 삭제를 지원한다.
 104. 직접 '할일' 명령과 개인 메뉴 5번은 기존 인증·jobs 요청 중복 방지·events 로그·5분 선택 세션에서 처리한다.
 105. 기존 메모/일정/부동산·주식·AI/날씨·Android 앱/UI/보안 설정·Python DB 데이터를 보존한다.
+106. v0.7.5에서 할 일 등록/수정/완료 시간 표시와 개인 5번 항목별 관리·2단계 삭제 확인 숫자 메뉴를 추가한다.
+107. 실제 완료·복원·삭제는 사전 번호 선택 후 기존 인증된 jobs/events 트랜잭션에서만 실행하며 0/00·방·발신자 보호를 유지한다.
 """
 from __future__ import annotations
 
@@ -143,7 +145,7 @@ from .real_estate import (RealEstateError, init_real_estate_schema, resolve_dist
                           save_district, parse_transaction_query, region_help,
                           transaction_report)
 
-VERSION = "0.7.4"
+VERSION = "0.7.5"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래", "할일"} | PERSONAL_COMMANDS
 
 
@@ -488,6 +490,13 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                      "\n※ 날 1~4 조회 · 0 이전 · 00 홈")
                         elif stock_reply is not None:
                             reply = stock_reply
+                        elif request.command == "메뉴" and resolved_argument.startswith("할일작업 "):
+                            # 선택 번호 자체에는 DB 변경이 없다. 인증·중복 요청 보호를 통과한 뒤만 갱신한다.
+                            action = resolved_argument[len("할일작업 "):]
+                            task_result = execute_todo_command(db, request.room, request.sender, action)
+                            menu = selection_menus.open_todo_results(db, request.room, request.sender)
+                            reply = task_result.reply + "\n\n" + menu.reply
+                            stock_menu_active = menu.menu_active
                         elif request.command in {"주식", "메뉴"}:
                             reply = execute_group_command(db, request.room, request.sender, resolved_argument)
                             if resolved_argument.strip() == '목록':
