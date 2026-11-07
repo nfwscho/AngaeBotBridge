@@ -14,6 +14,9 @@
 12. 외부 API·Google 계정·원격 알림·일정 자동 발신·개인정보 수집 기능은 추가하지 않는다.
 13. 카카오톡 메시지·SQLite 로그에 내용이 남을 수 있으므로 인증번호·비밀번호는 입력하지 않는다.
 14. 기존 Android Bridge·선택 메뉴·배터리 정보·사진 자동전송 및 로그 동작을 유지한다.
+15. v0.7.5는 기존 created_at/updated_at 컬럼을 읽어 등록·수정·완료 시각을 KST로 안내한다.
+16. 목록의 1~10은 고유 #ID와 구별된 선택 번호로 보이고 세부 화면에서 안전한 관리 메뉴로 이동한다.
+17. 확인 없는 단독 삭제를 계속 차단하고 기존 날짜/검색/범위/중복/SQL 인덱스를 보존한다.
 """
 from __future__ import annotations
 
@@ -21,10 +24,11 @@ import re
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 MAX_TODOS = 500
 LIST_LIMIT = 10
+KST = timezone(timedelta(hours=9))
 
 
 class TodoError(ValueError):
@@ -38,6 +42,8 @@ class Todo:
     detail: str
     due_date: str | None
     completed_at: int | None
+    created_at: int = 0
+    updated_at: int = 0
 
 
 @dataclass(frozen=True)
@@ -102,7 +108,8 @@ def _payload(text: str) -> tuple[str, str, str | None]:
 def _todo(row: tuple) -> Todo:
     return Todo(int(row[0]), str(row[1]), str(row[2]),
                 str(row[3]) if row[3] is not None else None,
-                int(row[4]) if row[4] is not None else None)
+                int(row[4]) if row[4] is not None else None,
+                int(row[5]), int(row[6]))
 
 
 def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
@@ -126,7 +133,7 @@ def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
         args.extend(('%' + escaped + '%', '%' + escaped + '%'))
     args.append(max(1, min(int(limit), LIST_LIMIT)))
     return tuple(_todo(row) for row in db.execute(
-        'SELECT id,title,detail,due_date,completed_at FROM personal_todos WHERE ' +
+        'SELECT id,title,detail,due_date,completed_at,created_at,updated_at FROM personal_todos WHERE ' +
         ' AND '.join(where) +
         " ORDER BY (completed_at IS NOT NULL) ASC, COALESCE(due_date,'9999-12-31') ASC, id DESC LIMIT ?",
         args).fetchall())
@@ -134,25 +141,35 @@ def list_todos(db: sqlite3.Connection, room: str, sender: str, *,
 
 def get_todo(db: sqlite3.Connection, room: str, sender: str, identifier: int) -> Todo:
     _scope(room, sender)
-    row = db.execute('''SELECT id,title,detail,due_date,completed_at FROM personal_todos
+    row = db.execute('''SELECT id,title,detail,due_date,completed_at,created_at,updated_at FROM personal_todos
         WHERE id=? AND room=? AND sender=?''', (identifier, room, sender)).fetchone()
     if row is None:
         raise TodoError("해당 할 일을 찾을 수 없습니다. 번호와 채팅방을 확인하세요.")
     return _todo(row)
 
 
+def _korean_time(timestamp: int) -> str:
+    return datetime.fromtimestamp(timestamp, KST).strftime('%Y-%m-%d %H:%M')
+
+
 def todo_preview(todo: Todo) -> str:
     symbol = '☑' if todo.completed_at is not None else '☐'
     due = (todo.due_date + ' ') if todo.due_date else ''
-    return f'{symbol} {due}{" ".join(todo.title.split())[:32]} (#{todo.id})'
+    registered = datetime.fromtimestamp(todo.created_at, KST).strftime('%m/%d %H:%M')
+    return f'{symbol} [#{todo.id}] {due}{" ".join(todo.title.split())[:32]} · 등록 {registered}'
 
 
 def todo_detail(todo: Todo) -> str:
     status = '✅ 완료' if todo.completed_at is not None else '⬜ 미완료'
     due = todo.due_date or '기한 없음'
+    changed = (f'\n수정: {_korean_time(todo.updated_at)}' if todo.updated_at > todo.created_at
+               else '')
+    finished = (f'\n완료: {_korean_time(todo.completed_at)}'
+                if todo.completed_at is not None else '')
     return (f'📋 할 일 #{todo.id} · {status}\n'
-            f'{todo.title}\n기한: {due}\n{todo.detail or "(상세 내용 없음)"}\n'
-            f'※ 할일 완료 {todo.id} · 할일 수정 {todo.id} 제목 · 할일 삭제 {todo.id} 확인')
+            f'{todo.title}\n등록: {_korean_time(todo.created_at)} (KST){changed}{finished}\n'
+            f'기한: {due}\n{todo.detail or "(상세 내용 없음)"}\n'
+            f'※ 직접 명령: 할일 수정 {todo.id} 새 제목 | 상세 내용')
 
 
 def todo_help() -> str:
@@ -164,7 +181,7 @@ def todo_help() -> str:
             '할일 수정 번호 새 제목 | 상세 내용\n'
             '할일 기한 번호 YYYY-MM-DD · 할일 기한 번호 없음\n'
             '할일 삭제 번호 확인\n'
-            '※ 목록의 숫자 1~10은 조회만 합니다. 완료·삭제는 별도 명령입니다.')
+            '※ 개 5 할일 추가 제목 도 가능하며, 항목 번호를 누르면 관리 메뉴가 열립니다.')
 
 
 def execute_todo_command(db: sqlite3.Connection, room: str, sender: str,
@@ -196,7 +213,9 @@ def execute_todo_command(db: sqlite3.Connection, room: str, sender: str,
             (room,sender,title,detail,due_date,completed_at,created_at,updated_at)
             VALUES (?,?,?,?,?,NULL,?,?)''',
             (room, sender, title, detail, due_date, now, now))
-        return TodoResult(f'✅ 할 일 등록 #{cur.lastrowid}\n{title}\n※ 할일 목록 · 할일 완료 {cur.lastrowid}')
+        return TodoResult(f'✅ 할 일 등록 #{cur.lastrowid}\n{title}\n'
+                          f'등록: {_korean_time(now)} (KST)\n'
+                          f'※ 개 5 / 할일 목록 · 할일 완료 {cur.lastrowid}')
     if action == '보기':
         return TodoResult(todo_detail(get_todo(db, room, sender, _identifier(remainder))))
     if action in ('완료', '복원', '삭제', '수정', '기한'):
