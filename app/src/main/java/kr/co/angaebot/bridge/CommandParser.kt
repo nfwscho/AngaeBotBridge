@@ -66,6 +66,8 @@
  * 68. v0.4.24는 앙개야 이미지 직공유대조를 같은 정확한 호출어와 알림 인증 흐름으로 처리한다.
  * 69. v0.4.25는 '앙개야 이미지 직접시험 / 이미지 직접차트 MU' 명령을 기존 정확한 호출어로 처리한다.
  * 70. 기존 명령/단축어/메뉴/로그/배터리/사용자 허용목록은 변경하지 않는다.
+ * 71. v0.4.26은 앙개야 동영상 직접시험/동영상 직접전송/동영상 상태를 기존 정확한 호출어에서만 수락한다.
+ * 72. 기존 이미지·주식·날씨·메모·개인메뉴·단축어/숫자 메뉴 파싱은 모두 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -181,7 +183,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.25 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.26 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
