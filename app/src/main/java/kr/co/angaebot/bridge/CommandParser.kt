@@ -58,6 +58,8 @@
  * 60. v0.4.19의 1명 사진 전송 버튼 인식 개선에 맞춰 상태 버전만 올리고 명령 파서 및 전체 도움말을 보존한다.
  * 61. v0.4.20에서 정확한 할/할일 단축 및 앙개야 할일 명령으로 개인 할 일 등록·완료·삭제를 Python Core에 전달한다.
  * 62. 기존 앙/주/개/메/부 등 단축어, 숫자 메뉴, 기존 개인정보 보호·로그·이미지 자동전송 기능을 보존한다.
+ * 63. v0.4.21은 사용자 입력 '개 5 할일 추가 ...'를 명시적 개인 할 일 명령으로 정확히 인식한다.
+ * 64. 개 5 숫자 경로, 일반 대화 차단, 기존 단축·알림/이미지/주식·로그/UI를 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -98,6 +100,14 @@ object CommandParser {
             }
             if (root != null) {
                 if (segments.size == 1) return ParseResult.Command("메뉴", root)
+                // 개인 메뉴의 '개 5 할일 추가 제목'을 할 일 직접 명령으로 처리한다.
+                // 기존 '개 5' 숫자 메뉴와 다른 메뉴 경로에는 전혀 영향을 주지 않는다.
+                if (index == "개" && segments.size >= 3 && segments[1] == "5" &&
+                    segments[2] == "할일") {
+                    val taskArgument = segments.drop(3).joinToString(" ")
+                    return ParseResult.Command("할일",
+                        if (taskArgument.isBlank()) "목록" else taskArgument)
+                }
                 if (numericPath) {
                     return ParseResult.Command("메뉴", "경로 $root ${segments.drop(1).joinToString(" ")}")
                 }
@@ -165,7 +175,7 @@ object CommandParser {
 
 object LocalCommandExecutor {
     fun execute(name: String, argument: String): String = when (name) {
-        "상태" -> "✅ Android Bridge v0.4.20 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
+        "상태" -> "✅ Android Bridge v0.4.21 · Galaxy S20+\n카카오톡 알림 응답 · Python 연결은 선택형\n서버·서비스·배포 통합 상태: 설 1"
         "도움말", "help" -> listOf(
             "📖 앙개봇 도움말",
             "앙(홈) · 주(주식) · 설(설정)",
