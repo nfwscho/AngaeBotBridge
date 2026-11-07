@@ -110,6 +110,10 @@
 105. 기존 메모/일정/부동산·주식·AI/날씨·Android 앱/UI/보안 설정·Python DB 데이터를 보존한다.
 106. v0.7.5에서 할 일 등록/수정/완료 시간 표시와 개인 5번 항목별 관리·2단계 삭제 확인 숫자 메뉴를 추가한다.
 107. 실제 완료·복원·삭제는 사전 번호 선택 후 기존 인증된 jobs/events 트랜잭션에서만 실행하며 0/00·방·발신자 보호를 유지한다.
+108. v0.7.6은 인증된 GET /v1/media/stock-chart?symbol=MU에서 기존 검증된 마감 일봉을 이용해 실제 PNG를 생성한다.
+109. 기존 jobs 명령·주식 데이터·로그·SQLite·토큰/.env·AI/메모·날씨/이미지 Reply 경로를 보존한다.
+110. 차트는 Pillow 외부 종속성 없이 Python 표준 라이브러리로 렌더링되며 다른 URL/로컬 파일을 읽지 않는다.
+111. PNG 엔드포인트는 token 인증·티커/출처 검증·이미지 크기 제한·no-store 응답 및 새로운 이벤트 로그만 추가한다.
 """
 from __future__ import annotations
 
@@ -122,7 +126,7 @@ from contextlib import closing
 from threading import RLock
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from .commands import CommandError, execute_command
 from .ai_engine import AIError, AISettings, get_ai_reply
@@ -134,6 +138,8 @@ from .market import StockQuoteError, execute_stock_command, WATCHLIST
 from .watchlists import (init_schema, is_group_quote_request, load_group, group_report,
                          execute_group_command, resolve_stock, resolve_saved_alias)
 from .history import is_analysis_request, individual_report, group_report as history_group_report, fetch_history
+from .watchlists import resolve_stock
+from .png_chart import render_history_png, ChartPngError
 from .sector_watchlists import parse_sector_request, get_page as get_sector_page, sector_report
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
@@ -145,7 +151,7 @@ from .real_estate import (RealEstateError, init_real_estate_schema, resolve_dist
                           save_district, parse_transaction_query, region_help,
                           transaction_report)
 
-VERSION = "0.7.5"
+VERSION = "0.7.6"
 SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래", "할일"} | PERSONAL_COMMANDS
 
 
@@ -210,6 +216,29 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         revision = deployment_identity()
         return {"ok": True, "version": VERSION, "uptime_seconds": int(time.monotonic() - began),
                 "deployment_branch": revision["branch"], "deployment_sha": revision["sha"]}
+
+    @api.get("/v1/media/stock-chart", dependencies=[Depends(authenticated)])
+    def media_stock_chart(symbol: str = Query(min_length=1, max_length=24)):
+        """로컬 토큰 인증 후 공개 종목의 실제 마감 일봉 차트를 PNG로 전달한다."""
+        try:
+            # 사용자 그룹 이름/SQLite 별칭/외부 URL은 이 PNG 경로에서 사용하지 않는다.
+            stock = resolve_stock(symbol.strip())
+            history = fetch_history(stock)
+            data = render_history_png(history)
+        except (StockQuoteError, ChartPngError, ValueError) as exc:
+            with lock:
+                with closing(connect()) as db, db:
+                    db.execute("INSERT INTO events(event_time,level,stage,detail) VALUES (?,?,?,?)",
+                               (int(time.time()), "WARN", "MEDIA_STOCK_CHART_FAILED",
+                                "symbol=" + symbol[:24] + " type=" + exc.__class__.__name__))
+            raise HTTPException(status_code=422, detail="유효한 마감 일봉 차트를 생성할 수 없습니다.") from exc
+        with lock:
+            with closing(connect()) as db, db:
+                db.execute("INSERT INTO events(event_time,level,stage,detail) VALUES (?,?,?,?)",
+                           (int(time.time()), "INFO", "MEDIA_STOCK_CHART_READY",
+                            "ticker=" + stock.ticker + " bytes=" + str(len(data))))
+        return Response(content=data, media_type="image/png",
+                        headers={"Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff"})
 
     @api.post("/v1/commands", dependencies=[Depends(authenticated)])
     def command(request: CommandRequest):
