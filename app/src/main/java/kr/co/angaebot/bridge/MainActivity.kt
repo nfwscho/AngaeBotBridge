@@ -20,6 +20,7 @@
  * 기존 알림 접근 권한/자동응답/허용 방·발신자/Python/AI/테스트/로그 UI·데이터를 그대로 보존하고 기능은 기본 OFF다.
  * v0.4.17 사진 확인 화면 자동 버튼 클릭을 보완하며 기존 이미지 접근성 스위치/설정 및 앱 사용자 설정은 유지한다.
  * v0.4.18은 인증 불필요 잠금 화면 자동 깨우기 안내만 추가하며 기존 UI/DB/로그/토큰/설정은 전부 보존한다.
+ * v0.4.19는 사진 전송 '1 보내기' 버튼 인식 보완 버전만 표시하며 기존 관리 UI·로그·설정·토큰을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -95,7 +96,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.4.18 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.19 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
