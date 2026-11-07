@@ -11,6 +11,8 @@
  * 9. 기존 읽기 전용/앱 비공개 캐시/외부 파일·경로 탐색 금지/Android 설정 및 모든 이미지 로그를 유지한다.
  * 10. v0.4.25에서 카카오톡이 미리보기 생성 시 요청하는 OpenableColumns DISPLAY_NAME/SIZE를 실제 파일 기준으로 조회한다.
  * 11. URI 스키마/파일명 화이트리스트·파일 존재 여부 검사를 공유하고 기존 쓰기/외부 파일 접근 차단을 보존한다.
+ * 12. v0.4.26은 S20+ 앱이 발급한 난수 이름의 MP4 파일만 추가하고 MIME video/mp4·파일 크기를 제공한다.
+ * 13. 이미지와 영상 모두 앱 캐시의 읽기 전용 파일만 제공하며 외부 URI·쓰기·임의 경로·기존 로그는 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -31,6 +33,7 @@ class ImageReplyProvider : ContentProvider() {
         val name = uri.pathSegments.singleOrNull() ?: return null
         return when {
             name == "angaebot-test.jpg" -> "image/jpeg"
+            DirectMp4Policy.allowedFileName(name) -> "video/mp4"
             name in setOf("angaebot-test.png", "angaebot-direct-a.png", "angaebot-direct-b.png") ||
                 isUniqueProductionPng(name) -> "image/png"
             else -> null
@@ -45,20 +48,22 @@ class ImageReplyProvider : ContentProvider() {
         if(getType(uri)==null) return null
         val base=context?.cacheDir ?: return null
         val file=File(File(base,"image-reply"),name)
-        return file.takeIf { it.isFile }
+        return file.takeIf { it.isFile &&
+            (getType(uri) != "video/mp4" || it.length() in 48L..DirectMp4Policy.MAX_BYTES) }
     }
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
-        if (mode != "r") throw FileNotFoundException("read-only image provider")
+        if (mode != "r") throw FileNotFoundException("read-only media provider")
         val filename = uri.pathSegments.singleOrNull()
         if (filename !in setOf("angaebot-test.png", "angaebot-test.jpg",
                 "angaebot-direct-a.png", "angaebot-direct-b.png") &&
-            (filename == null || !isUniqueProductionPng(filename))) {
+            (filename == null ||
+                (!isUniqueProductionPng(filename) && !DirectMp4Policy.allowedFileName(filename)))) {
             throw FileNotFoundException("unknown image")
         }
         val base = context?.cacheDir ?: throw FileNotFoundException("context unavailable")
         val image = File(File(base, "image-reply"), filename!!)
-        if (!image.isFile) throw FileNotFoundException("image not prepared")
+        if (!image.isFile) throw FileNotFoundException("media not prepared")
         return ParcelFileDescriptor.open(image, ParcelFileDescriptor.MODE_READ_ONLY)
     }
 
