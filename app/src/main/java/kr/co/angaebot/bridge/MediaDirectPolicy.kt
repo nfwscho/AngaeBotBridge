@@ -9,6 +9,7 @@
  * 7. PIN 인증 잠금을 해제하거나 카카오톡 내부 DB를 조회하는 기능은 포함하지 않는다.
  * 8. 공유 대상 선택창이 실제 나타났는지 관찰 전용 UI 스냅샷으로 분류하며 자동 클릭을 하지 않는다.
  * 9. 방/상대 확인이 불충분할 때는 식별 불가로 표시하고 직접 공유 성공으로 판단하지 않는다.
+ * 10. A/B 비교군에는 서로 다른 고정 PNG 파일명과 명확한 영문 표식을 할당해 같은 그림의 오인 식별을 막는다.
  */
 package kr.co.angaebot.bridge
 
@@ -66,4 +67,16 @@ internal object MediaDirectRoutePolicy {
             MediaDirectRoute.TARGET_SCREEN_CANDIDATE
         else -> MediaDirectRoute.UNVERIFIED
     }
+}
+
+/** A/B 시험 파일명·표식은 중앙 정책으로 한정하며 외부 경로/파일명을 받지 않는다. */
+internal object MediaDirectComparisonPolicy {
+    fun fileName(withChannelHint: Boolean): String =
+        if (withChannelHint) "angaebot-direct-a.png" else "angaebot-direct-b.png"
+
+    fun imageLabel(withChannelHint: Boolean): String =
+        if (withChannelHint) "A: DIRECT (KEY_ID)" else "B: CONTROL (NO KEY_ID)"
+
+    fun mode(withChannelHint: Boolean): String =
+        if (withChannelHint) "A_KEY_ID" else "B_NO_KEY"
 }
