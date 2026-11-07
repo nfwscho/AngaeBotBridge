@@ -46,6 +46,8 @@
  * 44. v0.4.22 MediaSender 진단/직공유시험 명령은 기존 정확한 방·발신자·호출어·중복 검증 뒤에만 처리한다.
  * 45. 알림 tag 후보는 카카오 채팅방 ID라고 확정하지 않으며 1:1에서 5분 내 일회성 진단 승인 후에만 사용한다.
  * 46. 새 실험 스위치는 기본 OFF, 일반 이미지 자동시험·텍스트/시세/메모·배터리·모든 로그는 유지한다.
+ * 47. v0.4.23 직공유경로확인은 기존 진단 5분/일회성 승인 뒤 카카오 공유 UI를 읽기만 하고 버튼은 자동 클릭하지 않는다.
+ * 48. 기존 직공유시험의 수신자 클릭 로그와 실제 전송 성공을 구별하며 PIN 정책·기존 모든 명령·로그를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -130,6 +132,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             val isImageAutoTest = parsed.name == "이미지" && parsed.argument == "자동시험"
             val isMediaDirectDiagnostic = parsed.name == "이미지" && parsed.argument == "직공유진단"
             val isMediaDirectTest = parsed.name == "이미지" && parsed.argument == "직공유시험"
+            val isMediaRouteProbe = parsed.name == "이미지" && parsed.argument == "직공유경로확인"
             // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
             // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
             if (numericSelection == null && !isModuleLookup &&
@@ -165,12 +168,16 @@ class KakaoNotificationListener : NotificationListenerService() {
             val imageAutoStart = if (isImageAutoTest) KakaoImageAccessibilityService.queueTest(message.room) else null
             val directCandidate = if (isMediaDirectDiagnostic) {
                 mediaDirectApproval.diagnose(sbn.tag, message.room, message.sender, SystemClock.elapsedRealtime())
-            } else if (isMediaDirectTest && MediaDirectConfig.enabled(this)) {
+            } else if ((isMediaDirectTest || isMediaRouteProbe) && MediaDirectConfig.enabled(this)) {
                 mediaDirectApproval.consume(sbn.tag, message.room, message.sender, SystemClock.elapsedRealtime())
             } else null
-            val directStart = if (isMediaDirectTest && directCandidate != null) {
-                KakaoImageAccessibilityService.queueDirectTest(message.room, directCandidate)
-            } else null
+            val directStart = when {
+                isMediaDirectTest && directCandidate != null ->
+                    KakaoImageAccessibilityService.queueDirectTest(message.room, directCandidate)
+                isMediaRouteProbe && directCandidate != null ->
+                    KakaoImageAccessibilityService.queueRouteProbe(message.room, directCandidate)
+                else -> null
+            }
             val response = if (parsed.name == "이미지") {
                 sourceModule = "bridge.image"
                 if (isMediaDirectDiagnostic) {
@@ -185,9 +192,10 @@ class KakaoNotificationListener : NotificationListenerService() {
                         "🧪 MediaSender 직공유 진단\n숫자형 알림 tag 후보: " +
                             MediaDirectPolicy.mask(directCandidate) + "\n" +
                             "※ 실제 카카오 채팅방 ID인지 미확인\n" +
-                            "※ S20+ ②-B-1 스위치를 켜고 5분 안에 앙개야 이미지 직공유시험 입력"
+                            "※ S20+ ②-B-1 스위치를 켜고 5분 안에 앙개야 이미지 직공유경로확인 입력\n" +
+                            "※ 기존 전송 비교 명령: 앙개야 이미지 직공유시험"
                     }
-                } else if (isMediaDirectTest) {
+                } else if (isMediaDirectTest || isMediaRouteProbe) {
                     when {
                         !MediaDirectConfig.enabled(this) -> {
                             logger.log("WARN", "MEDIA_DIRECT_REJECTED", "별도 직공유 스위치 OFF",
@@ -200,11 +208,21 @@ class KakaoNotificationListener : NotificationListenerService() {
                             "⚠️ 직공유 후보 미검증\n먼저 앙개야 이미지 직공유진단을 보내세요."
                         }
                         directStart == ImageAutoStart.Queued -> {
-                            logger.log("INFO", "MEDIA_DIRECT_QUEUED",
-                                "단일 허용 방 직접 공유 예약 · 카카오 수신 미확인", message.room, message.sender)
-                            "🧪 MediaSender 직접 공유 시험 시작\n" +
-                                "파일: 테스트 PNG · 후보: " + MediaDirectPolicy.mask(directCandidate) + "\n" +
-                                "※ 사진이 실제로 올바른 1:1 채팅에 도착했는지 확인하세요."
+                            if (isMediaRouteProbe) {
+                                logger.log("INFO", "MEDIA_DIRECT_PROBE_QUEUED",
+                                    "직공유 화면 관찰 전용 · 버튼 자동 클릭 없음 · 실제 수신 미확인",
+                                    message.room, message.sender)
+                                "🔍 MediaSender 직접 공유 경로 확인\n" +
+                                    "후보: " + MediaDirectPolicy.mask(directCandidate) + "\n" +
+                                    "※ 이번에는 방 선택/보내기 버튼을 자동 클릭하지 않습니다.\n" +
+                                    "※ S20+ 카카오톡에 어떤 화면이 떴는지 확인하세요."
+                            } else {
+                                logger.log("INFO", "MEDIA_DIRECT_QUEUED",
+                                    "단일 허용 방 직접 공유 예약 · 카카오 수신 미확인", message.room, message.sender)
+                                "🧪 MediaSender 직접 공유 시험 시작\n" +
+                                    "파일: 테스트 PNG · 후보: " + MediaDirectPolicy.mask(directCandidate) + "\n" +
+                                    "※ 사진이 실제로 올바른 1:1 채팅에 도착했는지 확인하세요."
+                            }
                         }
                         directStart is ImageAutoStart.Rejected -> {
                             logger.log("WARN", "MEDIA_DIRECT_REJECTED", directStart.reason,
@@ -228,7 +246,7 @@ class KakaoNotificationListener : NotificationListenerService() {
                     }
                 } else if (!isImageTest) {
                     "🖼️ 이미지 진단: 앙개야 이미지 테스트 / 앙개야 이미지 자동시험\n" +
-                        "MediaSender: 앙개야 이미지 직공유진단 / 앙개야 이미지 직공유시험\n" +
+                        "MediaSender: 앙개야 이미지 직공유진단 / 앙개야 이미지 직공유경로확인 / 앙개야 이미지 직공유시험\n" +
                         "※ 직접 공유는 별도 OFF 기본값이며 진단이 선행돼야 합니다."
                 } else if (imageMime == null) {
                     logger.log("WARN", "IMAGE_REPLY_UNAVAILABLE", "카카오톡 알림에 이미지 MIME RemoteInput 액션 없음", message.room, message.sender)
