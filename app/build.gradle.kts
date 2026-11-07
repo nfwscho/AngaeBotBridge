@@ -44,6 +44,8 @@
 // 43. 기존 앙개봇 이미지 자동전송/주식/날씨/할 일/SQLite/.env/Android UI 및 모든 로그/보안 설정을 유지한다.
 // 44. v0.4.23(versionCode 27) 관찰 전용 직접공유 경로 진단으로 기존 대상 선택과 직접 ID 경로를 구분한다.
 // 45. 진단에서 방/보내기 클릭 없음, 기존 전송 방식/SQLite/잠금·로그/UI 보존.
+// 46. v0.4.24(versionCode 28)는 A/B 고유 테스트 PNG와 no-key 대조로 MediaSender ID 힌트 실제 효과를 비교한다.
+// 47. 기존 모든 앱 설정/SQLite/개인 할 일/이미지 자동시험/잠금 인증/Android 로그를 보존한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -57,8 +59,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.4.23"
+        versionCode = 28
+        versionName = "0.4.24"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
