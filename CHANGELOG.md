@@ -1,3 +1,15 @@
+## 2026-11-07 — 검증된 1:1 PNG 직접전송 및 실제 Python Core 일봉 차트 (Android v0.4.25 / Core v0.7.6)
+
+- S20+ MediaSender A/B 실기기 성공 결과를 바탕으로 **②-B-2 독립 직접 PNG 엔진** 추가. 새 기능 기본 OFF, 기존 기능의 스위치/자동 UI 클릭 경로는 변경하지 않음.
+- 실제 A/B 검증 1:1 후보는 `직공유진단`으로 5분간 RAM에 보관, **사용자가 S20+ 앱에서 명시적 물리 승인**해야 정확한 room/sender/tag 한 쌍을 로컬에 저장. 카카오톡 원격 명령만으로 자동 페어링 불가.
+- `앙개야 이미지 직접시험`: UUID 기반 고유 Content URI·PNG를 생성하고 카카오톡 `key_id`/ `key_type`/ `key_from_direct_share` 직접 공유 Intent로 자동 클릭 없이 전송 요청.
+- `앙개야 이미지 직접차트 MU` 또는 `... 005930`: Python Core의 기존 검증 과거 일별 종가를 사용해 **추가 Pillow 의존성 없이** 720×420 PNG 생성, 토큰 인증 HTTP 응답, Android PNG 전체 청크 CRC/크기/색상 확인 후 공유.
+- 카카오톡 썸네일 흰색 캐시 충돌 완화 목적으로 매번 다른 파일명/URI와 표준 `DISPLAY_NAME/SIZE` ContentProvider 메타데이터 제공. 실제 개선 여부는 S20+ 추가 검증 필요.
+- `DIRECT_PNG_PAIR_APPROVED`, `DIRECT_PNG_SETTING_SAVED`, `DIRECT_PNG_QUEUED`, `DIRECT_PNG_INTENT_REQUESTED`, `DIRECT_PNG_RECEIPT_UNCONFIRMED`, `MEDIA_STOCK_CHART_READY/FAILED` 신규 로그. 수신 확인을 과장하지 않음.
+- 기존 카카오 알림/사진 자동전송/A/B 실험/주식·날씨·부동산·금융·개인 메모/해야 할 일/Python Core 명령/SQLite DB/.env/로그·모듈/배터리 및 PIN 인증 잠금 정책 보존.
+- 본 브랜치만 수정하고 main 및 다른 채팅 개발 브랜치는 변경하지 않음. 사용자 S20+ 실기기 추가 확인 후 병합 검토.
+- 세부 안내: docs/MEDIASENDER_EXPERIMENT.md
+
 ## 2026-11-07 — MediaSender 직접공유 A/B S20+ 실기기 검증 결과
 
 - Android Bridge v0.4.24 실기기 A/B를 21:41에 실시. 동일 1:1 방에서 A(카카오톡 직접 공유 3개 Intent 키 포함)는 `A: DIRECT (KEY_ID)` PNG 새 사진 말풍선 수신 성공.
