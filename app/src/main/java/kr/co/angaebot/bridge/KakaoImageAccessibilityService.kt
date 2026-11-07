@@ -20,6 +20,9 @@
  * 17. 일회성 토큰·화면 잠금 재검사·타임아웃·기존 Image_UI 및 IMAGE_WAKE 로그와 접근성 방 검증을 유지한다.
  * 18. v0.4.19는 S20+ 공유 화면 하단의 '1 보내기'를 인식해 선택된 1명에게만 전송하도록 보완한다.
  * 19. 기존 수신 방 선택 성공/단일 버튼/잠금/타임아웃/사진 확인/모든 기존 로그와 응답 흐름을 보존한다.
+ * 20. v0.4.22에서 사용자가 별도 승인한 경우에만 MediaSender 방식의 3가지 채팅방 직접 지정 인텐트 힌트를 추가한다.
+ * 21. 기존 공유/사진/방 선택/버튼 클릭/잠금 인증 제한 로직은 전부 유지하고 직공유는 실제 수신 미확인으로 기록한다.
+ * 22. 알림 숫자형 tag가 실제 카카오 채널 ID인지 미검증이며 자체 2단계 진단 후 1:1 시험에만 사용한다.
  */
 package kr.co.angaebot.bridge
 
@@ -62,6 +65,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         var lastDiagnosticAtMs: Long = 0L,
         val shareIntent: Intent,
         val wakeToken: String,
+        val directCandidate: Long? = null,
         @Volatile var wakePending: Boolean = false
     )
 
@@ -89,7 +93,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
     private fun inspectCurrentWindow(job: ImageJob) {
         if (activeJob !== job || !job.shareLaunched) return
         val settings = BotConfig(this).load()
-        if (!ImageAutoConfig.enabled(this) || !settings.enabled || !settings.isAllowedRoom(job.room)) {
+        if (!ImageAutoConfig.enabled(this) ||
+            (job.directCandidate != null && !MediaDirectConfig.enabled(this)) ||
+            !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
             return
         }
@@ -209,8 +215,11 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun beginShare(room: String): ImageAutoStart {
+    private fun beginShare(room: String, directCandidate: Long? = null): ImageAutoStart {
         if (!ImageAutoConfig.enabled(this)) return ImageAutoStart.Rejected("이미지 자동전송 스위치 OFF")
+        if (directCandidate != null && !MediaDirectConfig.enabled(this)) {
+            return ImageAutoStart.Rejected("MediaSender 직공유 실험 스위치 OFF")
+        }
         val settings = BotConfig(this).load()
         if (!settings.enabled || !settings.isAllowedRoom(room)) {
             return ImageAutoStart.Rejected("자동응답 OFF 또는 허용되지 않은 채팅방")
@@ -234,12 +243,20 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             setPackage(KAKAO_PACKAGE)
             putExtra(Intent.EXTRA_STREAM, uri)
             clipData = ClipData.newUri(contentResolver, "AngaeBot photo test", uri)
+            if (directCandidate != null) {
+                // MediaSender의 공유 힌트를 실험한다. 공식 API 아님·타겟/전송 성공 보장 없음.
+                putExtra("key_id", directCandidate)
+                putExtra("key_type", 1)
+                putExtra("key_from_direct_share", true)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         return try {
             grantUriPermission(KAKAO_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             val job = ImageJob(room, SystemClock.elapsedRealtime(),
                 shareIntent = intent, wakeToken = UUID.randomUUID().toString(),
+                directCandidate = directCandidate,
                 wakePending = action == ImageLockAction.WAKE)
             activeJob = job
             logger.log("INFO", "IMAGE_UI_QUEUED", "허용 채팅방 기준 이미지 공유 준비")
@@ -303,6 +320,11 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             startActivity(job.shareIntent)
             job.shareLaunched = true
             logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
+            if (job.directCandidate != null) {
+                logger.log("INFO", "MEDIA_DIRECT_INTENT_STARTED",
+                    "알림 태그 기반 key_id 힌트 포함 · 후보 " + MediaDirectPolicy.mask(job.directCandidate) +
+                        " · 실제 수신/대상은 S20+ 카카오톡에서 확인 필요")
+            }
         } catch (e: Exception) {
             finish("IMAGE_UI_ABORTED", "공유 화면 시작 오류: ${e.javaClass.simpleName}", true)
         }
@@ -338,6 +360,12 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         internal fun queueTest(room: String): ImageAutoStart {
             val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
             return service.beginShare(room)
+        }
+
+        internal fun queueDirectTest(room: String, candidate: Long): ImageAutoStart {
+            val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
+            if (candidate <= 0L) return ImageAutoStart.Rejected("잘못된 채팅방 ID 후보")
+            return service.beginShare(room, candidate)
         }
     }
 }
