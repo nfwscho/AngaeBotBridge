@@ -10,6 +10,9 @@
  * 이미지 전송 요청이 수락되어도 카카오톡 대화방의 실제 수신·표시 여부는 S20+로 별도 확인해야 한다.
  * 접근성 공유 시험에서는 기존 앱 전용 640x360 PNG 생성을 재사용하고 content URI만 제공하며 원래 텍스트 답장 코드는 변경하지 않는다.
  * v0.4.24 MediaSender 대조 실험은 고유 파일명·이미지 내 A/B 표식·작업별 파일 구별로 두 직접공유 Intent를 구분한다.
+ * v0.4.25 새 PNG 직접전송 엔진은 테스트 PNG 또는 인증된 Python Core 차트 PNG를 고유 UUID 기반 URI로 준비한다.
+ * 각 공유의 파일명은 서로 달라 흰색 썸네일의 캐시 충돌을 최소화하며 PNG만 읽기 전용으로 제공한다.
+ * 24시간 지난 직접 공유 임시 파일만 정리하며 기존 테스트 PNG/이미지 DB/Android 로그/토큰은 보존한다.
  * A는 key_id 포함, B는 key_id 제외이며 기존 테스트 사진 생성·RemoteInput·공유 API/로그/UI를 변경하지 않는다.
  */
 package kr.co.angaebot.bridge
@@ -25,6 +28,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
 import java.io.File
+import java.util.UUID
 import android.os.Build
 import android.os.Bundle
 
@@ -137,6 +141,30 @@ object ReplyManager {
             .authority("${context.packageName}.imageprovider")
             .appendPath(fileName)
             .build()
+    }
+
+    /** 사용자 허용 1:1 방 전용 PNG. 서로 다른 Content URI를 발급하여 이전 썸네일 캐시 충돌을 방지한다. */
+    fun prepareProductionPng(context: Context, content: ByteArray? = null): Uri {
+        if(content!=null && !DirectPngBytes.valid(content)) {
+            throw IllegalArgumentException("차트 PNG 데이터 검증 실패")
+        }
+        val fileName="angaebot-prod-" + UUID.randomUUID().toString().replace("-","").take(20) + ".png"
+        val dir=File(context.cacheDir,"image-reply")
+        if(!dir.isDirectory && !dir.mkdirs()) throw IllegalStateException("이미지 캐시 폴더 생성 실패")
+        val stale=System.currentTimeMillis()-24L*60L*60L*1000L
+        dir.listFiles()?.forEach { file ->
+            if(file.name.matches(Regex("angaebot-prod-[0-9a-f]{20}\\.png")) &&
+                file.isFile && file.lastModified()<stale) file.delete()
+        }
+        if(content==null) {
+            createTestImage(context,fileName,"image/png","DIRECT PNG " + fileName.substring(14,20).uppercase())
+        } else {
+            val target=File(dir,fileName)
+            target.outputStream().use { it.write(content) }
+        }
+        return Uri.Builder().scheme("content")
+            .authority("${context.packageName}.imageprovider")
+            .appendPath(fileName).build()
     }
 
     private fun createTestImage(context: Context, fileName: String, mime: String, marker: String? = null) {
