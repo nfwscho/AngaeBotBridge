@@ -7,6 +7,8 @@
  * 5. 기존 텍스트 RemoteInput/허용목록/중복방지/배터리/SQLite 로그는 그대로 유지한다.
  * 6. MediaSender A/B 실험용으로 고정 2종 PNG만 추가하며 기존 파일명·외부 저장소 차단·읽기 전용 권한은 유지한다.
  * 7. 새 PNG는 파일 자체에 A/B 표식을 넣어 직접 ID 인텐트와 무-ID 대조 실험의 수신 여부를 구별한다.
+ * 8. v0.4.25는 오직 앱이 발급한 20자리 16진수 랜덤 PNG만 신규 경로로 허용해 파일명 재사용/흰색 미리보기 충돌을 방지한다.
+ * 9. 기존 읽기 전용/앱 비공개 캐시/외부 파일·경로 탐색 금지/Android 설정 및 모든 이미지 로그를 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -21,18 +23,25 @@ import java.io.FileNotFoundException
 class ImageReplyProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
 
-    override fun getType(uri: Uri): String? = when (uri.pathSegments.singleOrNull()) {
-        "angaebot-test.png" -> "image/png"
-        "angaebot-test.jpg" -> "image/jpeg"
-        "angaebot-direct-a.png", "angaebot-direct-b.png" -> "image/png"
-        else -> null
+    override fun getType(uri: Uri): String? {
+        val name = uri.pathSegments.singleOrNull() ?: return null
+        return when {
+            name == "angaebot-test.jpg" -> "image/jpeg"
+            name in setOf("angaebot-test.png", "angaebot-direct-a.png", "angaebot-direct-b.png") ||
+                isUniqueProductionPng(name) -> "image/png"
+            else -> null
+        }
     }
+
+    private fun isUniqueProductionPng(name: String): Boolean =
+        name.matches(Regex("angaebot-prod-[0-9a-f]{20}\\.png"))
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         if (mode != "r") throw FileNotFoundException("read-only image provider")
         val filename = uri.pathSegments.singleOrNull()
         if (filename !in setOf("angaebot-test.png", "angaebot-test.jpg",
-                "angaebot-direct-a.png", "angaebot-direct-b.png")) {
+                "angaebot-direct-a.png", "angaebot-direct-b.png") &&
+            (filename == null || !isUniqueProductionPng(filename))) {
             throw FileNotFoundException("unknown image")
         }
         val base = context?.cacheDir ?: throw FileNotFoundException("context unavailable")
