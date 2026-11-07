@@ -73,7 +73,6 @@ class MainActivity : Activity() {
     private lateinit var directPngStatus: TextView
     private lateinit var directMp4Switch: Switch
     private lateinit var directMp4Status: TextView
-    private companion object { const val MP4_PICK_REQUEST = 4926 }
     private lateinit var pythonTokenInput: EditText
     private lateinit var logs: LogRepository
     private lateinit var powerSwitch: Switch
@@ -429,34 +428,6 @@ class MainActivity : Activity() {
             "\n" + DirectMp4Config.selectedSummary(this)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode,resultCode,data)
-        if(requestCode != MP4_PICK_REQUEST || resultCode != Activity.RESULT_OK) return
-        val uri=data?.data ?: return
-        directMp4Status.text = "MP4 파일을 앱 전용 캐시에 복사·검사하는 중..."
-        thread(name="angaebot-mp4-import") {
-            val outcome=DirectMp4Files.importSelected(applicationContext,uri)
-            runOnUiThread {
-                when(outcome) {
-                    is Mp4ImportOutcome.Ready -> {
-                        logs.log("INFO","DIRECT_MP4_FILE_READY",
-                            "size="+outcome.size+" durationMs="+outcome.durationMs+
-                                " · 사용자 선택 mp4, 원본 보존")
-                        Toast.makeText(this,"MP4 선택·검증 완료",Toast.LENGTH_LONG).show()
-                    }
-                    is Mp4ImportOutcome.Failed -> {
-                        logs.log("WARN","DIRECT_MP4_FILE_REJECTED",outcome.reason)
-                        AlertDialog.Builder(this).setTitle("MP4 파일 선택 거부")
-                            .setMessage(outcome.reason)
-                            .setPositiveButton("확인",null).show()
-                    }
-                }
-                updateDirectMp4Status()
-                updateStatusAndLogs()
-            }
-        }
-    }
-
     private fun updateDirectPngStatus() {
         val binding=DirectPngConfig.binding(this)
         val on=DirectPngConfig.enabled(this)
@@ -566,6 +537,33 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == MP4_PICK_REQUEST) {
+            if (resultCode != RESULT_OK) return
+            val uri = data?.data ?: return
+            directMp4Status.text = "MP4 파일을 앱 전용 캐시에 복사·검사하는 중..."
+            thread(name = "angaebot-mp4-import") {
+                val outcome = DirectMp4Files.importSelected(applicationContext, uri)
+                runOnUiThread {
+                    when (outcome) {
+                        is Mp4ImportOutcome.Ready -> {
+                            logs.log("INFO", "DIRECT_MP4_FILE_READY",
+                                "size=" + outcome.size + " durationMs=" + outcome.durationMs +
+                                    " · 사용자 선택 MP4, 원본 보존")
+                            Toast.makeText(this, "MP4 선택·검증 완료", Toast.LENGTH_LONG).show()
+                        }
+                        is Mp4ImportOutcome.Failed -> {
+                            logs.log("WARN", "DIRECT_MP4_FILE_REJECTED", outcome.reason)
+                            AlertDialog.Builder(this).setTitle("MP4 파일 선택 거부")
+                                .setMessage(outcome.reason)
+                                .setPositiveButton("확인", null).show()
+                        }
+                    }
+                    updateDirectMp4Status()
+                    updateStatusAndLogs()
+                }
+            }
+            return
+        }
         if (requestCode == EXPORT_LOGS && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             thread(name = "AngaeBotLogExport") {
@@ -650,5 +648,8 @@ class MainActivity : Activity() {
 
     private fun dp(px: Int): Int = (px * resources.displayMetrics.density).toInt()
 
-    companion object { private const val EXPORT_LOGS = 1010 }
+    companion object {
+        private const val EXPORT_LOGS = 1010
+        private const val MP4_PICK_REQUEST = 4926
+    }
 }
