@@ -21,6 +21,7 @@
  * v0.4.17 사진 확인 화면 자동 버튼 클릭을 보완하며 기존 이미지 접근성 스위치/설정 및 앱 사용자 설정은 유지한다.
  * v0.4.18은 인증 불필요 잠금 화면 자동 깨우기 안내만 추가하며 기존 UI/DB/로그/토큰/설정은 전부 보존한다.
  * v0.4.19는 사진 전송 '1 보내기' 버튼 인식 보완 버전만 표시하며 기존 관리 UI·로그·설정·토큰을 보존한다.
+ * v0.4.20은 개인 메뉴 5번 해야 할 일 등록·완료·삭제 안내만 추가하며 기존 UI·로그·이미지 전송·토큰을 유지한다.
  */
 package kr.co.angaebot.bridge
 
@@ -96,7 +97,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.4.19 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.20 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -143,7 +144,7 @@ class MainActivity : Activity() {
 
         root.addView(space(12))
         root.addView(section("②-A Python 명령 엔진 (Termux)"))
-        root.addView(label("카톡 메뉴: 앙(홈) / 부(부동산) / 금(금융·투자) / 개(개인 메모·일정) / 설(설정). 기존 투·메 단축어도 지원합니다. 기록 등록·목록·검색·수정·삭제는 Python ON에서 사용합니다. 테스트·계산·질문 명령은 비활성화되었습니다.", 12f))
+        root.addView(label("카톡 메뉴: 앙(홈) / 부(부동산) / 금(금융·투자) / 개(개인 메모·일정) / 설(설정). 기존 투·메 단축어도 지원합니다. 기록 등록·목록·검색·수정·삭제와 '개 5' 해야 할 일, '할일 추가 제목'은 Python ON에서 사용합니다. 테스트·계산·질문 명령은 비활성화되었습니다.", 12f))
         pythonSwitch = Switch(this).apply {
             text = "Python 연결 활성화 (기본 OFF)"
             textSize = 16f
