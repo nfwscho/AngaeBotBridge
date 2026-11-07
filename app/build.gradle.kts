@@ -40,6 +40,8 @@
 // 39. v0.4.20(versionCode 24)은 '할'/'할일' 명령을 안전하게 Python Core에 전달한다.
 // 40. 기존 이미지 자동전송·접근성 설정·Android 데이터/로그/버전 업그레이드 호환성을 보존한다.
 // 41. v0.4.21(versionCode 25)은 '개 5 할일 추가' 복합 명령만 추가하고 기존 앱 설정/UI/로그는 유지한다.
+// 42. v0.4.22(versionCode 26)은 MediaSender 채팅방 직접 공유 후보 진단과 별도 OFF 기본값 실험을 제공한다.
+// 43. 기존 앙개봇 이미지 자동전송/주식/날씨/할 일/SQLite/.env/Android UI 및 모든 로그/보안 설정을 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -53,8 +55,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.4.21"
+        versionCode = 26
+        versionName = "0.4.22"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
