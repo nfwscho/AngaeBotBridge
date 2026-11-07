@@ -129,8 +129,8 @@ object ReplyManager {
 
     /** 별도 파일명을 갖는 MediaSender A/B PNG. 기존 공유 이미지와 절대 같은 경로를 사용하지 않는다. */
     fun prepareDirectComparisonImage(context: Context, withChannelHint: Boolean): Uri {
-        val fileName = if (withChannelHint) "angaebot-direct-a.png" else "angaebot-direct-b.png"
-        val marker = if (withChannelHint) "A: DIRECT (KEY_ID)" else "B: CONTROL (NO KEY_ID)"
+        val fileName = MediaDirectComparisonPolicy.fileName(withChannelHint)
+        val marker = MediaDirectComparisonPolicy.imageLabel(withChannelHint)
         createTestImage(context, fileName, "image/png", marker)
         return Uri.Builder()
             .scheme("content")
