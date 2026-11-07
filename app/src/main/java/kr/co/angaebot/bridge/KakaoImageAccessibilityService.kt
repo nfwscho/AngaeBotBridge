@@ -35,6 +35,11 @@
  * 32. 직접 PNG 엔진에서는 접근성 서비스가 방/보내기 버튼을 절대 클릭하지 않고 화면을 관찰만 한다.
  * 33. 직접 PNG 전용 REQUESTED/OBSERVED/RECEIPT_UNCONFIRMED 로그로 Intent 실행과 수신 성공을 구별한다.
  * 34. 기존 자동전송·A/B 실험·잠금 깨우기/타임아웃/허용목록/배터리 및 로그 흐름은 변경하지 않는다.
+ * 35. v0.4.26은 MP4 직접전송을 별도 default OFF 스위치와 기존 물리 승인 1:1 방/태그로만 허용한다.
+ * 36. 테스트 MP4 또는 사용자가 직접 선택한 검증된 MP4를 video/mp4 MIME, 읽기 전용 URI, key_id 공유 Intent로 전달한다.
+ * 37. MP4 전송 경로에서는 접근성의 방 선택/보내기 자동 클릭을 절대로 수행하지 않는다.
+ * 38. MP4 공유/전송 의뢰/화면 관찰/만료를 DIRECT_MP4_* 로그에 분리하고 카카오톡 실제 수신으로 단정하지 않는다.
+ * 39. PIN/패턴/비밀번호 인증 잠금과 허용목록·화면 깨우기 재검사, 기존 모든 이미지/텍스트 기능을 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -80,6 +85,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         val directCandidate: Long? = null,
         val observeOnly: Boolean = false,
         val directProduction: Boolean = false,
+        val directMp4: Boolean = false,
+        val mp4TestClip: Boolean = false,
         val sourceKind: String = "test",
         @Volatile var wakePending: Boolean = false
     )
@@ -113,6 +120,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 !MediaDirectConfig.enabled(this)) ||
             (job.directProduction && (job.directCandidate == null ||
                 !DirectPngConfig.authorizedCandidate(this,job.room,job.directCandidate))) ||
+            (job.directMp4 && (job.directCandidate == null ||
+                !DirectMp4Config.authorizedCandidate(this,job.room,job.directCandidate))) ||
+            (job.directMp4 && (job.directCandidate == null ||
+                !DirectMp4Config.authorizedCandidate(this,job.room,job.directCandidate))) ||
             !settings.enabled || !settings.isAllowedRoom(job.room)) {
             finish("IMAGE_UI_ABORTED", "자동응답/이미지 전송 OFF 또는 허용 채팅방 변경으로 중단", true)
             return
@@ -155,6 +166,16 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(bounds)
                 bounds.width() >= 160f * density && bounds.height() >= 95f * density
             }
+        }
+        if (job.directMp4) {
+            // MP4 직접전송은 카카오톡 자체 공유 처리에만 맡긴다. 화면 버튼은 절대 클릭하지 않는다.
+            if (SystemClock.elapsedRealtime() - job.lastDiagnosticAtMs >= 3500L) {
+                job.lastDiagnosticAtMs=SystemClock.elapsedRealtime()
+                logger.log("INFO", "DIRECT_MP4_UI_OBSERVED",
+                    "source=" + job.sourceKind + " roomChoices=" + roomCandidates.size +
+                    " sendButtons=" + sendCandidates.size + " autoClick=false · 수신 미확인")
+            }
+            return
         }
         if (job.directProduction) {
             // 별도의 검증된 1:1 PNG 전용 엔진. 카카오톡 자체 전송 외의 모든 클릭 금지.
@@ -279,9 +300,15 @@ class KakaoImageAccessibilityService : AccessibilityService() {
 
     private fun beginShare(room: String, directCandidate: Long? = null, observeOnly: Boolean = false,
                            directProduction: Boolean = false, pngBytes: ByteArray? = null,
-                           sourceKind: String = "test"): ImageAutoStart {
+                           sourceKind: String = "test", directMp4: Boolean = false,
+                           mp4TestClip: Boolean = false): ImageAutoStart {
         if (!ImageAutoConfig.enabled(this)) return ImageAutoStart.Rejected("이미지 자동전송 스위치 OFF")
-        if (directProduction) {
+        if (directMp4) {
+            if (directCandidate == null ||
+                !DirectMp4Config.authorizedCandidate(this, room, directCandidate)) {
+                return ImageAutoStart.Rejected("MP4 직접전송 승인 1:1 방/태그 또는 동영상 스위치 미확인")
+            }
+        } else if (directProduction) {
             if (directCandidate == null ||
                 !DirectPngConfig.authorizedCandidate(this,room,directCandidate)) {
                 return ImageAutoStart.Rejected("직접 PNG 전송 대상 1:1 연결 또는 별도 스위치 미확인")
@@ -306,7 +333,9 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             return ImageAutoStart.Rejected("S20+ 보안 잠금 인증 필요: PIN·패턴·비밀번호는 자동 해제하지 않습니다.")
         }
         val uri = try {
-            if (directProduction) {
+            if (directMp4) {
+                if (mp4TestClip) DirectMp4Files.testUri(this) else DirectMp4Files.selectedUri(this)
+            } else if (directProduction) {
                 ReplyManager.prepareProductionPng(this, pngBytes)
             } else if (observeOnly) {
                 ReplyManager.prepareDirectComparisonImage(this, withChannelHint = directCandidate != null)
@@ -314,13 +343,15 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 ReplyManager.prepareShareTestImage(this)
             }
         } catch (e: Exception) {
-            return ImageAutoStart.Rejected("테스트 이미지 준비 실패: ${e.javaClass.simpleName}")
+            return ImageAutoStart.Rejected((if (directMp4) "MP4 영상 준비 실패: " else "테스트 이미지 준비 실패: ") +
+                (e.message?.take(100) ?: e.javaClass.simpleName))
         }
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/png"
+            type = if (directMp4) "video/mp4" else "image/png"
             setPackage(KAKAO_PACKAGE)
             putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newUri(contentResolver, "AngaeBot photo test", uri)
+            clipData = ClipData.newUri(contentResolver,
+                if (directMp4) "AngaeBot MP4 video" else "AngaeBot photo test", uri)
             if (observeOnly) {
                 // A와 B가 동일한 Intent 플래그를 사용하도록 통제한다.
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -341,6 +372,8 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 directCandidate = directCandidate,
                 observeOnly = observeOnly,
                 directProduction = directProduction,
+                directMp4 = directMp4,
+                mp4TestClip = mp4TestClip,
                 sourceKind = sourceKind,
                 wakePending = action == ImageLockAction.WAKE)
             activeJob = job
@@ -364,7 +397,10 @@ class KakaoImageAccessibilityService : AccessibilityService() {
             }
             handler.postDelayed({
                 if (activeJob === job) {
-                    if (job.directProduction) {
+                    if (job.directMp4) {
+                        finish("DIRECT_MP4_RECEIPT_UNCONFIRMED",
+                            "source=" + job.sourceKind + " · 공유 Intent 이후 관찰 종료·카카오톡 동영상 실제 수신은 별도 확인", false)
+                    } else if (job.directProduction) {
                         finish("DIRECT_PNG_RECEIPT_UNCONFIRMED",
                             "source=" + job.sourceKind + " · 전송 Intent 이후 관찰 종료·카카오톡 실제 수신은 별도 확인",false)
                     } else if (job.observeOnly) {
@@ -419,7 +455,13 @@ class KakaoImageAccessibilityService : AccessibilityService() {
         try {
             startActivity(job.shareIntent)
             job.shareLaunched = true
-            logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED", "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
+            logger.log("INFO", "IMAGE_UI_SHARE_OPEN_REQUESTED",
+                if (job.directMp4) "Android ACTION_SEND 카카오톡 MP4 공유 화면 열기 요청" else
+                    "Android ACTION_SEND 카카오톡 사진 공유 화면 열기 요청")
+            if (job.directMp4) {
+                logger.log("INFO", "DIRECT_MP4_INTENT_REQUESTED",
+                    "source=" + job.sourceKind + " · MIME=video/mp4 · 승인된 1:1 공유 힌트 포함 · 자동 클릭 없음 · 수신 미확인")
+            }
             if (job.directProduction) {
                 logger.log("INFO", "DIRECT_PNG_INTENT_REQUESTED",
                     "source=" + job.sourceKind + " · 승인된 1:1 방 직접 공유 힌트 · 자동 클릭 없음 · 실제 카카오톡 수신 미확인")
@@ -438,7 +480,7 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 logger.log("INFO", "MEDIA_DIRECT_CONTROL_INTENT_STARTED",
                     "B_NO_KEY · key_id/key_type/key_from_direct_share 없음 · 자동 클릭 없음 · 실제 수신 미확인")
             }
-            if (job.directCandidate != null && !job.directProduction) {
+            if (job.directCandidate != null && !job.directProduction && !job.directMp4) {
                 logger.log("INFO", "MEDIA_DIRECT_INTENT_STARTED",
                     "알림 태그 기반 key_id 힌트 포함 · 후보 " + MediaDirectPolicy.mask(job.directCandidate) +
                         " · 실제 수신/대상은 S20+ 카카오톡에서 확인 필요")
@@ -504,6 +546,20 @@ class KakaoImageAccessibilityService : AccessibilityService() {
                 ?: return ImageAutoStart.Rejected("현재 알림 채팅방 ID 검증 실패")
             return service.beginShare(room, directCandidate=candidate,
                 directProduction=true, pngBytes=content, sourceKind=source)
+        }
+
+        /** 승인된 1:1 방으로 직접 MP4 공유. 일반 이미지/PNG 모드의 클릭·로그는 유지한다. */
+        internal fun queueProductionMp4(room: String, sender: String, tag: String?,
+                                        testClip: Boolean): ImageAutoStart {
+            val service = connected ?: return ImageAutoStart.Rejected("접근성 서비스 미연결")
+            if (!DirectMp4Config.authorized(service, room, sender, tag)) {
+                return ImageAutoStart.Rejected("MP4 직접전송 별도 스위치 OFF 또는 미승인 1:1 채팅방")
+            }
+            val candidate = MediaDirectPolicy.candidate(tag, room, sender)
+                ?: return ImageAutoStart.Rejected("현재 알림 채팅방 후보 ID 불일치")
+            return service.beginShare(room, directCandidate = candidate,
+                directMp4 = true, mp4TestClip = testClip,
+                sourceKind = if (testClip) "h264_sample" else "user_selected_mp4")
         }
 
         /** B 대조군: 동일한 UI 관찰·고유 PNG·Intent 플래그, 채팅방 직접 지정 extra만 생략. */
