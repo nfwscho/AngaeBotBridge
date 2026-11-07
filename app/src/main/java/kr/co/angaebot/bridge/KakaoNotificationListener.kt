@@ -55,6 +55,9 @@
  * 53. 앙개야 이미지 직접시험/직접차트 MU는 등록된 방과 현재 알림 tag가 정확히 같은 경우에만 새로운 전송을 요청한다.
  * 54. 직접차트는 기존 토큰으로 localhost Python Core에서 실제 일별 차트 PNG를 받아 유효한 PNG만 공유한다.
  * 55. 새 직접전송 엔진은 다른 채팅/단체방/미연결/설정 OFF에서 거부하고 기존 이미지 자동시험/A-B/모든 로그를 보존한다.
+ * 56. v0.4.26 '앙개야 동영상 직접시험'은 앱 내장 H.264 MP4, '동영상 직접전송'은 사용자가 S20+에서 선택한 MP4만 공유한다.
+ * 57. 별도 동영상 ON 스위치·기존 1:1 물리 승인 방/발신자/태그/접근성/잠금 검증을 모두 통과해야 하며 클릭은 수행하지 않는다.
+ * 58. 공유 요청/거부/관찰/수신 미확인은 DIRECT_MP4_* 로그에 별도 기록해 기존 PNG·텍스트 로그를 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -143,6 +146,8 @@ class KakaoNotificationListener : NotificationListenerService() {
             val isMediaControlProbe = parsed.name == "이미지" && parsed.argument == "직공유대조"
             val isDirectPngTest = parsed.name == "이미지" && parsed.argument == "직접시험"
             val isDirectPngChart = parsed.name == "이미지" && parsed.argument.startsWith("직접차트 ")
+            val isDirectMp4Test = parsed.name == "동영상" && parsed.argument == "직접시험"
+            val isDirectMp4Selected = parsed.name == "동영상" && parsed.argument == "직접전송"
             // 요청한 모듈 정보는 원래 시세 선택 상태를 방해하지 않는다.
             // 그 밖의 기존 명령은 이전과 동일하게 번호 선택을 무효화한다.
             if (numericSelection == null && !isModuleLookup &&
@@ -163,7 +168,7 @@ class KakaoNotificationListener : NotificationListenerService() {
             logger.log("INFO", "COMMAND", "command=${parsed.name} arg=${parsed.argument}", message.room, message.sender)
             // 명시적으로 켠 자연어 모드에서만 미등록 명령을 AI 질문으로 전달한다.
             // 기존 로컬 명령 및 기존 Python 3개 명령의 우선순위는 그대로 보존한다.
-            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help", "이미지") || isModuleLookup
+            val isLocal = parsed.name in setOf("테스트", "ping", "상태", "도움말", "help", "이미지", "동영상") || isModuleLookup
             val explicitPython = parsed.name in PythonBridgeClient.supportedCommands
             val freeform = if (!isLocal && !explicitPython) {
                 try { val p = pythonConfig.load(); p.enabled && p.freeformEnabled } catch (_: Exception) { false }
@@ -192,7 +197,51 @@ class KakaoNotificationListener : NotificationListenerService() {
                     KakaoImageAccessibilityService.queueNoKeyProbe(message.room, directCandidate)
                 else -> null
             }
-            val response = if (parsed.name == "이미지") {
+            val response = if (parsed.name == "동영상") {
+                sourceModule = "bridge.video"
+                when {
+                    parsed.argument == "상태" -> {
+                        "🎬 MP4 직접전송 상태\n" +
+                            "동영상 전용 스위치: " + (if (DirectMp4Config.enabled(this)) "ON" else "OFF") + "\n" +
+                            "승인된 1:1 채팅: " + (if (DirectPngConfig.binding(this) != null) "등록됨" else "미등록") + "\n" +
+                            DirectMp4Config.selectedSummary(this) + "\n" +
+                            "※ 영상: 동영상 직접시험 / 동영상 직접전송"
+                    }
+                    !isDirectMp4Test && !isDirectMp4Selected ->
+                        "🎬 동영상 직접전송 사용법\n" +
+                            "앙개야 동영상 직접시험: 앱 내장 2.5초 MP4\n" +
+                            "앙개야 동영상 직접전송: S20+에서 직접 선택한 MP4\n" +
+                            "앙개야 동영상 상태: ON/OFF·파일 확인\n" +
+                            "※ S20+ ②-B-3에서 별도 스위치를 ON 저장하세요."
+                    !DirectMp4Config.authorized(this, message.room, message.sender, sbn.tag) -> {
+                        logger.log("WARN", "DIRECT_MP4_REJECTED",
+                            "직접 MP4 전용 스위치 OFF 또는 승인된 1:1 방/알림 태그 불일치",
+                            message.room, message.sender)
+                        "⚠️ 동영상 직접전송 미승인\n" +
+                            "S20+ ②-B-3 동영상 스위치를 ON 저장하고 기존 승인된 1:1 대화방에서 사용하세요."
+                    }
+                    else -> {
+                        val start=KakaoImageAccessibilityService.queueProductionMp4(
+                            message.room, message.sender, sbn.tag, isDirectMp4Test)
+                        when(start) {
+                            ImageAutoStart.Queued -> {
+                                val source=if(isDirectMp4Test) "h264_sample" else "user_selected_mp4"
+                                logger.log("INFO","DIRECT_MP4_QUEUED",
+                                    "source="+source+" · 승인 1:1 영상 MIME=video/mp4 · 실제 수신 미확인",
+                                    message.room,message.sender)
+                                "🎬 MP4 직접전송 요청\n" +
+                                    (if(isDirectMp4Test) "앱 내장 2.5초 테스트 영상" else "S20+에서 선택한 MP4 영상") +
+                                    "\n※ 실제 동영상 말풍선이 도착하고 재생되는지 확인하세요."
+                            }
+                            is ImageAutoStart.Rejected -> {
+                                logger.log("WARN","DIRECT_MP4_REJECTED",start.reason,
+                                    message.room,message.sender)
+                                "⚠️ MP4 직접전송 거부\n"+start.reason
+                            }
+                        }
+                    }
+                }
+            } else if (parsed.name == "이미지") {
                 sourceModule = "bridge.image"
                 if (isDirectPngTest || isDirectPngChart) {
                     if (!DirectPngConfig.authorized(this,message.room,message.sender,sbn.tag)) {
