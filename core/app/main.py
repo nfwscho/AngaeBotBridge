@@ -105,6 +105,9 @@
 100. 섹터 1~19 번호는 해당 그룹의 실제 티커 분석에 연결하고 0은 이전 시세·00은 홈으로 이동하며 5분·인증·jobs/events·배터리/Android 출력은 유지한다.
 101. 섹터는 기존 SQLite stock_groups 및 사용자별 관심그룹 CRUD와 무관한 읽기 전용 목록이며 외부 가격은 각 시세 조회 시 검증된 공급자에서만 가져온다.
 102. Android 하단 모듈/파일명은 사용자 명시 조회시에만 표시하고 배터리는 한 줄 아이콘·퍼센트로 유지하며 이 Python API의 module_source는 삭제하지 않는다.
+103. v0.7.4 개인 해야 할 일 전용 SQLite 테이블과 목록/검색/조회/추가/완료/복원/수정/기한/확인 삭제를 지원한다.
+104. 직접 '할일' 명령과 개인 메뉴 5번은 기존 인증·jobs 요청 중복 방지·events 로그·5분 선택 세션에서 처리한다.
+105. 기존 메모/일정/부동산·주식·AI/날씨·Android 앱/UI/보안 설정·Python DB 데이터를 보존한다.
 """
 from __future__ import annotations
 
@@ -133,14 +136,15 @@ from .sector_watchlists import parse_sector_request, get_page as get_sector_page
 from .selection_menu import StockSelectionMenus, CONTENT_ITEMS
 from .personal_records import (PERSONAL_COMMANDS, CATEGORIES as PERSONAL_SECTORS,
                                RecordError, init_records_schema, execute_record_command)
+from .todos import TodoError, init_todos_schema, execute_todo_command
 from .weather import (WeatherError, init_weather_schema, get_location, resolve_location,
                       save_location, forecast_text, location_help)
 from .real_estate import (RealEstateError, init_real_estate_schema, resolve_district,
                           save_district, parse_transaction_query, region_help,
                           transaction_report)
 
-VERSION = "0.7.3"
-SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래"} | PERSONAL_COMMANDS
+VERSION = "0.7.4"
+SUPPORTED = {"계산", "시간", "서버상태", "질문", "요약", "AI상태", "대화초기화", "상세상태", "통계", "최근오류", "가동시간", "주식", "메모리7", "메뉴", "날씨", "실거래", "할일"} | PERSONAL_COMMANDS
 
 
 class CommandRequest(BaseModel):
@@ -189,6 +193,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
         init_schema(db)
         # 독립 메모/일정 테이블만 새로 생성. 기존 주식/AI/이벤트 테이블에는 변경 없음.
         init_records_schema(db)
+        init_todos_schema(db)
         init_weather_schema(db)
         init_real_estate_schema(db)
 
@@ -453,7 +458,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                                 back=selection_back, previous=selection_previous,
                                 group_name=resolved_argument.strip())
                         stock_menu_active = True
-            except (StockQuoteError, RecordError, WeatherError, RealEstateError) as error:
+            except (StockQuoteError, RecordError, TodoError, WeatherError, RealEstateError) as error:
                 stock_error = error
         with lock:
             with closing(connect()) as db, db:
@@ -492,6 +497,15 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                         else:
                             # 메모리7에 잘못된 인수가 있으면 기존 사용법 오류를 그대로 반환한다.
                             reply = execute_stock_command(request.command, request.argument)
+                    elif request.command == '할일':
+                        result = execute_todo_command(db, request.room, request.sender, request.argument)
+                        if result.rows is not None:
+                            menu = selection_menus.open_todo_results(
+                                db, request.room, request.sender, rows=result.rows, heading=result.reply)
+                            reply = menu.reply
+                            stock_menu_active = menu.menu_active
+                        else:
+                            reply = result.reply
                     elif request.command in PERSONAL_COMMANDS:
                         result = execute_record_command(db, request.room, request.sender,
                                                         request.command, request.argument)
@@ -541,7 +555,7 @@ def create_app(token: str | None = None, database_path: str | Path | None = None
                     else:
                         reply = execute_command(request.command, request.argument, int(time.monotonic() - began))
                     ok = True
-                except (CommandError, AIError, StockQuoteError, RecordError, WeatherError, RealEstateError) as error:
+                except (CommandError, AIError, StockQuoteError, RecordError, TodoError, WeatherError, RealEstateError) as error:
                     reply = "⚠️ " + str(error)
                     ok = False
                 now = int(time.time())
