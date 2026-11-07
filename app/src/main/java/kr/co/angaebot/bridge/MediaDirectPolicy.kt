@@ -7,6 +7,8 @@
  * 5. 로그와 응답에서 후보 ID 전체를 숨기고 자릿수/끝 4자리만 표시해 개인정보 노출을 제한한다.
  * 6. 기존 허용 방/발신자, Python, SQLite, 사진 자동전송, 잠금/로그/UI 동작을 보존한다.
  * 7. PIN 인증 잠금을 해제하거나 카카오톡 내부 DB를 조회하는 기능은 포함하지 않는다.
+ * 8. 공유 대상 선택창이 실제 나타났는지 관찰 전용 UI 스냅샷으로 분류하며 자동 클릭을 하지 않는다.
+ * 9. 방/상대 확인이 불충분할 때는 식별 불가로 표시하고 직접 공유 성공으로 판단하지 않는다.
  */
 package kr.co.angaebot.bridge
 
@@ -42,5 +44,26 @@ internal class MediaDirectApproval(private val lifetimeMs: Long = 5L * 60L * 100
             previous.room == room && previous.sender == sender && previous.tagValue == id &&
                 nowMs >= previous.time && nowMs - previous.time <= lifetimeMs
         }
+    }
+}
+
+/** 채팅방 선택 UI가 나타났는지 판정하는 읽기 전용 정책. 실제 수신/채팅방 ID를 인증하지 않는다. */
+internal enum class MediaDirectRoute { RECIPIENT_PICKER, TARGET_SCREEN_CANDIDATE, UNVERIFIED }
+
+internal data class MediaDirectRouteSnapshot(
+    val recipientPickerHeadingVisible: Boolean,
+    val clickableRoomCount: Int,
+    val exactTargetNameVisible: Boolean,
+    val sendButtonCount: Int
+)
+
+internal object MediaDirectRoutePolicy {
+    fun classify(snapshot: MediaDirectRouteSnapshot): MediaDirectRoute = when {
+        snapshot.recipientPickerHeadingVisible && snapshot.clickableRoomCount > 0 ->
+            MediaDirectRoute.RECIPIENT_PICKER
+        !snapshot.recipientPickerHeadingVisible &&
+            snapshot.exactTargetNameVisible && snapshot.sendButtonCount == 1 ->
+            MediaDirectRoute.TARGET_SCREEN_CANDIDATE
+        else -> MediaDirectRoute.UNVERIFIED
     }
 }
