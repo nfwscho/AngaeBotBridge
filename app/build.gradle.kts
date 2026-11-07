@@ -35,6 +35,8 @@
 // 34. 기존 설치 데이터/알림·접근성 권한/메뉴/로그/토큰/배터리/API를 보존하며 잠긴 화면에선 전송하지 않는다.
 // 35. v0.4.18(versionCode 22)은 인증 불필요 잠금/꺼진 화면의 Android 공식 화면 깨우기와 잠금 정책 테스트를 추가한다.
 // 36. 인증 필요한 PIN/패턴/비밀번호는 우회하지 않으며 기존 설치 DB/.env/텍스트 알림/UI·로그/배터리를 유지한다.
+// 37. v0.4.19(versionCode 23)은 S20+ 카카오톡 '1 보내기' 숫자 포함 단일 수신 버튼 인식을 보완한다.
+// 38. 기존 Python Core/DB/.env/Android UI·설정/알림 응답/로그·배터리/잠금 정책은 모두 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -48,8 +50,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.4.18"
+        versionCode = 23
+        versionName = "0.4.19"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
