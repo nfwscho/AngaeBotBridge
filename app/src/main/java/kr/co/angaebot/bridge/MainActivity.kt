@@ -25,6 +25,7 @@
  * v0.4.21은 '개 5 할일 추가 제목' 명령 안내를 추가하되 기존 관리 UI/설정/이미지 자동전송·로그는 모두 유지한다.
  * v0.4.22 MediaSender 직접 공유 진단은 별도 OFF 기본값과 설정 저장 버튼만 추가하며 기존 UI·로그·토큰·이미지 자동전송을 유지한다.
  * v0.4.23은 '직공유경로확인' 관찰 전용 명령 안내를 추가하며 기존 설정/DB/로그/이미지·텍스트 UI를 보존한다.
+ * v0.4.24는 A/B 사진 직접공유 시험 절차와 이미지는 각기 구별되며 기존 앱 설정·로그·UI는 보존한다.
  */
 package kr.co.angaebot.bridge
 
@@ -101,7 +102,7 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(label("🤖 앙개봇 Bridge", 23f, true))
-        root.addView(label("Galaxy S20+ · v0.4.23 · 카카오톡 자동응답 + Python 연동", 13f))
+        root.addView(label("Galaxy S20+ · v0.4.24 · 카카오톡 자동응답 + Python 연동", 13f))
         root.addView(space(10))
         statusText = label("상태를 확인하는 중...", 14f)
         root.addView(statusText)
@@ -194,9 +195,11 @@ class MainActivity : Activity() {
         root.addView(label(
             "기존 사진 자동전송과 독립된 실험이며 기본 OFF입니다.\n" +
             "알림 숫자형 tag를 채팅방 ID 후보로만 사용합니다. 실제 카카오 ID인지는 확인되지 않았습니다.\n" +
-            "본인과의 1:1 채팅에서만: 앙개야 이미지 직공유진단 → 별도 ON 저장 → " +
-            "5분 이내 앙개야 이미지 직공유경로확인\n" +
-            "이 관찰 명령은 전송 버튼을 자동 클릭하지 않고 공유 UI 모양만 기록합니다.\n다른 방 오발송 가능성을 배제할 수 없으므로 테스트 사진만 사용합니다. PIN 잠금은 거부합니다.", 12f))
+            "1:1 방 A/B: 직공유진단 → 5분 이내 이미지 직공유경로확인(A) → " +
+            "화면을 닫은 뒤 다시 직공유진단 → 이미지 직공유대조(B)\n" +
+            "A 이미지=A: DIRECT (KEY_ID), B 이미지=B: CONTROL (NO KEY_ID) 표식.\n" +
+            "방/보내기 버튼은 자동 클릭하지 않지만 카카오톡 자체 전송을 막지 않습니다.\n" +
+            "의도치 않은 대화방에 전송될 위험이 있으므로 본인 1:1 시험에서만 사용하세요. PIN 잠금은 거부합니다.", 12f))
         mediaDirectSwitch = Switch(this).apply {
             text = "MediaSender 채팅방 직접 공유 시험 허용 (기본 OFF)"
             textSize = 15f
