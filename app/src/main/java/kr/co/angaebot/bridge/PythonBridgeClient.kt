@@ -95,7 +95,19 @@ object PythonBridgeClient {
             }
             val declared=conn.contentLengthLong
             if(declared>DirectPngBytes.MAX_BYTES) return ChartPngOutcome.Failed("차트 PNG 크기 제한 초과")
-            val bytes=conn.inputStream.use { it.readNBytes(DirectPngBytes.MAX_BYTES+1) }
+            val bytes=conn.inputStream.use { input ->
+                val output=java.io.ByteArrayOutputStream()
+                val buffer=ByteArray(8192)
+                var remaining=DirectPngBytes.MAX_BYTES+1
+                while(remaining>0) {
+                    val read=input.read(buffer,0,minOf(buffer.size,remaining))
+                    if(read<0) break
+                    if(read==0) continue
+                    output.write(buffer,0,read)
+                    remaining-=read
+                }
+                output.toByteArray()
+            }
             if(!DirectPngBytes.valid(bytes)) return ChartPngOutcome.Failed("PNG 구조/크기 검사 실패")
             ChartPngOutcome.Ready(bytes)
         } catch(e:java.net.SocketTimeoutException) {
