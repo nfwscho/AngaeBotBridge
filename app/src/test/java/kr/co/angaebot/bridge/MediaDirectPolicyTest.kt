@@ -4,6 +4,7 @@
  * 2. 단체방·발신자 불일치·음수·0·짧거나 긴 ID·선행0·비숫자·Long 범위 초과를 거부한다.
  * 3. 진단 미실시/다른 채팅/태그 변경/5분 초과/재사용된 승인 요청을 모두 차단한다.
  * 4. 원본 채팅 메시지나 인증정보를 다루지 않고 실제 Android 동작 없이 Kotlin JUnit으로만 검증한다.
+ * 5. 수신 선택창/주소 명확성/불명확 화면에서 실제 클릭 없이 관찰 분류만 하도록 테스트한다.
  */
 package kr.co.angaebot.bridge
 
@@ -23,6 +24,21 @@ class MediaDirectPolicyTest {
         }
         assertNull(MediaDirectPolicy.candidate(tag, "단톡방", "조우상"))
         assertNull(MediaDirectPolicy.candidate(tag, "", ""))
+    }
+
+    @Test fun routeProbeLabelsAreNotConflatedWithActualSendSuccess() {
+        assertEquals(MediaDirectRoute.RECIPIENT_PICKER,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(true, 1, true, 1)))
+        assertEquals(MediaDirectRoute.TARGET_SCREEN_CANDIDATE,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(false, 0, true, 1)))
+        assertEquals(MediaDirectRoute.UNVERIFIED,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(true, 0, true, 1)))
+        assertEquals(MediaDirectRoute.UNVERIFIED,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(false, 0, false, 1)))
+        assertEquals(MediaDirectRoute.UNVERIFIED,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(false, 0, true, 2)))
+        assertEquals(MediaDirectRoute.UNVERIFIED,
+            MediaDirectRoutePolicy.classify(MediaDirectRouteSnapshot(false, 0, true, 0)))
     }
 
     @Test fun diagnosisIsSingleUseAndExpires() {
