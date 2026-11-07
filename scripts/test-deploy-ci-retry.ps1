@@ -27,7 +27,7 @@ function Assert-Classified([int]$StatusCode, [bool]$Expected) {
     $ex = New-Object System.Exception('Synthetic HTTP status')
     $response = New-Object psobject -Property @{ StatusCode = $StatusCode }
     $ex | Add-Member -MemberType NoteProperty -Name Response -Value $response
-    $record = New-Object System.Management.Automation.ErrorRecord(
+    $record = [System.Management.Automation.ErrorRecord]::new(
         $ex, 'test-http', [System.Management.Automation.ErrorCategory]::ConnectionError, $null)
     $actual = Test-TransientGithubApiFailure $record
     if ($actual -ne $Expected) {
@@ -37,9 +37,9 @@ function Assert-Classified([int]$StatusCode, [bool]$Expected) {
 
 foreach ($status in @(408, 429, 500, 502, 503, 504)) { Assert-Classified $status $true }
 foreach ($status in @(400, 401, 403, 404)) { Assert-Classified $status $false }
-$timeout = New-Object System.Net.WebException(
+$timeout = [System.Net.WebException]::new(
     'Synthetic timeout', [System.Net.WebExceptionStatus]::Timeout)
-$timeoutRecord = New-Object System.Management.Automation.ErrorRecord(
+$timeoutRecord = [System.Management.Automation.ErrorRecord]::new(
     $timeout, 'test-timeout', [System.Management.Automation.ErrorCategory]::OperationTimeout, $null)
 if (-not (Test-TransientGithubApiFailure $timeoutRecord)) {
     throw 'Transient network timeout must be retried'
