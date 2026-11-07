@@ -1,3 +1,12 @@
+## 2026-11-07 — MediaSender 채팅방 직접 공유 A/B 실험 v0.4.24
+
+- 21:08:54~21:09:14 실제 로그 `MEDIA_DIRECT_INTENT_STARTED`, `MEDIA_DIRECT_PROBE_WAIT pickerHeading=true targetNameVisible=true roomChoices=0 sendButtons=0 autoClick=false`, `MEDIA_DIRECT_PROBE_TIMEOUT` 확인. 자동 클릭 없이 공유 Intent 실행은 확인되었지만 전송 성공/채팅방 ID 인증은 미확인.
+- 이전 모든 시험 이미지가 같은 "AngaeBot Image Test"라는 문제를 해결. 고정 PNG `angaebot-direct-a.png`와 `angaebot-direct-b.png`를 별도 생성하고 사진 내부에 `A: DIRECT (KEY_ID)`/ `B: CONTROL (NO KEY_ID)` 표기.
+- 기존 `앙개야 이미지 직공유경로확인`은 A(key_id/key_type/key_from_direct_share 포함). 새 `앙개야 이미지 직공유대조`는 B(3개 extra 제외). 둘 다 5분 일회성 진단 뒤 동일 잠금/접근성/허용 방 검사를 통과하고 자동 클릭 없이 20초 관찰.
+- B 시험은 독립 OFF 실험 스위치 보호도 동일하게 적용. B의 공유 Intent 실행 및 A/B 관찰 분류를 로그로 구분한다.
+- 원래 일반 이미지 자동시험, `직공유시험`, 이미지 RemoteInput, 모든 메뉴/개인 할 일/주식/날씨/Python Core/기존 DB/.env/Android UI·설정·로그·배터리 및 PIN 인증 잠금 제한 유지.
+- 자세한 시험 순서와 결과 판정: docs/MEDIASENDER_EXPERIMENT.md
+
 ## 2026-11-07 — MediaSender 실제 직접 공유 경로 구분 v0.4.23
 
 - S25 실기기에서 `이미지 직공유진단`은 숫자 알림 태그 15자리(끝 8064), `직공유시험`은 실제 1:1 카카오톡 PNG 수신 확인.
