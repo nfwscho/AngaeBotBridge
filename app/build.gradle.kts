@@ -39,6 +39,7 @@
 // 38. 기존 Python Core/DB/.env/Android UI·설정/알림 응답/로그·배터리/잠금 정책은 모두 유지한다.
 // 39. v0.4.20(versionCode 24)은 '할'/'할일' 명령을 안전하게 Python Core에 전달한다.
 // 40. 기존 이미지 자동전송·접근성 설정·Android 데이터/로그/버전 업그레이드 호환성을 보존한다.
+// 41. v0.4.21(versionCode 25)은 '개 5 할일 추가' 복합 명령만 추가하고 기존 앱 설정/UI/로그는 유지한다.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -52,8 +53,8 @@ android {
         applicationId = "kr.co.angaebot.bridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.4.20"
+        versionCode = 25
+        versionName = "0.4.21"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
